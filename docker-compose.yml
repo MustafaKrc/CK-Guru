@@ -1,0 +1,106 @@
+version: '3.8'
+
+services:
+  #################
+  # Backend API
+  #################
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: ckguru_backend
+    # Mount source code for development hot-reloading (remove for production)
+    # Mount shared core_logic and persistent data volume
+    volumes:
+      - ./backend/app:/app/app # Hot-reload for backend code
+      - ./core:/app/core # Shared logic access + hot-reload
+      - app_data:/app/persistent_data # Maps the named volume for storage
+    ports:
+      - "8000:8000" # Map host port 8000 to container port 8000
+    env_file:
+      - .env # Load environment variables from .env file
+    environment:
+      # Ensure backend knows where the shared data volume is mounted INSIDE container
+      STORAGE_BASE_PATH: /app/persistent_data
+      # Add other backend specific env vars if needed
+    depends_on:
+      - db
+      - broker
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload # Dev command
+
+  #################
+  # Celery Worker
+  #################
+  worker:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    container_name: ckguru_worker
+    volumes:
+      - ./worker/app:/app/app # Optional: hot-reload (requires watchdog)
+      - ./core_logic:/app/core_logic
+      - app_data:/app/persistent_data
+    env_file:
+      - .env
+    environment:
+      STORAGE_BASE_PATH: /app/persistent_data
+      # Ensure CUDA devices are visible (often handled by deploy key, but can be explicit)
+      # NVIDIA_VISIBLE_DEVICES: all # Set this if needed
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility # Often needed
+    depends_on:
+      - broker
+      - db
+    # <<< --- GPU Configuration --- >>>
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              # count: 1 # Request exactly one GPU
+              count: all # Request all available GPUs
+              capabilities: [gpu] # Request GPU capabilities
+
+  #################
+  # Frontend UI
+  #################
+  frontend:
+    build:
+      context: ./frontend # Context is the frontend directory
+      dockerfile: Dockerfile
+    container_name: ckguru_frontend
+    ports:
+      - "3000:80" # Map host port 3000 to Nginx container port 80
+    depends_on:
+      - backend # Usually depends on backend being available
+
+  #################
+  # Database
+  #################
+  db:
+    image: postgres:15-alpine
+    container_name: ckguru_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # Persistent DB data
+    env_file:
+      - .env # For POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
+    ports:
+      - "5432:5432" # Optional: Expose DB port to host for debugging
+
+  #################
+  # Message Broker
+  #################
+  broker:
+    image: rabbitmq:3.12-management-alpine
+    container_name: ckguru_broker
+    env_file:
+      - .env # For RABBITMQ_DEFAULT_USER, RABBITMQ_DEFAULT_PASS
+    ports:
+      - "5672:5672"   # AMQP protocol port
+      - "15672:15672" # Management UI port
+
+#################
+# Volumes
+#################
+volumes:
+  postgres_data: # Stores PostgreSQL data
+  app_data:      # Stores datasets, models, etc. (local storage via fsspec)
