@@ -1,0 +1,26 @@
+# worker/requirements.txt
+
+# --- Core ---
+celery[librabbitmq,redis]>=5.0
+redis>=4.0
+pydantic
+pydantic-settings
+
+# --- Git & Data (From your script) ---
+GitPython>=3.1.30
+pandas>=1.5
+numpy>=1.20 # Added from your script
+
+# --- Database ---
+sqlalchemy>=2.0
+asyncpg>=0.25.0 # For async PostgreSQL access
+psycopg2-binary # Sometimes needed by Alembic even if using asyncpg
+
+# --- ML/Other (Add your specific libraries) ---
+# scikit-learn
+# torch # Or tensorflow[and-cuda] - ensure GPU/CUDA compatibility!
+# etc.
+
+# --- Optional (if worker needs DB directly) ---
+# sqlalchemy>=2.0
+# asyncpg # Or psycopg[binary]

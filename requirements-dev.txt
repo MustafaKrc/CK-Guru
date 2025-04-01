@@ -1,0 +1,18 @@
+# requirements-dev.txt
+
+-r backend/requirements.txt 
+-r worker/requirements.txt
+
+# Linting & formatting
+ruff
+black
+isort
+mypy
+
+# Testing
+pytest
+pytest-cov
+
+# Type stubs (optional)
+types-requests
+types-python-dateutil

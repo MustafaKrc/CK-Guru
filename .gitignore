@@ -479,3 +479,7 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.toptal.com/developers/gitignore/api/node,visualstudiocode,windows,macos,linux,test
+
+
+# Docker Compose override file
+docker-compose.override.yml
