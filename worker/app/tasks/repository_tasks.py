@@ -16,7 +16,7 @@ from sqlalchemy.exc import SQLAlchemyError
 # --- Internal Imports ---
 from ..core.config import settings
 from .data_processing.feature_extraction import checkout_commit, run_ck_tool # Import the checkout and CK tool functions
-from ..db.session import get_worker_session # Import the DB session context manager
+from ..db.session import get_worker_sync_session  # Import the DB session context manager
 
 # --- Setup Logger ---
 logger = get_task_logger(__name__)
@@ -36,7 +36,7 @@ except ModuleNotFoundError:
 
 # === Main Celery Task ===
 @shared_task(bind=True, name='tasks.create_repository_dataset')
-async def create_repository_dataset_task(self, repository_id: int, git_url: str):
+def create_repository_dataset_task(self, repository_id: int, git_url: str):
     """
     Celery task to clone repo, run CK metrics, and save results to the database.
     """
@@ -68,43 +68,43 @@ async def create_repository_dataset_task(self, repository_id: int, git_url: str)
         logger.info(f"Task {task_id}: Iterating commits and running CK analysis...")
         self.update_state(state='STARTED', meta={'status': 'Analyzing commits with CK...', 'progress': 20})
 
-        COMMIT_LIMIT = 1000 # Example limit
+        COMMIT_LIMIT = 2 # Example limit
         commits_iterator = repo.iter_commits(rev=repo.heads.master, max_count=COMMIT_LIMIT)
         total_commits_to_process = COMMIT_LIMIT
         processed_count = 0
 
-        async with get_worker_session() as session: # Get DB session for the whole loop (or per commit)
+        # Use the synchronous session context manager
+        with get_worker_sync_session() as session: # Use SYNC session
             for commit in commits_iterator:
                 processed_count += 1
                 commit_hash = commit.hexsha
                 parent_hash = commit.parents[0].hexsha if commit.parents else None
 
                 commits_to_analyze_this_iteration = []
-                # Check current commit
+
+                # Check current commit (SYNC DB query)
                 stmt_curr = select(exists().where(CKMetric.commit_hash == commit_hash, CKMetric.repository_id == repository_id))
-                result_curr = await session.execute(stmt_curr)
+                result_curr = session.execute(stmt_curr) # No await
                 if not result_curr.scalar_one_or_none():
                     commits_to_analyze_this_iteration.append(commit_hash)
                 else:
                      logger.debug(f"Metrics for commit {commit_hash} already exist in DB.")
 
-                # Check parent commit
+                # Check parent commit (SYNC DB query)
                 if parent_hash:
                     stmt_parent = select(exists().where(CKMetric.commit_hash == parent_hash, CKMetric.repository_id == repository_id))
-                    result_parent = await session.execute(stmt_parent)
+                    result_parent = session.execute(stmt_parent) # \u003c\u003c\u003c No await
                     if not result_parent.scalar_one_or_none():
-                        # Only add parent if not already added (could be the current commit of a previous iteration)
                         if parent_hash not in commits_to_analyze_this_iteration:
                              commits_to_analyze_this_iteration.append(parent_hash)
                     else:
                          logger.debug(f"Metrics for parent commit {parent_hash} already exist in DB.")
 
-                # Analyze commits identified for this iteration
+                # Analyze and Insert (Sync)
                 for hash_to_analyze in commits_to_analyze_this_iteration:
                     logger.info(f"Analyzing commit: {hash_to_analyze} ({processed_count}/{total_commits_to_process})")
-                    if checkout_commit(repo, hash_to_analyze):
-                        # Pass a base temp dir for CK, it will manage subdirs internally now
-                        metrics_df = run_ck_tool(repo_local_path, base_storage_path / "temp_ck_runs", hash_to_analyze)
+                    if checkout_commit(repo, hash_to_analyze): # checkout_commit is sync
+                        metrics_df = run_ck_tool(repo_local_path, base_storage_path / "temp_ck_runs", hash_to_analyze) # run_ck_tool is sync
 
                         if not metrics_df.empty:
                             logger.info(f"Obtained {len(metrics_df)} metric rows for {hash_to_analyze}.")
@@ -134,13 +134,11 @@ async def create_repository_dataset_task(self, repository_id: int, git_url: str)
                                         db_key = mapped_keys.get(k, k)
                                         if db_key in valid_keys:
                                              filtered_record[db_key] = v
-
                                     instances_to_add.append(CKMetric(**filtered_record))
 
                                 if instances_to_add:
-                                    session.add_all(instances_to_add)
-                                    # Commit can happen outside the loop by the context manager
-                                    # await session.flush() # Optional: Flush to check for immediate errors
+                                    session.add_all(instances_to_add) # \u003c\u003c\u003c No await
+                                    # Commit happens automatically via context manager exit
                                     total_metrics_inserted += len(instances_to_add)
                                     logger.info(f"Added {len(instances_to_add)} metric records for {hash_to_analyze} to DB session.")
 
@@ -160,6 +158,8 @@ async def create_repository_dataset_task(self, repository_id: int, git_url: str)
                 if processed_count % 20 == 0:
                     progress = 20 + int(75 * (processed_count / total_commits_to_process))
                     self.update_state(state='STARTED', meta={'status': f'Analyzing commits ({processed_count}/{total_commits_to_process})...', 'progress': progress})
+
+            # End of loop - session commit happens automatically if no errors
 
         logger.info(f"Task {task_id}: Finished iterating commits. Inserted {total_metrics_inserted} new metric records.")
         self.update_state(state='STARTED', meta={'status': 'Finalizing...', 'progress': 98})
