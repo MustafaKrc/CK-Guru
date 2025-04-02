@@ -396,7 +396,7 @@ def calculate_commit_guru_metrics(repo_path: Path, since_commit: Optional[str] =
         final_data = commit_data.copy()
         final_data.pop('stats_lines', None) # Remove raw stats lines
         final_data.update(_finalize_metrics(commit_metrics)) # Add calculated metrics (NaN/Inf handled)
-        final_data['files_changed'] = ",".join(files_seen_paths) # Add file list
+        final_data['files_changed'] = files_seen_paths if files_seen_paths else None
 
         # Add simple 'fix' keyword flag
         commit_message = final_data.get('commit_message', '').lower()

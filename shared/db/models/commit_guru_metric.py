@@ -1,6 +1,6 @@
 # shared/db/models/commit_guru_metric.py
 from sqlalchemy import (
-    Column, Integer, String, Float, Boolean, ForeignKey, BigInteger, JSON, Index, UniqueConstraint, Text
+    ARRAY, Column, Integer, String, Float, Boolean, ForeignKey, BigInteger, JSON, Index, UniqueConstraint, Text
 ) # Import Text
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from typing import Optional, List, Dict, Any
@@ -32,7 +32,7 @@ class CommitGuruMetric(Base):
     # linked: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True) # Deferring 'linked' status
 
     # --- Commit Information ---
-    files_changed: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    files_changed: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), nullable=True)
 
     # --- Commit Guru Metrics ---
     ns: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
