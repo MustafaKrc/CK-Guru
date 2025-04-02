@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     python3-venv \
     git \
+    grep \
     openjdk-17-jre-headless \
     # Add any other system dependencies your ML or data processing code might need
     && rm -rf /var/lib/apt/lists/*
