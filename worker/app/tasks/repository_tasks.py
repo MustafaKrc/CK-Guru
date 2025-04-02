@@ -35,8 +35,6 @@ except ModuleNotFoundError:
     logger.critical("Could not import shared DB models. Ensure shared module is accessible.", exc_info=True)
     raise
 
-# === Constants ===
-CK_COMMIT_LIMIT = 10 # Example limit for CK analysis
 
 # === Helper Functions ===
 
@@ -301,11 +299,10 @@ def _run_ck_analysis(
     repository_id: int,
     repo: git.Repo,
     repo_local_path: Path,
-    commit_limit: int
 ) -> int:
-    """Runs CK analysis on recent commits of the default branch."""
+    """Runs CK analysis on all commits of the default branch."""
     task_id = task.request.id
-    logger.info(f"Task {task_id}: Starting CK metric extraction (limit: {commit_limit})...")
+    logger.info(f"Task {task_id}: Starting CK metric extraction for all relevant commits...")
     _update_task_state(task, 'STARTED', 'Starting CK metric extraction...', 80)
 
     try:
@@ -322,7 +319,7 @@ def _run_ck_analysis(
              repo.create_head(local_branch_name, target_ref).set_tracking_branch(target_ref).checkout()
         logger.info(f"Checked out {local_branch_name} for CK analysis.")
 
-        commits_iterator = repo.iter_commits(rev=default_branch_ref_name, max_count=commit_limit)
+        commits_iterator = repo.iter_commits(rev=default_branch_ref_name)
     except (git.GitCommandError, ValueError, IndexError, AttributeError, Exception) as e:
         logger.error(f"Task {task_id}: Error setting up commit iteration or checkout for CK: {e}", exc_info=True)
         # Decide if CK failure is fatal - let's allow task to succeed without CK for now
@@ -332,6 +329,13 @@ def _run_ck_analysis(
     processed_ck_count = 0
     inserted_ck_count = 0
     processed_hashes_this_run = set() # Avoid redundant processing if iterator yields duplicates
+
+    try:
+        total_commits_for_ck = sum(1 for _ in repo.iter_commits(rev=default_branch_ref_name))
+        logger.info(f"Task {task_id}: Estimated {total_commits_for_ck} total commits for CK analysis.")
+    except Exception as count_err:
+         logger.warning(f"Task {task_id}: Could not estimate total commits for CK progress: {count_err}. Progress reporting will be less granular.")
+         total_commits_for_ck = 0 # Indicate unknown total
 
     with get_worker_sync_session() as session:
         for commit in commits_iterator:
@@ -349,7 +353,7 @@ def _run_ck_analysis(
             if session.execute(exists_stmt).scalar_one_or_none() is not None:
                 continue
 
-            logger.info(f"Running CK analysis for commit: {ck_commit_hash[:7]} ({processed_ck_count}/{commit_limit})")
+            logger.info(f"Running CK analysis for commit: {ck_commit_hash[:7]} ({processed_ck_count}{f'/{total_commits_for_ck}' if total_commits_for_ck > 0 else ''})...")
             if not checkout_commit(repo, ck_commit_hash):
                 logger.error(f"Failed to checkout commit {ck_commit_hash[:7]} for CK. Skipping.")
                 continue
@@ -418,13 +422,15 @@ def _run_ck_analysis(
             except Exception as e:
                 logger.error(f"Error processing CK metrics DataFrame for {ck_commit_hash[:7]}: {e}", exc_info=True)
 
-            # Update progress
-            if processed_ck_count % 5 == 0:
-                progress = 80 + int(18 * (processed_ck_count / commit_limit)) if commit_limit else 80
-                _update_task_state(task, 'STARTED', f'Analyzing CK ({processed_ck_count}/{commit_limit})...', progress)
+            # Update progress periodically (e.g., every 50 commits)
+            if processed_ck_count % 50 == 0:
+                 # Calculate progress based on total estimate if available
+                 current_progress = 80 + int(18 * (processed_ck_count / total_commits_for_ck)) if total_commits_for_ck > 0 else 80
+                 _update_task_state(task, 'STARTED', f'Analyzing CK ({processed_ck_count}{f"/{total_commits_for_ck}" if total_commits_for_ck > 0 else ""} completed)...', current_progress)
 
-    logger.info(f"Task {task_id}: Finished CK analysis. Inserted {inserted_ck_count} new CK metric records.")
-    return inserted_ck_count
+
+    logger.info(f"Task {task_id}: Finished CK analysis. Inserted {inserted_ck_count} new CK metric records from {processed_ck_count} commits checked.")
+    return inserted_ck_count # Return number inserted, not processed
 
 # === Main Celery Task (Orchestrator) ===
 @shared_task(bind=True, name='tasks.create_repository_dataset')
@@ -468,7 +474,7 @@ def create_repository_dataset_task(self: Task, repository_id: int, git_url: str)
         # --- Phase 5: Run CK Analysis ---
         if repo: # Ensure repo object is valid before CK
              total_ck_metrics_inserted = _run_ck_analysis(
-                 self, repository_id, repo, repo_local_path, CK_COMMIT_LIMIT
+                 self, repository_id, repo, repo_local_path
              )
              # Check if CK phase added a warning
              current_meta = self.AsyncResult(self.request.id).info or {}
@@ -489,7 +495,6 @@ def create_repository_dataset_task(self: Task, repository_id: int, git_url: str)
             'commit_guru_metrics_inserted': total_guru_metrics_inserted,
             'ck_metrics_inserted': total_ck_metrics_inserted,
             'total_commits_analyzed_guru': len(commit_guru_data_list),
-            'ck_commit_limit': CK_COMMIT_LIMIT,
         }
         if warning_info:
             result_payload['warning'] = warning_info
