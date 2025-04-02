@@ -1,6 +1,6 @@
 # backend/app/schemas/task.py
 import enum
-from typing import Any
+from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 class TaskResponse(BaseModel):
@@ -20,31 +20,36 @@ class TaskStatusEnum(str, enum.Enum): # Use standard Python enum
 class TaskStatusResponse(BaseModel):
     """Response model for checking the status of a background task."""
     task_id: str = Field(..., description="The unique ID of the background task.")
-    status: TaskStatusEnum = Field(..., description="Current status of the task.")
-    # Use Union for result, allowing it to be None or specific types later
-    result: Any | None = Field(None, description="Result of the task if completed successfully.")
+    status: TaskStatusEnum = Field(..., description="Current high-level status of the task.")
+    progress: Optional[int] = Field(None, description="Percentage progress of the task (if available).") # <<< NEW
+    status_message: Optional[str] = Field(None, description="Detailed status message from the worker (if available).") # <<< NEW
+    result: Any | None = Field(None, description="Final result of the task if completed successfully.")
     error: str | None = Field(None, description="Error message if the task failed.")
 
-    model_config = { # Pydantic V2 config
+    model_config = {
         "json_schema_extra": {
             "examples": [
-                {
-                    "task_id": "b1a9c8f8-7d6e-4b3c-9a1f-0e2d1b3c4d5e",
-                    "status": "PENDING",
+                { # Example for PROGRESS state
+                    "task_id": "d3c1e0f0...",
+                    "status": "STARTED", # Main state is still STARTED
+                    "progress": 55,      # Progress percentage
+                    "status_message": "Saving Commit Guru metrics (150/400)...", # Detailed message
                     "result": None,
                     "error": None,
                 },
-                {
-                    "task_id": "b1a9c8f8-7d6e-4b3c-9a1f-0e2d1b3c4d5e",
+                { # Example for final SUCCESS with meta-data returned
+                    "task_id": "e4d2f1a1...",
                     "status": "SUCCESS",
-                    "result": {"dataset_path": "/app/persistent_data/datasets/repo_1/dataset_20250401.csv"},
+                    "progress": None, # Optional: Could be 100, but often cleared on success
+                    "status_message": None, # Optional: Often cleared on success
+                    "result": { # Final result payload from the task
+                        "status": "Completed successfully",
+                        "repository_id": 1,
+                        "commit_guru_metrics_inserted": 40,
+                        "ck_metrics_inserted": 512,
+                        "total_commits_analyzed_guru": 40
+                    },
                     "error": None,
-                },
-                 {
-                    "task_id": "c2b0d9g9-8e7f-5c4d-0b2g-1f3e2c4d5e6f",
-                    "status": "FAILURE",
-                    "result": None,
-                    "error": "Failed to clone repository: Authentication required.",
                 },
             ]
         }
