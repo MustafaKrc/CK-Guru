@@ -365,6 +365,33 @@ def _run_ck_analysis(
                 records = metrics_df.to_dict(orient='records')
                 instances_to_add = []
                 for record in records:
+
+                    # *** PATH CORRECTION ***
+                    original_file_path_str = record.get('file')
+                    if original_file_path_str:
+                        try:
+                            absolute_file_path = Path(original_file_path_str)
+                            # Ensure path is absolute and starts with the repo root
+                            if absolute_file_path.is_absolute() and str(absolute_file_path).startswith(str(repo_local_path)):
+                                relative_path = absolute_file_path.relative_to(repo_local_path)
+                                # Store the relative path string
+                                record['file'] = str(relative_path)
+                                logger.debug(f"Converted CK path '{original_file_path_str}' to relative '{record['file']}'")
+                            else:
+                                # Path is already relative or outside the repo? Keep original but warn.
+                                 logger.warning(
+                                     f"CK metric file path '{original_file_path_str}' "
+                                     f"in commit {ck_commit_hash[:7]} is not absolute or doesn't start "
+                                     f"with repo root '{repo_local_path}'. Using original path."
+                                 )
+                        except (ValueError, TypeError) as path_err:
+                             logger.error(
+                                 f"Error processing CK file path '{original_file_path_str}' "
+                                 f"for commit {ck_commit_hash[:7]}: {path_err}. Keeping original."
+                             )
+                    else:
+                         logger.warning(f"Missing 'file' key in CK metric record for commit {ck_commit_hash[:7]}.")
+                    
                     # Prepare record (handle renames, add IDs, filter, clean NaN/Inf)
                     record['class_name'] = record.pop('class', None)
                     record['type_'] = record.pop('type', None)
