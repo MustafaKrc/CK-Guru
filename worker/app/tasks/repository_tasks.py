@@ -22,6 +22,8 @@ from ..core.config import settings
 from .data_processing.feature_extraction import checkout_commit, run_ck_tool
 from ..db.session import get_worker_sync_session
 from .utils.commit_guru_utils import calculate_commit_guru_metrics, GitCommitLinker
+from .utils.github_utils import GitHubIssueFetcher, extract_issue_ids, _extract_repo_owner_name
+from .utils.git_utils import find_commit_hash_before_timestamp
 
 # --- Setup Logger ---
 logger = get_task_logger(__name__)
@@ -34,7 +36,7 @@ except ModuleNotFoundError:
     raise
 
 # === Constants ===
-CK_COMMIT_LIMIT = 5 # Example limit for CK analysis
+CK_COMMIT_LIMIT = 10 # Example limit for CK analysis
 
 # === Helper Functions ===
 
@@ -68,46 +70,124 @@ def _prepare_repository(task_id: str, git_url: str, repo_local_path: Path) -> gi
     logger.info(f"Task {task_id}: Cloning complete.")
     return repo
 
-def _calculate_and_link_guru_metrics(
+def _fetch_and_process_github_issues(
+    task_id: str,
+    git_url: str,
+    commits_data: List[Dict[str, Any]]
+) -> None:
+    """
+    Fetches GitHub issue data for commits mentioning issues IN PLACE.
+    Modifies the `commits_data` list by adding GitHub info.
+    Handles rate limiting internally via GitHubIssueFetcher.
+    """
+    logger.info(f"Task {task_id}: Starting GitHub issue processing...")
+    repo_info = _extract_repo_owner_name(git_url)
+    if not repo_info:
+        logger.warning(f"Task {task_id}: Cannot process GitHub issues, failed to extract owner/repo from URL: {git_url}")
+        return
+    owner, repo_name = repo_info
+
+    if not settings.GITHUB_TOKEN:
+        logger.warning(f"Task {task_id}: Skipping GitHub issue processing - GITHUB_TOKEN not set.")
+        return
+
+    fetcher = GitHubIssueFetcher()
+    processed_count = 0
+    total_commits = len(commits_data)
+
+    for commit in commits_data:
+        commit_hash_short = commit.get('commit_hash', 'UNKNOWN')[:7]
+        message = commit.get('commit_message')
+        issue_ids = extract_issue_ids(message)
+
+        if issue_ids:
+            logger.debug(f"Task {task_id}: Found issue IDs {issue_ids} in commit {commit_hash_short}")
+            commit['github_issue_ids'] = {"ids": issue_ids}
+
+            try:
+                # --- This call now handles rate limit waits internally ---
+                earliest_ts = fetcher.get_earliest_issue_open_timestamp(owner, repo_name, issue_ids)
+                # --- Removed GitHubRateLimitError handling here ---
+
+                if earliest_ts is not None:
+                    commit['github_earliest_issue_open_timestamp'] = earliest_ts
+                    logger.debug(f"Task {task_id}: Earliest issue timestamp for {commit_hash_short}: {earliest_ts}")
+                elif earliest_ts is None and issue_ids: # Check if fetch failed for existing IDs
+                    logger.warning(f"Task {task_id}: Failed to fetch earliest timestamp for issues {issue_ids} in commit {commit_hash_short} (check previous logs for errors/retries).")
+
+            except Exception as e: # Catch other unexpected errors during timestamp processing
+                logger.error(f"Task {task_id}: Unexpected error processing GitHub issues for commit {commit_hash_short}: {e}", exc_info=True)
+
+        processed_count += 1
+        if processed_count % 100 == 0:
+             logger.info(f"Task {task_id}: Processed GitHub issues for {processed_count}/{total_commits} commits...")
+
+    logger.info(f"Task {task_id}: Finished GitHub issue processing.")
+
+def _calculate_and_save_guru_metrics(
     task: Task,
     task_id: str,
-    repo_local_path: Path
-) -> Tuple[List[Dict[str, Any]], Dict[str, List[str]], Set[str]]:
-    """Calculates Commit Guru metrics and performs bug linking."""
+    repository_id: int,
+    repo_local_path: Path,
+    git_url: str 
+) -> Tuple[int, List[Dict[str, Any]], str | None]: # Return inserted count, data list, warning
+    """Calculates, links, fetches issue data, and saves Commit Guru metrics."""
+
+    # --- Calculate Metrics ---
     _update_task_state(task, 'STARTED', 'Calculating Commit Guru metrics...', 20)
     logger.info(f"Task {task_id}: Calculating Commit Guru metrics...")
     try:
         commit_guru_data_list = calculate_commit_guru_metrics(repo_local_path)
     except Exception as e:
         logger.error(f"Task {task_id}: Failed during Commit Guru metric calculation: {e}", exc_info=True)
-        raise  # Re-raise to be caught by main handler
+        raise
 
     total_commits_found = len(commit_guru_data_list)
     logger.info(f"Task {task_id}: Found {total_commits_found} commits for Commit Guru analysis.")
-    _update_task_state(task, 'STARTED', f'Found {total_commits_found} commits. Linking bugs...', 40)
+    _update_task_state(task, 'STARTED', f'Found {total_commits_found} commits. Linking bugs & fetching issues...', 40)
 
+    # --- Fetch GitHub Issue Data (Modifies commit_guru_data_list in place) ---
+    _fetch_and_process_github_issues(task_id, git_url, commit_guru_data_list)
+    # Note: Rate limit errors during issue fetch might cause subsequent steps to have incomplete data
+
+    # --- Link Bugs ---
     logger.info(f"Task {task_id}: Identifying corrective commits and linking bugs...")
-    corrective_hashes = {
-        commit['commit_hash'] for commit in commit_guru_data_list
-        if commit.get('fix') and commit.get('commit_hash')
-    }
-    logger.info(f"Task {task_id}: Found {len(corrective_hashes)} potential corrective commits.")
+
+    # Prepare info for the linker: map corrective hash -> earliest issue timestamp
+    corrective_commits_info: Dict[str, Optional[int]] = {}
+    for commit in commit_guru_data_list:
+        commit_hash = commit.get('commit_hash')
+        # Use the 'fix' flag calculated earlier
+        if commit.get('fix') and commit_hash:
+            corrective_commits_info[commit_hash] = commit.get('github_earliest_issue_open_timestamp') # Will be None if no issue found
+
+    logger.info(f"Task {task_id}: Found {len(corrective_commits_info)} potential corrective commits for linking.")
 
     bug_link_map: Dict[str, List[str]] = {}
     warning_msg = None
-    if corrective_hashes:
+    if corrective_commits_info: # Check if there are any corrective commits
         try:
             linker = GitCommitLinker(repo_local_path)
-            bug_link_map = linker.link_corrective_commits(corrective_hashes)
+            # Pass the dictionary with timestamps to the linker
+            bug_link_map = linker.link_corrective_commits(corrective_commits_info)
             logger.info(f"Task {task_id}: Bug linking identified {len(bug_link_map)} potential bug-introducing commits.")
         except Exception as e:
             logger.error(f"Task {task_id}: Failed during bug linking: {e}", exc_info=True)
-            warning_msg = 'Bug linking failed, proceeding with metrics...'
-            _update_task_state(task, 'STARTED', warning_msg, 45, warning=warning_msg) # Update with warning
+            warning_msg = 'Bug linking failed, proceeding...'
+            _update_task_state(task, 'STARTED', warning_msg, 45, warning=warning_msg)
+    else:
+        logger.info(f"Task {task_id}: No corrective commits found, skipping bug linking.")
+
 
     buggy_hashes_set = set(bug_link_map.keys())
+
+    # --- Save Metrics ---
     _update_task_state(task, 'STARTED', 'Saving Commit Guru metrics...', 50)
-    return commit_guru_data_list, bug_link_map, buggy_hashes_set
+    inserted_count = _save_commit_guru_metrics(
+        task, repository_id, commit_guru_data_list, bug_link_map, buggy_hashes_set
+    )
+
+    return inserted_count, commit_guru_data_list, warning_msg
 
 def _save_commit_guru_metrics(
     task: Task,
@@ -143,14 +223,16 @@ def _save_commit_guru_metrics(
                 "repository_id": repository_id, "commit_hash": commit_hash,
                 "parent_hashes": commit_data.get('parent_hashes'),
                 "author_name": commit_data.get('author_name'),
-                "author_date_unix_timestamp": commit_data.get('author_date_unix_timestamp'),
-                "is_buggy": is_buggy,
                 "author_email": commit_data.get('author_email'),
-                "author_date": commit_data.get('author_date'),
+                "author_date": commit_data.get('author_date'), 
+                "author_date_unix_timestamp": commit_data.get('author_date_unix_timestamp'),
                 "commit_message": commit_data.get('commit_message'),
-                "files_changed": commit_data.get('files_changed'),
-                "fix": commit_data.get('fix'),
+                "is_buggy": is_buggy,
+                "fix": commit_data.get('fix'), 
                 "fixing_commit_hashes": {"hashes": fixing_hashes} if fixing_hashes else None,
+                "github_issue_ids": commit_data.get('github_issue_ids'), 
+                "github_earliest_issue_open_timestamp": commit_data.get('github_earliest_issue_open_timestamp'),
+                "files_changed": commit_data.get('files_changed'),
                 "ns": commit_data.get('ns'), "nd": commit_data.get('nd'),
                 "nf": commit_data.get('nf'), "entropy": commit_data.get('entropy'),
                 "la": commit_data.get('la'), "ld": commit_data.get('ld'),
@@ -170,8 +252,8 @@ def _save_commit_guru_metrics(
 
             # Update progress periodically
             if (i + 1) % 100 == 0:
-                 progress = 50 + int(30 * ((i + 1) / total_to_process)) if total_to_process else 50
-                 _update_task_state(task, 'STARTED', f'Saving Commit Guru metrics ({i+1}/{total_to_process})...', progress)
+                progress = 50 + int(30 * ((i + 1) / total_to_process)) if total_to_process else 50
+                _update_task_state(task, 'STARTED', f'Saving Commit Guru metrics ({i+1}/{total_to_process})...', progress)
 
         # Final commit handled by context manager
     logger.info(f"Task {task.request.id}: Finished saving {inserted_count} new Commit Guru metric records.")
@@ -348,21 +430,13 @@ def create_repository_dataset_task(self: Task, repository_id: int, git_url: str)
         repo = _prepare_repository(task_id, git_url, repo_local_path)
         _update_task_state(self, 'STARTED', 'Repository ready.', 15)
 
-        # --- Phase 2 & 3: Calculate Commit Guru Metrics & Link Bugs ---
-        commit_guru_data_list, bug_link_map, buggy_hashes_set = _calculate_and_link_guru_metrics(
-            self, task_id, repo_local_path
+        # --- Phase 2, 3, 4: Calculate, Link, Fetch Issues, Save Commit Guru Metrics ---
+        total_guru_metrics_inserted, commit_guru_data_list, guru_warning = _calculate_and_save_guru_metrics(
+            self, task_id, repository_id, repo_local_path, git_url # Pass git_url
         )
-        # Check if a warning was set during linking
-        current_meta = self.AsyncResult(self.request.id).info or {}
-        if 'warning' in current_meta:
-             warning_info = current_meta['warning']
-             final_status = "Completed with warnings (Bug linking failed)"
-
-
-        # --- Phase 4: Save Commit Guru Metrics ---
-        total_guru_metrics_inserted = _save_commit_guru_metrics(
-            self, repository_id, commit_guru_data_list, bug_link_map, buggy_hashes_set
-        )
+        if guru_warning and not warning_info: # Capture warning if not already set
+             warning_info = guru_warning
+             final_status = "Completed with warnings"
 
         # --- Phase 5: Run CK Analysis ---
         if repo: # Ensure repo object is valid before CK

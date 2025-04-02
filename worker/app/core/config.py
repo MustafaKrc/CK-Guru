@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     # Example: postgresql+asyncpg://user:password@ckguru_db:5432/mydatabase
     DATABASE_URL: PostgresDsn = Field(..., validation_alias='DATABASE_URL')
 
+    # --- GitHub API --- 
+    GITHUB_TOKEN: Optional[str] = Field(None, validation_alias='GITHUB_TOKEN')
+
     # --- Storage Configuration ---
     # Base path where the worker will store cloned repos (temp) and datasets
     # This path MUST be accessible within the worker container AND map to
@@ -61,13 +64,17 @@ class Settings(BaseSettings):
 # Create a single, reusable settings instance
 settings = Settings()
 
+
 # --- Optional: Basic Logging Setup ---
-# You can configure Python's root logger here if needed
-# import logging
-# logging.basicConfig(level=settings.LOG_LEVEL.upper())
-# logger = logging.getLogger(__name__)
-# logger.info("Worker settings loaded.")
-# logger.info(f"Broker URL: {settings.CELERY_BROKER_URL}")
-# logger.info(f"Result Backend: {'Configured' if settings.CELERY_RESULT_BACKEND else 'Not Configured'}")
-# logger.info(f"Database URL: {'Configured' if settings.DATABASE_URL else 'Not Configured'}")
-# logger.info(f"Storage Path: {settings.STORAGE_BASE_PATH}")
+import logging
+logging.basicConfig(level=settings.LOG_LEVEL.upper())
+logger = logging.getLogger(__name__)
+logger.info("Worker settings loaded.")
+logger.info(f"Broker URL: {settings.CELERY_BROKER_URL}")
+logger.info(f"Result Backend: {'Configured' if settings.CELERY_RESULT_BACKEND else 'Not Configured'}")
+logger.info(f"Database URL: {'Configured' if settings.DATABASE_URL else 'Not Configured'}")
+logger.info(f"Storage Path: {settings.STORAGE_BASE_PATH}")
+if settings.GITHUB_TOKEN:
+    logger.info("GitHub Token: Loaded (Token value not logged)")
+else:
+    logger.warning("GitHub Token: Not configured. Issue tracking will be disabled.")

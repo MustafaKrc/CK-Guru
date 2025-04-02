@@ -49,6 +49,10 @@ class CommitGuruMetric(Base):
     rexp: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     sexp: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
+    # --- GitHub Issue Linking Info ---
+    github_issue_ids: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True) # Store list of found IDs
+    github_earliest_issue_open_timestamp: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True) # Earliest open date
+
     # --- Deferred Columns ---
     # classification: Mapped[Optional[str]] = mapped_column(String, nullable=True) # Requires classifier logic
     # glm_probability: Mapped[Optional[float]] = mapped_column(Float, nullable=True) # Requires GLM logic
@@ -63,4 +67,5 @@ class CommitGuruMetric(Base):
     def __repr__(self):
         buggy_status = "Buggy" if self.is_buggy else "Not Buggy"
         fix = "Fix" if self.fix else ""
-        return f"<CommitGuruMetric(repo={self.repository_id}, commit='{self.commit_hash[:7]}', {buggy_status} {fix})>"
+        issue_info = f" Issues: {self.github_issue_ids['ids']}" if self.github_issue_ids else ""
+        return f"<CommitGuruMetric(repo={self.repository_id}, commit='{self.commit_hash[:7]}', {buggy_status} {fix} {issue_info})>"

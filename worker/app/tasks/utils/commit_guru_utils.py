@@ -6,7 +6,9 @@ import logging
 import math
 import re
 from pathlib import Path
-from typing import Dict, List, Set, Any, Optional, Tuple, NamedTuple
+from typing import Dict, List, Mapping, Set, Any, Optional, Tuple, NamedTuple
+
+from .git_utils import find_commit_hash_before_timestamp, run_git_command
 
 logger = logging.getLogger(__name__)
 
@@ -81,33 +83,6 @@ class DevExperienceMetrics(NamedTuple):
 
 
 # --- Helper Functions ---
-def _run_git_command(cmd: str, cwd: Path) -> str:
-    """Helper to run git commands and handle errors."""
-    try:
-        # Reduced logging noise for successful commands
-        # logger.debug(f"Running git command in {cwd}: {cmd[:100]}...")
-        result = subprocess.run(
-            cmd, shell=True, cwd=cwd, check=True, capture_output=True,
-            text=True, encoding='utf-8', errors='ignore'
-        )
-        # logger.debug(f"Git command successful. Stdout length: {len(result.stdout)}")
-        if result.stderr:
-             logger.warning(f"Git command stderr: {result.stderr.strip()}")
-        return result.stdout
-    except subprocess.CalledProcessError as e:
-        # Log error details without raising immediately, allow caller to handle
-        error_message = (
-            f"Git command failed (exit code {e.returncode}) in {cwd}.\n"
-            f"Command: {e.cmd}\nStderr: {e.stderr.strip()}"
-        )
-        logger.error(error_message)
-        raise # Re-raise the exception
-    except FileNotFoundError:
-        logger.error(f"Git command not found. Ensure git is installed and in PATH.")
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error running git command '{cmd[:100]}...' in {cwd}: {e}", exc_info=True)
-        raise
 
 def _parse_commit_guru_log(log_output: str) -> List[Dict[str, Any]]:
     """Parses the custom formatted git log output."""
@@ -299,7 +274,7 @@ def calculate_commit_guru_metrics(repo_path: Path, since_commit: Optional[str] =
         logger.info("Analyzing all commits.")
 
     try:
-        log_output = _run_git_command(cmd, cwd=repo_path)
+        log_output = run_git_command(cmd, cwd=repo_path)
     except subprocess.CalledProcessError as e:
         if "fatal: bad revision" not in e.stderr and "unknown revision" not in e.stderr:
              raise
@@ -459,9 +434,13 @@ class GitCommitLinker:
         self.repo_path: Path = repo_path
         logger.info(f"GitCommitLinker initialized for repository: {self.repo_path}")
 
-    def link_corrective_commits(self, corrective_commit_hashes: Set[str]) -> Dict[str, List[str]]:
+    def link_corrective_commits(
+        self,
+        corrective_commits_info: Mapping[str, Optional[int]] # Hash -> Earliest Issue Timestamp
+    ) -> Dict[str, List[str]]:
         """
         Links corrective commits to the commits that likely introduced the bug.
+        Uses earliest issue timestamp to refine blame starting point if available.
 
         Args:
             corrective_commit_hashes: A set of commit hashes identified as corrective.
@@ -472,15 +451,21 @@ class GitCommitLinker:
             Example: {'buggy_hash1': ['fix_hash1', 'fix_hash2'], 'buggy_hash2': ['fix_hash3']}
         """
         bug_link_map: Dict[str, List[str]] = {} # buggy_hash -> [fixing_hash1, fixing_hash2,...]
-        total_corrective = len(corrective_commit_hashes)
+        total_corrective = len(corrective_commits_info)
         processed_count = 0
 
         logger.info(f"Starting bug linking for {total_corrective} corrective commits...")
 
+        # Get corrective hashes from the input dictionary keys
+        corrective_commit_hashes = set(corrective_commits_info.keys())
+
         for corrective_hash in corrective_commit_hashes:
             processed_count += 1
+            earliest_issue_ts = corrective_commits_info.get(corrective_hash) # Get timestamp for this hash
+
             if processed_count % 10 == 0 or processed_count == total_corrective:
-                 logger.info(f"Linking corrective commit {processed_count}/{total_corrective}: {corrective_hash[:7]}...")
+                ts_info = f"(issue ts: {earliest_issue_ts})" if earliest_issue_ts else ""
+                logger.info(f"Linking corrective commit {processed_count}/{total_corrective}: {corrective_hash[:7]} {ts_info}...")
 
             try:
                 modified_regions = self._get_modified_regions(corrective_hash)
@@ -488,7 +473,10 @@ class GitCommitLinker:
                     logger.debug(f"No modified code regions found or parsed for corrective commit {corrective_hash[:7]}.")
                     continue
 
-                introducing_commits = self._git_annotate_regions(modified_regions, corrective_hash)
+                # Pass the timestamp to the annotation function
+                introducing_commits = self._git_annotate_regions(
+                    modified_regions, corrective_hash, earliest_issue_ts
+                )
 
                 for buggy_hash in introducing_commits:
                     if buggy_hash not in bug_link_map:
@@ -503,8 +491,8 @@ class GitCommitLinker:
         linked_count = len(bug_link_map)
         logger.info(f"Finished bug linking. Identified {linked_count} potential bug-introducing commits from {total_corrective} corrective commits.")
         if logger.isEnabledFor(logging.DEBUG) and bug_link_map:
-             debug_map_str = json.dumps({k[:7]: [v[:7] for v in vals] for k, vals in list(bug_link_map.items())[:5]}, indent=2)
-             logger.debug(f"Sample bug link map (buggy_hash -> [fixing_hashes]):\n{debug_map_str}")
+            debug_map_str = json.dumps({k[:7]: [v[:7] for v in vals] for k, vals in list(bug_link_map.items())[:5]}, indent=2)
+            logger.debug(f"Sample bug link map (buggy_hash -> [fixing_hashes]):\n{debug_map_str}")
 
         return bug_link_map
 
@@ -517,8 +505,8 @@ class GitCommitLinker:
         files_cmd = f"git diff --name-only {commit_hash}^ {commit_hash}"
 
         try:
-            diff_output = _run_git_command(diff_cmd, cwd=self.repo_path)
-            files_modified_output = _run_git_command(files_cmd, cwd=self.repo_path)
+            diff_output = run_git_command(diff_cmd, cwd=self.repo_path)
+            files_modified_output = run_git_command(files_cmd, cwd=self.repo_path)
             files_modified = set(fn for fn in files_modified_output.strip().splitlines() if fn) # Filter empty lines
         except subprocess.CalledProcessError as e:
             if "unknown revision" in e.stderr or "bad revision" in e.stderr:
@@ -589,40 +577,112 @@ class GitCommitLinker:
         return {f: lines for f, lines in modified_lines_map.items() if lines} # Clean empty entries
 
 
-    def _git_annotate_regions(self, regions: Dict[str, List[int]], corrective_commit_hash: str) -> Set[str]:
-        """Uses `git blame` to find the origins of modified lines."""
+    def _git_annotate_regions(
+        self,
+        regions: Dict[str, List[int]],
+        corrective_commit_hash: str,
+        earliest_issue_timestamp: Optional[int]
+    ) -> Set[str]:
+        """
+        Uses `git blame` to find the origins of modified lines.
+        Starts blame from commit before earliest issue timestamp if provided.
+        If that fails due to "no such path", it falls back to blaming from
+        the parent of the corrective commit.
+        """
         introducing_commits: Set[str] = set()
-        parent_commit = f"{corrective_commit_hash}^"
+        default_blame_start = f"{corrective_commit_hash}^"
+
+        # --- Determine the initial starting commit for blame ---
+        initial_blame_start_commit: Optional[str] = None
+        used_issue_timestamp = False # Flag to know if we used the timestamp strategy initially
+
+        if earliest_issue_timestamp:
+            logger.debug(f"Using earliest issue timestamp {earliest_issue_timestamp} to find blame start for {corrective_commit_hash[:7]}")
+            commit_before_issue = find_commit_hash_before_timestamp(self.repo_path, earliest_issue_timestamp)
+            if commit_before_issue:
+                initial_blame_start_commit = commit_before_issue
+                used_issue_timestamp = True
+                logger.info(f"Initial blame start for {corrective_commit_hash[:7]} set to commit before issue: {initial_blame_start_commit[:7]}")
+            else:
+                logger.warning(f"Could not find commit before issue timestamp {earliest_issue_timestamp} for {corrective_commit_hash[:7]}. Defaulting to parent.")
+                initial_blame_start_commit = default_blame_start
+        else:
+            initial_blame_start_commit = default_blame_start
+            logger.debug(f"Initial blame start for {corrective_commit_hash[:7]} set to parent: {initial_blame_start_commit[:7]}")
+        # --- End determining initial start commit ---
+
+        # Ensure initial_blame_start_commit is not None (should only happen if parent doesn't exist - initial commit case handled by _get_modified_regions returning {})
+        if not initial_blame_start_commit:
+             logger.error(f"Could not determine a valid blame start commit for {corrective_commit_hash[:7]}. Skipping blame.")
+             return introducing_commits
+
 
         for file_path, line_numbers in regions.items():
             if not line_numbers: continue
 
-            logger.debug(f"Annotating file '{file_path}' for {len(line_numbers)} lines starting from {parent_commit[:7]}")
+            current_blame_start = initial_blame_start_commit
+            attempt_fallback = False
+            blame_succeeded = False
+
+            logger.debug(f"Annotating file '{file_path}' for {len(line_numbers)} lines starting from {current_blame_start[:7]}")
             line_args = " ".join([f"-L {ln},{ln}" for ln in line_numbers])
-            # Use --porcelain format for more reliable parsing
-            blame_cmd = f"git blame --porcelain -w {parent_commit} {line_args} -- \"{file_path}\""
+            blame_cmd = f"git blame --porcelain -w {current_blame_start} {line_args} -- \"{file_path}\""
 
             try:
-                blame_output = _run_git_command(blame_cmd, cwd=self.repo_path)
-                # Parse porcelain output: the first line of each block is the commit hash
-                current_hash = None
-                for line in blame_output.strip().splitlines():
-                    parts = line.split()
-                    if len(parts) > 0 and len(parts[0]) == 40: # Looks like a hash
-                        current_hash = parts[0]
-                    # Check for 'previous' line to handle renames/copies if needed,
-                    # but basic blame should give the hash we need.
-                    # Add the hash found for the line range.
-                    if current_hash and '\t' in line: # Line content starts after first tab
-                         if current_hash != corrective_commit_hash:
-                             introducing_commits.add(current_hash)
-                         current_hash = None # Reset for next block if any
+                blame_output = run_git_command(blame_cmd, cwd=self.repo_path)
+                blame_succeeded = True # Mark as succeeded on first try
 
             except subprocess.CalledProcessError as e:
-                 logger.warning(f"Git blame failed for '{file_path}', lines ~{line_numbers[0]} at {parent_commit[:7]}: {e.stderr.strip()}")
+                 # Check if it's the "no such path" error AND we used the issue timestamp initially
+                 is_no_such_path_error = "fatal: no such path" in e.stderr
+                 if is_no_such_path_error and used_issue_timestamp and current_blame_start != default_blame_start:
+                      logger.warning(f"Blame from issue-derived commit {current_blame_start[:7]} failed for '{file_path}' (no path). Attempting fallback from parent {default_blame_start[:7]}.")
+                      attempt_fallback = True
+                 elif "fatal: bad revision" in e.stderr:
+                     logger.warning(f"Git blame failed for '{file_path}' at start {current_blame_start[:7]} (bad revision): {e.stderr.strip()}")
+                     # Cannot fallback if parent is bad revision
+                 else: # Other errors
+                      logger.warning(f"Git blame command failed for '{file_path}', lines ~{line_numbers[0]} starting at {current_blame_start[:7]} for corrective {corrective_commit_hash[:7]}: {e.stderr.strip()}")
+                      # Don't fallback on other errors for now
             except Exception as e:
-                 logger.error(f"Unexpected error running git blame for {file_path} at {parent_commit[:7]}: {e}", exc_info=True)
+                 logger.error(f"Unexpected error running initial git blame for {file_path} at {current_blame_start[:7]}: {e}", exc_info=True)
+                 # Don't fallback
+
+            # --- Fallback Attempt ---
+            if attempt_fallback:
+                current_blame_start = default_blame_start # Switch to parent
+                logger.debug(f"Fallback: Annotating file '{file_path}' for {len(line_numbers)} lines starting from {current_blame_start[:7]}")
+                blame_cmd = f"git blame --porcelain -w {current_blame_start} {line_args} -- \"{file_path}\""
+                try:
+                    blame_output = run_git_command(blame_cmd, cwd=self.repo_path)
+                    blame_succeeded = True # Mark as succeeded on fallback
+                except subprocess.CalledProcessError as e:
+                     # Log fallback failure
+                     logger.warning(f"Fallback git blame failed for '{file_path}' at start {current_blame_start[:7]}: {e.stderr.strip()}")
+                     blame_succeeded = False # Ensure it's marked as failed
+                except Exception as e:
+                     logger.error(f"Unexpected error running fallback git blame for {file_path} at {current_blame_start[:7]}: {e}", exc_info=True)
+                     blame_succeeded = False
+
+            # --- Process Blame Output (if succeeded) ---
+            if blame_succeeded:
+                try:
+                    current_hash = None
+                    for line in blame_output.strip().splitlines():
+                        parts = line.split()
+                        # Check if the first part is a 40-char hash
+                        if len(parts) > 0 and len(parts[0]) == 40 and all(c in '0123456789abcdef' for c in parts[0]):
+                            current_hash = parts[0]
+                        # Check if this line contains actual code content (heuristic: has a tab)
+                        # and we have a hash associated with it
+                        if current_hash and '\t' in line:
+                            # Ensure we don't link the corrective commit itself or the commit we *started* blaming from
+                            if current_hash != corrective_commit_hash and current_hash != current_blame_start:
+                                introducing_commits.add(current_hash)
+                            current_hash = None # Reset for the next potential blame block
+                except Exception as parse_err:
+                    logger.error(f"Error parsing blame output for {file_path} (start: {current_blame_start[:7]}): {parse_err}", exc_info=True)
+
 
         return introducing_commits
-
 # ==================================================
