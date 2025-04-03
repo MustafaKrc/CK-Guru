@@ -9,7 +9,6 @@ services:
     container_name: ckguru_backend
     volumes:
       - ./backend/app:/app/app # Hot-reload for backend code
-      - app_data:/app/persistent_data # Maps the named volume for storage
       # Mounts for alembic are still useful for development to see changes
       # without rebuilding the image every time.
       - ./backend/alembic.ini:/app/alembic.ini
@@ -28,6 +27,8 @@ services:
         condition: service_started # Adjust condition as needed
       redis:
         condition: service_started
+      minio:
+        condition: service_healthy
   #################
   # Celery Worker
   #################
@@ -39,7 +40,7 @@ services:
     volumes:
       - ./worker/app:/app/app # Optional: hot-reload 
       - ./shared:/app/shared # Shared directory hot-reload 
-      - app_data:/app/persistent_data
+      - app_data:/app/persistent_data # For git clones
     env_file:
       - .env
     environment:
@@ -51,6 +52,7 @@ services:
       - broker
       - db
       - redis
+      - minio
     # <<< --- GPU Configuration --- >>>
     deploy:
       resources:
@@ -60,6 +62,51 @@ services:
               # count: 1 # Request exactly one GPU
               count: all # Request all available GPUs
               capabilities: [gpu] # Request GPU capabilities
+
+  #################
+  # Object Storage (MinIO)
+  #################
+  minio:
+    image: minio/minio:RELEASE.2025-04-03T14-56-28Z # If cpu architecture does not support x86_64-v2 use RELEASE.2025-04-03T14-56-28Z-cpuv1 (cpuv1 variant)
+    container_name: ckguru_minio
+    env_file:
+      - .env # Load MINIO_ROOT_USER, MINIO_ROOT_PASSWORD from .env
+    environment:
+      # These should match S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY in .env
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY}
+    command: server /data --console-address ":9001" # Start server, data dir, console port
+    ports:
+      - "9000:9000" # API port
+      - "9001:9001" # Console port
+    volumes:
+      - minio_data:/data # Persistent storage for MinIO buckets/objects
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"] # Use MinIO Client for healthcheck
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+  mc: # MinIO Client Helper Container (for creating bucket)
+      image: minio/mc
+      depends_on:
+          minio:
+              condition: service_healthy
+      env_file:
+          - .env # Need access keys
+      entrypoint: >
+          /bin/sh -c "
+          echo 'Waiting for MinIO...' &&
+          sleep 5 &&
+          mc config host add local ${S3_ENDPOINT_URL:-http://minio:9000} ${S3_ACCESS_KEY_ID} ${S3_SECRET_ACCESS_KEY} --api S3v4 &&
+          echo 'Checking if bucket ${S3_BUCKET_NAME} exists...' &&
+          mc ls local/${S3_BUCKET_NAME} > /dev/null 2>&1 || (
+              echo 'Bucket ${S3_BUCKET_NAME} does not exist. Creating...' &&
+              mc mb local/${S3_BUCKET_NAME} &&
+              echo 'Bucket ${S3_BUCKET_NAME} created.'
+          ) || echo 'Bucket ${S3_BUCKET_NAME} already exists.'
+          echo 'MinIO setup complete.'
+          "
 
   #################
   # Frontend UI
@@ -103,6 +150,8 @@ services:
     ports:
       - "5672:5672"   # AMQP protocol port
       - "15672:15672" # Management UI port
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq # Persistent storage for RabbitMQ data
 
   #################
   # Result Backend (Redis)
@@ -126,5 +175,7 @@ services:
 #################
 volumes:
   postgres_data: # Stores PostgreSQL data
-  app_data:      # Stores datasets, models, etc. (local storage via fsspec)
+  app_data:      # Stores git clones for worker
   redis_data:    # Stores Redis data (optional, but good for persistence)
+  minio_data:    # Stores MinIO data (buckets/objects) for datasets, models, etc.
+  rabbitmq_data: # Stores RabbitMQ message data, user configs, etc.

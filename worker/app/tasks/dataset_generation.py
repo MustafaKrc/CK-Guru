@@ -6,6 +6,7 @@ from pathlib import Path
 import logging
 import re
 from typing import List, Optional, Type
+
 import pandas as pd
 import numpy as np
 import pyarrow as pa
@@ -16,6 +17,7 @@ from sqlalchemy.orm import sessionmaker, Session, aliased, DeclarativeBase
 from sqlalchemy.sql.selectable import Select
 from sqlalchemy.engine import Connection
 import sqlalchemy as sa
+import s3fs
 
 from ..core.config import settings
 from ..db.session import get_worker_sync_session, sync_engine # Use sync session
@@ -235,8 +237,6 @@ def generate_dataset_task(self: Task, dataset_id: int):
     dataset: Optional[Dataset] = None
     repo: Optional[Repository] = None
     bot_patterns: List[BotPattern] = []
-    output_file_path: Optional[Path] = None
-    pq_writer: Optional[pq.ParquetWriter] = None
     total_rows_processed = 0
     total_rows_written = 0
 
@@ -307,11 +307,15 @@ def generate_dataset_task(self: Task, dataset_id: int):
             batch_size = 1000 # Adjust batch size based on memory/performance
             logger.info(f"Task {task_id}: Starting data processing in batches of {batch_size}...")
 
-            # Set up output file path and Parquet writer
-            output_dir = Path(settings.STORAGE_BASE_PATH) / "datasets"
-            output_dir.mkdir(parents=True, exist_ok=True)
-            output_file_path = output_dir / f"dataset_{dataset_id}.parquet"
-            logger.info(f"Task {task_id}: Output file will be: {output_file_path}")
+            # --- Define Object Storage Path ---
+            dataset_filename = f"dataset_{dataset_id}.parquet"
+            # Construct S3 URI
+            object_storage_uri = f"s3://{settings.S3_BUCKET_NAME}/datasets/{dataset_filename}"
+            logger.info(f"Task {task_id}: Output will be written to: {object_storage_uri}")
+
+
+            # --- Get Storage Options ---
+            storage_options = settings.s3_storage_options
 
             first_batch = True
             arrow_schema = None
@@ -319,6 +323,20 @@ def generate_dataset_task(self: Task, dataset_id: int):
             # Use stream_results for memory efficiency
             conn: Connection = session.connection() # Get underlying DBAPI connection if needed by stream_results? or session.stream()
             stream = session.execute(base_query).yield_per(batch_size) # Use yield_per
+
+            # --- Overwrite existing object at the start ---
+            # Important to clear any partial results from previous failed runs
+            try:
+                logger.warning(f"Task {task_id}: Attempting to overwrite existing object if present: {object_storage_uri}")
+                fs = s3fs.S3FileSystem(**storage_options)
+                if fs.exists(object_storage_uri):
+                    fs.rm(object_storage_uri)
+                    logger.info(f"Task {task_id}: Removed existing object at {object_storage_uri}")
+
+            except Exception as overwrite_err:
+                # Log error but proceed - maybe bucket doesn't exist yet or permissions issue
+                logger.error(f"Task {task_id}: Could not ensure removal of existing object at {object_storage_uri}: {overwrite_err}. Proceeding anyway.")
+
 
             for i, result_batch in enumerate(stream.partitions(batch_size)):
                 start_time_batch = time.time()
@@ -401,37 +419,50 @@ def generate_dataset_task(self: Task, dataset_id: int):
 
                 final_batch_df = cleaned_batch_df[available_final_columns]
 
-                # -- Append to Parquet File --
-                if not final_batch_df.empty:
-                    logger.debug(f"Task {task_id}: Batch {i+1} - Writing {len(final_batch_df)} rows to Parquet...")
-                    table = pa.Table.from_pandas(final_batch_df, schema=arrow_schema, preserve_index=False)
+                # -- Append to Object Storage (using pandas.to_parquet) --
+            if not final_batch_df.empty:
+                logger.debug(f"Task {task_id}: Batch {i+1} - Writing {len(final_batch_df)} rows to {object_storage_uri}...")
+                try:
                     if first_batch:
-                        arrow_schema = table.schema # Infer schema from first batch
-                        pq_writer = pq.ParquetWriter(output_file_path, arrow_schema)
-                        first_batch = False
-
-                    if pq_writer:
-                         pq_writer.write_table(table)
+                         # Write first batch, creating the file & schema
+                         final_batch_df.to_parquet(
+                             object_storage_uri,
+                             engine='pyarrow',
+                             compression='snappy', # Or other compression
+                             index=False,
+                             storage_options=storage_options
+                             # schema=arrow_schema # let pandas infer schema on first write
+                         )
+                         # We don't strictly need the schema variable anymore
+                         # arrow_schema = pa.Table.from_pandas(final_batch_df).schema
+                         first_batch = False
+                         logger.info(f"Task {task_id}: Wrote first batch to {object_storage_uri}")
                     else:
-                         # This should not happen after the first batch unless the first batch was empty
-                         logger.error("Parquet writer not initialized.")
-                         raise IOError("Failed to initialize Parquet writer.")
-
+                         # Append subsequent batches
+                         final_batch_df.to_parquet(
+                             object_storage_uri,
+                             engine='pyarrow',
+                             compression='snappy',
+                             index=False,
+                             storage_options=storage_options,
+                             append=True # Use append=True (requires pandas >= 1.5)
+                         )
                     total_rows_written += len(final_batch_df)
+                except Exception as write_err:
+                    logger.error(f"Task {task_id}: Batch {i+1} - Error writing to object storage {object_storage_uri}: {write_err}", exc_info=True)
+                    # If write fails, subsequent appends might corrupt file - fail task
+                    raise write_err
 
                 batch_duration = time.time() - start_time_batch
                 logger.debug(f"Task {task_id}: Batch {i+1} processed in {batch_duration:.2f} seconds.")
                 # --- End Batch Loop ---
 
-            # Close Parquet writer
-            if pq_writer:
-                pq_writer.close()
-            logger.info(f"Task {task_id}: Finished processing {total_rows_processed} rows. Written {total_rows_written} rows to {output_file_path}.")
+            logger.info(f"Task {task_id}: Finished processing {total_rows_processed} rows. Written {total_rows_written} rows to {object_storage_uri}.")
 
             # 5. Update Final Status
             dataset.status = DatasetStatusEnum.READY
             dataset.status_message = f"Dataset generated successfully. {total_rows_written} rows written."
-            dataset.storage_path = str(output_file_path.relative_to(settings.STORAGE_BASE_PATH)) # Store relative path
+            dataset.storage_path = object_storage_uri
             session.commit()
             update_task_state(self, 'SUCCESS', dataset.status_message, 100)
             logger.info(f"Task {task_id}: Dataset {dataset_id} marked as READY.")
@@ -457,21 +488,17 @@ def generate_dataset_task(self: Task, dataset_id: int):
         except Exception as db_update_err:
             logger.error(f"Task {task_id}: CRITICAL - Failed to update dataset status to FAILED in DB: {db_update_err}")
 
-        # Clean up partially written file if it exists
-        if output_file_path and output_file_path.exists():
+
+        # Clean up potentially partially written OBJECT in storage
+        if object_storage_uri:
             try:
-                 logger.warning(f"Task {task_id}: Deleting partially generated file: {output_file_path}")
-                 output_file_path.unlink()
-            except OSError as unlink_err:
-                 logger.error(f"Task {task_id}: Failed to delete partial file {output_file_path}: {unlink_err}")
+                logger.warning(f"Task {task_id}: Attempting to delete potentially incomplete object: {object_storage_uri}")
+                fs = s3fs.S3FileSystem(**settings.s3_storage_options) # Get fs instance again
+                if fs.exists(object_storage_uri):
+                    fs.rm(object_storage_uri)
+                    logger.info(f"Task {task_id}: Deleted incomplete object: {object_storage_uri}")
+            except Exception as cleanup_err:
+                logger.error(f"Task {task_id}: Failed to delete incomplete object {object_storage_uri} after error: {cleanup_err}")
 
         # Re-raise the exception so Celery marks the task as failed
         raise e
-
-    finally:
-         # Ensure Parquet writer is closed even if errors occurred before its definition
-         if pq_writer:
-              try:
-                   pq_writer.close()
-              except Exception as close_err:
-                   logger.error(f"Task {task_id}: Error closing Parquet writer: {close_err}")

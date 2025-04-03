@@ -1,13 +1,21 @@
 # backend/app/api/v1/endpoints/datasets.py
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
+import io
+import logging
+from typing import Any, Dict, List, Optional, AsyncGenerator
 
+import csv
+import s3fs
+import pandas as pd
+import pyarrow.parquet as pq
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import settings 
 from app import schemas, crud
 from app.api import deps
 from app.core.celery_app import backend_celery_app
-from shared.db.models.dataset import DatasetStatusEnum # Import Enum
-import logging
+from shared.db.models.dataset import DatasetStatusEnum 
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -149,3 +157,165 @@ async def delete_dataset_endpoint(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found")
     logger.info(f"Dataset definition {dataset_id} deleted. Associated file at {deleted_dataset.storage_path} may still exist.")
     return None
+
+async def get_valid_dataset_uri(dataset_id: int, db: AsyncSession) -> str:
+    """Gets dataset, checks status, returns object storage URI, raises HTTPException on error."""
+    db_dataset = await crud.crud_dataset.get_dataset(db, dataset_id=dataset_id)
+    if db_dataset is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found")
+    if db_dataset.status != DatasetStatusEnum.READY:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Dataset is not ready. Current status: {db_dataset.status.value}"
+        )
+    if not db_dataset.storage_path or not db_dataset.storage_path.startswith("s3://"): # Basic check
+        logger.error(f"Dataset ID {dataset_id} is READY but has invalid/missing storage path: {db_dataset.storage_path}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Dataset is marked ready but its storage path is missing or invalid."
+        )
+
+    logger.debug(f"Accessing dataset object at: {db_dataset.storage_path}")
+    # Further validation could involve an `fs.exists(uri)` check here, but adds latency
+    return db_dataset.storage_path
+
+@router.get(
+    "/datasets/{dataset_id}/view",
+    response_model=List[Dict[str, Any]],
+    summary="View Dataset Content (Paginated from Object Storage)",
+    description="Reads rows from the generated Parquet dataset object with pagination. May be slow for large datasets.",
+    # ... (responses remain similar) ...
+)
+async def view_dataset_content(
+    dataset_id: int,
+    db: AsyncSession = Depends(deps.get_db_session),
+    skip: int = Query(0, ge=0, description="Number of rows to skip."),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of rows to return."),
+):
+    """Reads dataset rows from object storage using PyArrow iteration."""
+    object_storage_uri = await get_valid_dataset_uri(dataset_id, db)
+    storage_options = settings.s3_storage_options
+
+    rows_collected = []
+    try:
+        # Use fsspec filesystem object with pyarrow
+        fs = s3fs.S3FileSystem(**storage_options)
+        # Need to strip s3:// prefix for path argument in pq.ParquetFile with filesystem
+        s3_path = object_storage_uri.replace("s3://", "")
+
+        with fs.open(s3_path, 'rb') as f: # Open file handle via fsspec
+            parquet_file = pq.ParquetFile(f)
+            logger.info(f"Total rows in dataset {dataset_id} object: {parquet_file.metadata.num_rows}")
+
+            # --- Pagination Logic (needs careful implementation for streaming) ---
+            # Simple approach: Read desired range if possible, or iterate batches
+            # Reading specific row groups might be more efficient if skip is large
+            # For now, stick to iterating batches and slicing in memory for simplicity:
+            total_rows_seen = 0
+            for batch in parquet_file.iter_batches(batch_size=65536):
+                if not rows_collected and total_rows_seen + batch.num_rows <= skip:
+                    total_rows_seen += batch.num_rows
+                    continue
+
+                batch_df = batch.to_pandas(types_mapper=pd.ArrowDtype)
+                start_index_in_batch = max(0, skip - total_rows_seen)
+                rows_needed = limit - len(rows_collected)
+                end_index_in_batch = start_index_in_batch + rows_needed
+                rows_to_add_df = batch_df.iloc[start_index_in_batch:end_index_in_batch]
+
+                rows_to_add = rows_to_add_df.to_dict(orient='records')
+                rows_collected.extend(rows_to_add)
+                total_rows_seen += batch.num_rows
+
+                if len(rows_collected) >= limit:
+                    break
+
+        logger.info(f"Returning {len(rows_collected)} rows for dataset {dataset_id} (skip={skip}, limit={limit})")
+        return rows_collected
+
+    except FileNotFoundError: # If fs.exists failed or object deleted between check and read
+         raise HTTPException(status_code=404, detail="Dataset object not found in storage.")
+    except Exception as e:
+        logger.error(f"Error reading Parquet object {object_storage_uri} for view: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to read dataset content: {e}")
+    
+@router.get(
+    "/datasets/{dataset_id}/download",
+    # response_class=FileResponse, # Changed to StreamingResponse 
+    summary="Download Generated Dataset as CSV",
+    description="Downloads the complete generated dataset by converting the stored Parquet file to CSV format on-the-fly.",
+    # ... (responses remain similar, but content type might change slightly) ...
+     responses={
+        200: {
+            "content": {"text/csv": {}}, # Use octet-stream for streaming generally
+            "description": "CSV  file download.",
+        },
+        404: {"description": "Dataset or file not found"},
+        409: {"description": "Dataset not ready"},
+        500: {"description": "Error accessing dataset file"},
+    }
+)
+async def download_dataset_file_as_csv(
+    dataset_id: int,
+    db: AsyncSession = Depends(deps.get_db_session),
+):
+    """Streams dataset content as CSV from Parquet stored in object storage."""
+    object_storage_uri = await get_valid_dataset_uri(dataset_id, db)
+    storage_options = settings.s3_storage_options
+    # Define the CSV filename for the download
+    csv_filename = f"dataset_{dataset_id}.csv"
+
+    async def generate_csv_chunks() -> AsyncGenerator[bytes, None]:
+        """Generator function to read Parquet, convert to CSV chunks, and yield bytes."""
+        try:
+            logger.info(f"Starting CSV conversion stream for {object_storage_uri}")
+            fs = s3fs.S3FileSystem(**storage_options)
+            s3_path = object_storage_uri.replace("s3://", "")
+
+            with fs.open(s3_path, 'rb') as f:
+                parquet_file = pq.ParquetFile(f)
+                first_chunk = True
+                # Iterate through batches (adjust batch_size based on typical row size and memory)
+                for i, batch in enumerate(parquet_file.iter_batches(batch_size=10000)):
+                    logger.debug(f"Processing batch {i} for CSV conversion...")
+                    batch_df = batch.to_pandas(types_mapper=pd.ArrowDtype)
+
+                    # Use io.StringIO to write CSV chunk to memory buffer
+                    output = io.StringIO()
+                    batch_df.to_csv(
+                        output,
+                        header=first_chunk, # Include header only for the first chunk
+                        index=False,      # Do not write pandas index
+                        quoting=csv.QUOTE_NONNUMERIC, # Example: Quote non-numeric fields
+                        escapechar="\\"              # Example: Use backslash for escaping
+                    )
+                    csv_chunk = output.getvalue()
+                    output.close()
+
+                    # Yield the CSV chunk encoded as bytes
+                    yield csv_chunk.encode('utf-8')
+
+                    if first_chunk:
+                        first_chunk = False # Header written, disable for next chunks
+
+            logger.info(f"Finished CSV conversion stream for {object_storage_uri}")
+
+        except FileNotFoundError:
+            logger.error(f"Parquet object not found during streaming: {object_storage_uri}")
+            # Raising exception inside generator might be tricky for FastAPI, log and yield nothing more.
+            # Or find a way to signal error to StreamingResponse. Logging is essential.
+            # Let's try raising it to see how FastAPI handles it.
+            raise HTTPException(status_code=404, detail="Dataset object not found in storage.")
+        except Exception as e:
+            logger.error(f"Error during CSV conversion stream for {object_storage_uri}: {e}", exc_info=True)
+            # Raise HTTP exception to signal failure during streaming
+            raise HTTPException(status_code=500, detail=f"Failed during CSV conversion stream: {e}")
+
+    # Return a StreamingResponse using the generator
+    return StreamingResponse(
+        content=generate_csv_chunks(),
+        media_type='text/csv',
+        headers={
+            'Content-Disposition': f'attachment; filename="{csv_filename}"'
+        }
+    )

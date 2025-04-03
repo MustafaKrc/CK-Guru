@@ -1,12 +1,12 @@
 # worker/app/core/config.py
 import os
 from pathlib import Path
-from typing import Optional # Use Optional for clarity, same as | None
+from typing import Any, Dict, Optional # Use Optional for clarity, same as | None
 
 # Using pydantic-settings (recommended for Pydantic v2+)
 # If using Pydantic v1, use `from pydantic import BaseSettings`
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, AmqpDsn, PostgresDsn, RedisDsn  # For URL validation
+from pydantic import Field, AmqpDsn, PostgresDsn, RedisDsn, SecretStr  # For URL validation
 
 class Settings(BaseSettings):
     """
@@ -46,15 +46,43 @@ class Settings(BaseSettings):
     # --- GitHub API --- 
     GITHUB_TOKEN: Optional[str] = Field(None, validation_alias='GITHUB_TOKEN')
 
-    # --- Storage Configuration ---
-    # Base path where the worker will store cloned repos (temp) and datasets
-    # This path MUST be accessible within the worker container AND map to
-    # a persistent volume if data needs to survive container restarts.
-    # The default assumes '/app/persistent_data' inside the container.
-    STORAGE_BASE_PATH: Path = Field(
-        default=Path('/app/persistent_data'),
-        validation_alias='STORAGE_BASE_PATH'
-    )
+    # --- Local Storage Path (Still needed for git clones) ---
+    STORAGE_BASE_PATH: Path = Field(default=Path('/app/persistent_data'))
+
+    # --- Object Storage Config ---
+    OBJECT_STORAGE_TYPE: str = Field("s3", validation_alias="OBJECT_STORAGE_TYPE")
+    S3_ENDPOINT_URL: Optional[str] = Field(None, validation_alias="S3_ENDPOINT_URL") # Required for MinIO/non-AWS
+    S3_ACCESS_KEY_ID: Optional[str] = Field(None, validation_alias="S3_ACCESS_KEY_ID")
+    S3_SECRET_ACCESS_KEY: Optional[SecretStr] = Field(None, validation_alias="S3_SECRET_ACCESS_KEY")
+    S3_BUCKET_NAME: str = Field(..., validation_alias="S3_BUCKET_NAME") # Bucket must be configured
+    S3_REGION: Optional[str] = Field(None, validation_alias="S3_REGION")
+    S3_USE_SSL: bool = Field(True, validation_alias="S3_USE_SSL") # Default to True for safety
+
+    # Helper property to construct storage options for fsspec/pandas
+    @property
+    def s3_storage_options(self) -> Dict[str, Any]:
+        opts = {}
+        # Only add credentials if they are set (allows IAM roles on AWS)
+        if self.S3_ACCESS_KEY_ID:
+            opts["key"] = self.S3_ACCESS_KEY_ID
+        if self.S3_SECRET_ACCESS_KEY:
+            opts["secret"] = self.S3_SECRET_ACCESS_KEY.get_secret_value()
+        if self.S3_ENDPOINT_URL: # Crucial for MinIO
+            opts["client_kwargs"] = {
+                "endpoint_url": self.S3_ENDPOINT_URL,
+                "region_name": self.S3_REGION # Pass region here too if needed
+            }
+            # Add use_ssl config for client_kwargs specifically for endpoint_url
+            opts["use_ssl"] = self.S3_USE_SSL
+        elif self.S3_REGION: # For standard AWS S3 if region needed
+             # For AWS S3, region is often handled by boto implicitly or env vars
+             # but can be set in client_kwargs if needed.
+             # opts.setdefault("client_kwargs", {})["region_name"] = self.S3_REGION
+             pass # s3fs usually picks up region from env or AWS config
+
+        # Add other potential s3fs config like requester_pays etc. if needed
+        return opts
+
 
     # --- Other Worker Settings ---
     # Example: Logging level
@@ -73,7 +101,9 @@ logger.info("Worker settings loaded.")
 logger.info(f"Broker URL: {settings.CELERY_BROKER_URL}")
 logger.info(f"Result Backend: {'Configured' if settings.CELERY_RESULT_BACKEND else 'Not Configured'}")
 logger.info(f"Database URL: {'Configured' if settings.DATABASE_URL else 'Not Configured'}")
-logger.info(f"Storage Path: {settings.STORAGE_BASE_PATH}")
+logger.info(f"Object Storage Type: {settings.OBJECT_STORAGE_TYPE}")
+logger.info(f"S3 Bucket: {settings.S3_BUCKET_NAME}")
+logger.info(f"S3 Endpoint URL: {settings.S3_ENDPOINT_URL or 'Default (AWS)'}")
 if settings.GITHUB_TOKEN:
     logger.info("GitHub Token: Loaded (Token value not logged)")
 else:
