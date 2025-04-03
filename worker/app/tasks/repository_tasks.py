@@ -19,11 +19,8 @@ logger = get_task_logger(__name__)
 @shared_task(bind=True, name='tasks.create_repository_dataset')
 def create_repository_dataset_task(self: Task, repository_id: int, git_url: str):
     """
-    Orchestrates the data extraction process for a repository:
-    1. Prepare local clone.
-    2. Calculate Commit Guru metrics & link bugs.
-    3. Save Commit Guru metrics.
-    4. Run CK analysis on recent commits.
+    Orchestrates data extraction: Repo prep, Commit Guru metrics (with GitHub issue cache),
+    bug linking, CK analysis.
     """
     task_id = self.request.id
     logger.info(f"Task {task_id}: Starting data extraction for repo ID: {repository_id}, URL: {git_url}")
@@ -33,62 +30,64 @@ def create_repository_dataset_task(self: Task, repository_id: int, git_url: str)
     repo_local_path.parent.mkdir(parents=True, exist_ok=True)
 
     repo: Optional[git.Repo] = None
-    commit_guru_data_list: List[Dict[str, Any]] = []
-    bug_link_map: Dict[str, List[str]] = {}
+    commit_guru_raw_data_list: List[Dict[str, Any]] = [] # Hold raw data for CK phase if needed
     total_guru_metrics_inserted = 0
     total_ck_metrics_inserted = 0
     final_status = "Completed successfully"
-    warning_info: Optional[str] = None
+    # Collect warnings from different phases
+    warnings: List[str] = []
 
     try:
         # --- Phase 1: Prepare Repository ---
         update_task_state(self, 'STARTED', 'Preparing repository...', 5)
-        repo = prepare_repository(task_id, git_url, repo_local_path)
+        repo = prepare_repository(git_url, repo_local_path)
         update_task_state(self, 'STARTED', 'Repository ready.', 15)
 
-        # --- Phase 2, 3, 4: Calculate, Link, Fetch Issues, Save Commit Guru Metrics ---
-        total_guru_metrics_inserted, commit_guru_data_list, guru_warning = calculate_and_save_guru_metrics(
-            self, task_id, repository_id, repo_local_path, git_url # Pass git_url
+        # --- Phase 2, 3, 4: Calculate Guru Metrics, Process Issues, Link Bugs, Save ---
+        # This function now handles insertion, issue linking, and bug linking updates
+        inserted_count, commit_guru_raw_data_list, guru_warning = calculate_and_save_guru_metrics(
+            self, repository_id, repo_local_path, git_url
         )
-        if guru_warning and not warning_info: # Capture warning if not already set
-             warning_info = guru_warning
-             final_status = "Completed with warnings"
+        total_guru_metrics_inserted = inserted_count
+        if guru_warning:
+            warnings.append(guru_warning)
+            final_status = "Completed with warnings"
 
         # --- Phase 5: Run CK Analysis ---
-        if repo: # Ensure repo object is valid before CK
-             total_ck_metrics_inserted = run_ck_analysis(
-                 self, repository_id, repo, repo_local_path
-             )
-             # Check if CK phase added a warning
-             current_meta = self.AsyncResult(self.request.id).info or {}
-             if 'warning' in current_meta and not warning_info: # Avoid overwriting previous warning
-                  warning_info = current_meta['warning']
-                  final_status = "Completed with warnings (CK analysis issue)"
+        update_task_state(self, 'STARTED', 'Starting CK metric extraction...', 90)
+        if repo:
+            total_ck_metrics_inserted = run_ck_analysis(
+                self, repository_id, repo, repo_local_path
+            )
+            # Check if CK phase added a warning via task meta (if it uses update_task_state with warning)
+            # current_meta = self.AsyncResult(self.request.id).info or {} # Requires result backend
+            # ck_warning = current_meta.get('warning')
+            # This part is less reliable without result backend, rely on logs for CK errors for now.
         else:
-             logger.error(f"Task {task_id}: Skipping CK analysis because repository object is invalid.")
-             final_status = "Completed with errors (Repo prep failed)" # Upgrade status
+            ck_err_msg = f"Task {task_id}: Skipping CK analysis because repository object is invalid."
+            logger.error(ck_err_msg)
+            warnings.append("CK analysis skipped (Repo prep failed)")
+            final_status = "Completed with errors"
 
 
         # --- Final Update ---
-        update_task_state(self, 'STARTED', 'Finalizing...', 99) # Progress before final SUCCESS state
+        update_task_state(self, 'STARTED', 'Finalizing...', 99)
 
         result_payload = {
             'status': final_status,
             'repository_id': repository_id,
             'commit_guru_metrics_inserted': total_guru_metrics_inserted,
             'ck_metrics_inserted': total_ck_metrics_inserted,
-            'total_commits_analyzed_guru': len(commit_guru_data_list),
+            'total_commits_analyzed_guru': len(commit_guru_raw_data_list), # Based on raw list from guru calc
         }
-        if warning_info:
-            result_payload['warning'] = warning_info
+        if warnings:
+            result_payload['warnings'] = "; ".join(warnings)
 
         logger.info(f"Task {task_id}: Data extraction finished for repo ID: {repository_id}. Status: {final_status}")
-        # Note: Celery automatically sets state to SUCCESS on successful return
-        # self.update_state(state='SUCCESS', meta=result_payload) # Explicit SUCCESS state
+        # Celery sets state to SUCCESS on successful return
         return result_payload
 
     except (git.GitCommandError, SQLAlchemyError, ValueError, Exception) as e:
-        # Catch exceptions from helpers or main flow
         error_type = type(e).__name__
         error_message = f"Task failed due to {error_type}: {str(e)}"
         # Log critical for major failures
@@ -97,13 +96,17 @@ def create_repository_dataset_task(self: Task, repository_id: int, git_url: str)
         else:
              logger.error(f"Task {task_id}: {error_message}", exc_info=True)
 
-        # Update state to FAILURE
         try:
-            # Check if self exists and has update_state method
-             if hasattr(self, 'update_state') and callable(self.update_state):
-                  self.update_state(state='FAILURE', meta={'status': 'Task failed', 'error': error_message, 'progress': 0})
+            if hasattr(self, 'update_state') and callable(self.update_state):
+                  # Define meta structure matching TaskStatusResponse schema
+                  meta = {
+                      'status': 'Task failed', # Use enum if schema is accessible
+                      'error': error_message,
+                      'progress': None, # Optional: Reset progress on failure
+                      'status_message': 'Task encountered a critical error.'
+                  }
+                  self.update_state(state='FAILURE', meta=meta)
         except Exception as update_err:
              logger.error(f"Task {task_id}: Failed to update task state to FAILURE: {update_err}")
 
-        # Important: Re-raise the exception so Celery knows the task failed
-        raise e
+        raise e # Re-raise the exception

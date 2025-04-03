@@ -3,8 +3,8 @@ from datetime import datetime
 import re
 import time
 import logging
-from typing import Optional, List, Dict, Any, Tuple
-from functools import lru_cache # Use standard library cache
+from typing import Optional, List, Dict, Any, Tuple, NamedTuple
+from datetime import datetime, timezone
 
 import requests
 import dateutil.parser
@@ -24,6 +24,15 @@ RATE_LIMIT_BUFFER_SECONDS = 10 # Extra seconds to wait after reset time
 # Simple owner/repo extraction (might need refinement for complex URLs)
 REPO_URL_REGEX = re.compile(r'github\.com[/:]([\w.-]+)/([\w.-]+?)(?:\.git)?$')
 
+# --- Structures for API Response ---
+class GitHubAPIResponse(NamedTuple):
+    status_code: int
+    etag: Optional[str] = None
+    json_data: Optional[Dict[str, Any]] = None
+    rate_limit_remaining: Optional[int] = None
+    rate_limit_reset: Optional[int] = None
+    error_message: Optional[str] = None # Add field for error details
+
 def extract_repo_owner_name(git_url: str) -> Optional[Tuple[str, str]]:
     """Extracts owner and repo name from a GitHub URL."""
     match = REPO_URL_REGEX.search(git_url)
@@ -39,133 +48,130 @@ class GitHubIssueFetcher:
     def __init__(self, token: Optional[str] = settings.GITHUB_TOKEN):
         self.token = token
         self.session = requests.Session()
+        headers = {'Accept': 'application/vnd.github.v3+json'}
         if self.token:
-            self.session.headers.update({'Authorization': f'token {self.token}'})
+            headers['Authorization'] = f'token {self.token}'
         else:
             logger.warning("No GitHub token provided. API requests will be unauthenticated and heavily rate-limited.")
-        self.session.headers.update({'Accept': 'application/vnd.github.v3+json'})
+        self.session.headers.update(headers)
 
-    def _make_request(self, url: str) -> Optional[Dict[str, Any]]: # Return Optional in case of failure after retries
+    def _parse_rate_limit_headers(self, headers: requests.structures.CaseInsensitiveDict) -> Tuple[Optional[int], Optional[int]]:
+        """Parses rate limit headers safely."""
+        remaining, reset_timestamp = None, None
+        remaining_str = headers.get('X-RateLimit-Remaining')
+        reset_str = headers.get('X-RateLimit-Reset')
+        if remaining_str is not None:
+            try:
+                remaining = int(remaining_str)
+            except ValueError:
+                logger.warning(f"Could not parse X-RateLimit-Remaining header: {remaining_str}")
+        if reset_str is not None:
+            try:
+                reset_timestamp = int(reset_str)
+            except ValueError:
+                logger.warning(f"Could not parse X-RateLimit-Reset header: {reset_str}")
+        return remaining, reset_timestamp
+
+    def _make_request(self, url: str, etag: Optional[str] = None) -> GitHubAPIResponse:
         """
-        Makes a request to the GitHub API, handling rate limits with waits/retries.
-        Returns parsed JSON data or None if the request fails after retries.
+        Makes a request to the GitHub API, handling rate limits and ETags.
+        Returns a structured GitHubAPIResponse.
         """
+        current_headers = self.session.headers.copy()
+        if etag:
+            current_headers['If-None-Match'] = etag
+
         rate_limit_retries = 0
         while True: # Loop for handling rate limit waits
+            remaining, reset_timestamp = None, None # Reset for each attempt
             try:
-                response = self.session.get(url, timeout=20) # Increased timeout slightly
+                response = self.session.get(url, headers=current_headers, timeout=20)
+                remaining, reset_timestamp = self._parse_rate_limit_headers(response.headers)
 
-                # --- Rate Limit Handling ---
-                remaining_str = response.headers.get('X-RateLimit-Remaining')
-                reset_str = response.headers.get('X-RateLimit-Reset')
-                remaining = -1
-                reset_timestamp = 0
+                logger.debug(f"GitHub API: {url} - Status: {response.status_code}, ETag: {etag}, Remaining: {remaining}")
 
-                if remaining_str is not None:
-                    try:
-                        remaining = int(remaining_str)
-                    except ValueError:
-                        logger.warning(f"Could not parse X-RateLimit-Remaining header: {remaining_str}")
-                if reset_str is not None:
-                     try:
-                         reset_timestamp = int(reset_str)
-                     except ValueError:
-                          logger.warning(f"Could not parse X-RateLimit-Reset header: {reset_str}")
-
-                logger.debug(f"GitHub API Rate Limit: {remaining} remaining. Resets at {datetime.fromtimestamp(reset_timestamp) if reset_timestamp > 0 else 'N/A'}.")
-
+                # --- Rate Limit Handling (Primary Trigger: 403 with remaining=0) ---
                 if response.status_code == 403 and remaining == 0:
                     rate_limit_retries += 1
                     if rate_limit_retries > MAX_RATE_LIMIT_RETRIES:
-                         logger.error(f"GitHub rate limit exceeded and maximum retries ({MAX_RATE_LIMIT_RETRIES}) reached for URL: {url}. Giving up on this request.")
-                         return None # Give up on this specific request
+                        msg = f"GitHub rate limit exceeded and max retries ({MAX_RATE_LIMIT_RETRIES}) reached for {url}."
+                        logger.error(msg)
+                        # Return specific status code or marker? Let's return the 403
+                        return GitHubAPIResponse(
+                            status_code=403, rate_limit_remaining=remaining,
+                            rate_limit_reset=reset_timestamp, error_message=msg
+                        )
 
-                    # Calculate wait time
                     current_time = time.time()
-                    wait_seconds = max(0, reset_timestamp - current_time) + RATE_LIMIT_BUFFER_SECONDS
-
-                    wait_minutes = wait_seconds / 60
-                    reset_dt = datetime.fromtimestamp(reset_timestamp) if reset_timestamp > 0 else "N/A"
-                    logger.warning(f"GitHub rate limit hit for {url}. Waiting for {wait_seconds:.1f} seconds (until ~{reset_dt}). Retry {rate_limit_retries}/{MAX_RATE_LIMIT_RETRIES}.")
+                    wait_seconds = max(0, (reset_timestamp or current_time) - current_time) + RATE_LIMIT_BUFFER_SECONDS
+                    reset_dt = datetime.fromtimestamp(reset_timestamp) if reset_timestamp else "N/A"
+                    logger.warning(
+                        f"GitHub rate limit hit for {url}. Waiting {wait_seconds:.1f}s "
+                        f"(until ~{reset_dt}). Retry {rate_limit_retries}/{MAX_RATE_LIMIT_RETRIES}."
+                    )
                     time.sleep(wait_seconds)
                     logger.info(f"Resuming GitHub API requests after rate limit wait.")
                     continue # Retry the request
 
-                # --- End Rate Limit Handling ---
+                # --- ETag Handling ---
+                response_etag = response.headers.get('ETag')
+                if response.status_code == 304: # Not Modified
+                    logger.debug(f"GitHub API: 304 Not Modified for {url} (ETag: {etag})")
+                    return GitHubAPIResponse(
+                        status_code=304, etag=response_etag or etag, # Return new or original ETag
+                        rate_limit_remaining=remaining, rate_limit_reset=reset_timestamp
+                    )
 
-                response.raise_for_status() # Raise HTTPError for other bad responses (4xx, 5xx)
-                return response.json() # Success! Return JSON data
+                # --- Other Status Codes ---
+                # Check for other errors *after* 304/403 rate limit
+                response.raise_for_status() # Raises HTTPError for 4xx/5xx other than 304/403 handled above
 
+                # --- Success (200 OK) ---
+                return GitHubAPIResponse(
+                    status_code=200,
+                    etag=response_etag,
+                    json_data=response.json(),
+                    rate_limit_remaining=remaining,
+                    rate_limit_reset=reset_timestamp
+                )
+
+            # --- Exception Handling ---
             except Timeout:
-                logger.error(f"GitHub API request timed out for {url}. Not retrying.")
-                return None # Fail this request
-            except ConnectionError:
-                # Could implement retries for connection errors if desired
-                logger.error(f"GitHub API connection error for {url}. Not retrying.")
-                return None # Fail this request
+                msg = f"GitHub API request timed out for {url}."
+                logger.error(msg)
+                return GitHubAPIResponse(status_code=408, error_message=msg) # 408 Request Timeout
+            except ConnectionError as e:
+                msg = f"GitHub API connection error for {url}: {e}"
+                logger.error(msg)
+                return GitHubAPIResponse(status_code=503, error_message=msg) # 503 Service Unavailable (example)
             except RequestException as e:
-                logger.error(f"GitHub API request failed for {url}: {e}")
-                if e.response is not None:
-                    logger.error(f"Response status: {e.response.status_code}, content: {e.response.text[:200]}")
-                    # Specific handling for common, non-retryable errors
-                    if e.response.status_code in [404, 410, 401]: # Not Found, Gone, Unauthorized
-                         return None # Don't retry these
-                # For other request exceptions, we break the loop and return None
-                return None
+                # Handle non-2xx/304/403 responses that raise_for_status catches, or other RequestExceptions
+                status_code = e.response.status_code if e.response is not None else 500
+                err_content = e.response.text[:200] if e.response is not None else str(e)
+                msg = f"GitHub API request failed for {url}: Status {status_code}, Error: {err_content}"
+                logger.error(msg)
+                # Return the actual status code from the response if available
+                return GitHubAPIResponse(
+                    status_code=status_code,
+                    error_message=msg,
+                    rate_limit_remaining=remaining, # Include rate limits even on error if available
+                    rate_limit_reset=reset_timestamp
+                )
             except Exception as e:
-                 # Catch any other unexpected error during the request/wait
-                 logger.error(f"Unexpected error during GitHub request/wait for {url}: {e}", exc_info=True)
-                 return None # Fail this request
-            
-    # Cache results for the same issue number within the same owner/repo
-    @lru_cache(maxsize=2048) # Cache up to 2048 issue results
-    def get_issue_data(self, owner: str, repo_name: str, issue_number: str) -> Optional[Dict[str, Any]]:
-        """Fetches data for a specific issue, handling rate limits."""
+                # Catch any other unexpected error during the request/wait
+                msg = f"Unexpected error during GitHub request/wait for {url}: {e}"
+                logger.exception(msg) # Use exception() to include traceback
+                return GitHubAPIResponse(status_code=500, error_message=msg) # 500 Internal Server Error
+        
+
+    def get_issue_data(self, owner: str, repo_name: str, issue_number: str, current_etag: Optional[str] = None) -> GitHubAPIResponse:
+        """
+        Fetches data for a specific issue using ETags for caching.
+        Returns a GitHubAPIResponse object.
+        """
         api_url = f"{GITHUB_API_BASE}/repos/{owner}/{repo_name}/issues/{issue_number}"
-        logger.debug(f"Fetching GitHub issue: {owner}/{repo_name}#{issue_number}")
-        # _make_request now returns None on failure after retries
-        return self._make_request(api_url)
-
-    def get_earliest_issue_open_timestamp(
-        self,
-        owner: str,
-        repo_name: str,
-        issue_ids: List[str]
-    ) -> Optional[int]:
-        """
-        Gets the earliest 'created_at' timestamp (Unix epoch seconds) for a list of issue IDs.
-        Waits and retries on rate limits.
-        """
-        earliest_timestamp: Optional[int] = None
-
-        for issue_id in issue_ids:
-            if not issue_id.isdigit():
-                logger.warning(f"Invalid issue ID format skipped: {issue_id}")
-                continue
-
-            # get_issue_data now handles retries/waits internally
-            issue_data = self.get_issue_data(owner, repo_name, issue_id)
-
-            if issue_data and 'created_at' in issue_data:
-                created_at_str = issue_data['created_at']
-                try:
-                    dt_obj = dateutil.parser.isoparse(created_at_str)
-                    timestamp = int(dt_obj.timestamp())
-                    if earliest_timestamp is None or timestamp < earliest_timestamp:
-                        earliest_timestamp = timestamp
-                except (ValueError, TypeError) as date_err:
-                    logger.error(f"Error parsing date '{created_at_str}' for issue #{issue_id}: {date_err}")
-            elif issue_data is None:
-                 # Fetch failed after retries, log it but continue if possible
-                 logger.error(f"Failed to fetch data for issue {owner}/{repo_name}#{issue_id} after retries/wait.")
-                 # If one issue fails, should we stop? For now, let's try the others.
-
-        if earliest_timestamp is not None:
-            logger.debug(f"Found earliest issue open timestamp {earliest_timestamp} for issues {issue_ids} in {owner}/{repo_name}")
-        else:
-            logger.debug(f"No valid open date found for issues {issue_ids} in {owner}/{repo_name}")
-
-        return earliest_timestamp
+        logger.debug(f"Fetching GitHub issue: {owner}/{repo_name}#{issue_number} with ETag: {current_etag}")
+        return self._make_request(api_url, etag=current_etag)
 
 
 def extract_issue_ids(message: Optional[str]) -> List[str]:

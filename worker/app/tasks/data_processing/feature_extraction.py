@@ -1,4 +1,5 @@
 # worker/app/tasks/feature_extraction.py
+from datetime import datetime, timezone
 import logging
 import math
 import os
@@ -12,15 +13,21 @@ import git
 import pandas as pd
 from celery import Task
 from git import Repo, GitCommandError
-from sqlalchemy import select
+from sqlalchemy import func, select, update
+from sqlalchemy.orm import Session
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+import dateutil.parser
 
 from ...core.config import settings
 from ...db.session import get_worker_sync_session
 from shared.db.models.ck_metric import CKMetric
 from shared.db.models.commit_guru_metric import CommitGuruMetric
+from shared.db.models.github_issue import GitHubIssue
+from shared.db.models.commit_github_issue_association import commit_github_issue_association_table
+
 from ..utils.commit_guru_utils import GitCommitLinker, calculate_commit_guru_metrics
 from ..utils.git_utils import determine_default_branch, checkout_commit
-from ..utils.github_utils import GitHubIssueFetcher, extract_issue_ids, extract_repo_owner_name
+from ..utils.github_utils import GitHubIssueFetcher, extract_issue_ids, extract_repo_owner_name, GitHubAPIResponse
 from ..utils.task_utils import update_task_state
 
 
@@ -138,147 +145,431 @@ def _run_ck_tool(repo_dir: Path, commit_hash: str) -> pd.DataFrame:
 
     return metrics_df
 
-def prepare_repository(task_id: str, git_url: str, repo_local_path: Path) -> git.Repo:
+def prepare_repository(git_url: str, repo_local_path: Path) -> git.Repo:
     """Clones or updates the local repository."""
     if repo_local_path.exists():
-        logger.info(f"Task {task_id}: Found existing clone at {repo_local_path}. Fetching updates...")
+        logger.info(f"Found existing clone at {repo_local_path}. Fetching updates...")
         try:
             repo = git.Repo(repo_local_path)
             repo.git.reset('--hard')
             repo.git.clean('-fdx')
             origin = repo.remotes.origin
             origin.fetch(prune=True) # Prune deleted remote branches
-            logger.info(f"Task {task_id}: Fetch complete.")
+            logger.info(f"Fetch complete.")
             return repo
         except (git.GitCommandError, Exception) as e:
-            logger.warning(f"Task {task_id}: Error updating existing repo at {repo_local_path}. Re-cloning. Error: {e}")
+            logger.warning(f"Error updating existing repo at {repo_local_path}. Re-cloning. Error: {e}")
             shutil.rmtree(repo_local_path) # Clean up problematic clone
             # Fall through to clone
     # Clone if it doesn't exist or update failed
-    logger.info(f"Task {task_id}: Cloning {git_url} to {repo_local_path}...")
+    logger.info(f"Cloning {git_url} to {repo_local_path}...")
     # Consider adding depth for large repos if full history isn't always needed immediately
     repo = git.Repo.clone_from(git_url, repo_local_path, no_checkout=True)
-    logger.info(f"Task {task_id}: Cloning complete.")
+    logger.info(f"Cloning complete.")
     return repo
 
-def _fetch_and_process_github_issues(
-    task_id: str,
-    git_url: str,
-    commits_data: List[Dict[str, Any]]
-) -> None:
+def _process_and_link_commit_issues(
+    session: Session,
+    repository_id: int,
+    commit_metric_id: int, # The DB ID of the CommitGuruMetric record
+    owner: str,
+    repo_name: str,
+    issue_numbers: List[str], # List of numbers like ['123', '45']
+    fetcher: GitHubIssueFetcher
+) -> List[int]:
     """
-    Fetches GitHub issue data for commits mentioning issues IN PLACE.
-    Modifies the `commits_data` list by adding GitHub info.
-    Handles rate limiting internally via GitHubIssueFetcher.
+    Looks up, fetches (conditionally), updates/inserts GitHub issues in the DB,
+    and links them to the given commit metric ID.
+
+    Uses ETag caching. Handles API errors gracefully by potentially using stale data.
+
+    Returns:
+        List of database IDs of the GitHubIssue records successfully linked to the commit.
     """
-    logger.info(f"Task {task_id}: Starting GitHub issue processing...")
-    repo_info = extract_repo_owner_name(git_url)
-    if not repo_info:
-        logger.warning(f"Task {task_id}: Cannot process GitHub issues, failed to extract owner/repo from URL: {git_url}")
-        return
-    owner, repo_name = repo_info
+    linked_issue_db_ids: List[int] = []
+    now_utc = datetime.now(timezone.utc)
 
-    if not settings.GITHUB_TOKEN:
-        logger.warning(f"Task {task_id}: Skipping GitHub issue processing - GITHUB_TOKEN not set.")
-        return
+    for number_str in issue_numbers:
+        try:
+            issue_number = int(number_str)
+        except ValueError:
+            logger.warning(f"Invalid non-integer issue number '{number_str}' skipped for commit {commit_metric_id}")
+            continue
 
-    fetcher = GitHubIssueFetcher()
-    processed_count = 0
-    total_commits = len(commits_data)
+        issue_db_id: Optional[int] = None
+        issue_data_to_use: Optional[Dict[str, Any]] = None # Store data used for linking
+        use_stale_data = False
+        needs_linking = True # Assume we need to create the link unless proven otherwise
 
-    for commit in commits_data:
-        commit_hash_short = commit.get('commit_hash', 'UNKNOWN')[:7]
-        message = commit.get('commit_message')
-        issue_ids = extract_issue_ids(message)
+        # 1. DB Lookup
+        stmt = select(GitHubIssue).where(
+            GitHubIssue.repository_id == repository_id,
+            GitHubIssue.issue_number == issue_number
+        )
+        # Fetch specific columns needed for decisions and potential use
+        # stmt = stmt.options(load_only(GitHubIssue.id, GitHubIssue.etag, GitHubIssue.state, ...)) # Optimization
+        db_issue: Optional[GitHubIssue] = session.execute(stmt).scalar_one_or_none()
 
-        if issue_ids:
-            logger.debug(f"Task {task_id}: Found issue IDs {issue_ids} in commit {commit_hash_short}")
-            commit['github_issue_ids'] = {"ids": issue_ids}
+        current_etag = db_issue.etag if db_issue else None
 
+        # 2. Conditional API Fetch
+        api_response: GitHubAPIResponse = fetcher.get_issue_data(
+            owner, repo_name, number_str, current_etag=current_etag
+        )
+
+        # 3. Handle API Response and DB Update/Insert
+        if db_issue:
+            # --- Issue Found in DB ---
+            issue_db_id = db_issue.id
+            if api_response.status_code == 304: # Not Modified
+                logger.debug(f"Issue #{issue_number} (DB ID: {issue_db_id}): ETag match (304). Updating last_fetched_at.")
+                db_issue.last_fetched_at = now_utc # Update timestamp even if not modified
+                session.add(db_issue) # Add to session to track update
+                issue_data_to_use = {"id": issue_db_id, "state": db_issue.state} # Use existing data
+            elif api_response.status_code == 200 and api_response.json_data: # Modified
+                logger.info(f"Issue #{issue_number} (DB ID: {issue_db_id}): Data changed (200 OK). Updating DB.")
+                new_data = api_response.json_data
+                db_issue.state = new_data.get('state', 'unknown')
+                db_issue.github_id = new_data.get('id')
+                db_issue.api_url = new_data.get('url')
+                db_issue.html_url = new_data.get('html_url')
+                created_at = dateutil.parser.isoparse(new_data['created_at']).timestamp() if new_data.get('created_at') else None
+                closed_at = dateutil.parser.isoparse(new_data['closed_at']).timestamp() if new_data.get('closed_at') else None
+                db_issue.created_at_timestamp = int(created_at) if created_at is not None else None
+                db_issue.closed_at_timestamp = int(closed_at) if closed_at is not None else None
+                db_issue.etag = api_response.etag
+                db_issue.last_fetched_at = now_utc
+                session.add(db_issue)
+                issue_data_to_use = {"id": issue_db_id, "state": db_issue.state} # Use newly updated data
+            elif api_response.status_code in [404, 410]: # Gone / Deleted
+                logger.warning(f"Issue #{issue_number} (DB ID: {issue_db_id}): Now missing on GitHub ({api_response.status_code}). Marking as deleted.")
+                db_issue.state = 'deleted'
+                db_issue.etag = None # Clear ETag
+                db_issue.last_fetched_at = now_utc
+                session.add(db_issue)
+                issue_data_to_use = {"id": issue_db_id, "state": 'deleted'} # Use 'deleted' state
+            else: # API Error (Rate limit, server error, etc.)
+                logger.error(f"Issue #{issue_number} (DB ID: {issue_db_id}): API fetch failed (Status: {api_response.status_code}). Using stale data. Error: {api_response.error_message}")
+                use_stale_data = True
+                issue_data_to_use = {"id": issue_db_id, "state": db_issue.state} # Use existing stale data
+
+        else:
+            # --- Issue NOT Found in DB ---
+            if api_response.status_code == 200 and api_response.json_data:
+                logger.info(f"Issue #{issue_number}: Found on GitHub (200 OK). Inserting into DB.")
+                new_data = api_response.json_data
+                created_at = dateutil.parser.isoparse(new_data['created_at']).timestamp() if new_data.get('created_at') else None
+                closed_at = dateutil.parser.isoparse(new_data['closed_at']).timestamp() if new_data.get('closed_at') else None
+                new_issue = GitHubIssue(
+                    repository_id=repository_id,
+                    issue_number=issue_number,
+                    github_id=new_data.get('id'),
+                    state=new_data.get('state', 'unknown'),
+                    created_at_timestamp=int(created_at) if created_at is not None else None,
+                    closed_at_timestamp=int(closed_at) if closed_at is not None else None,
+                    api_url=new_data.get('url'),
+                    html_url=new_data.get('html_url'),
+                    last_fetched_at=now_utc,
+                    etag=api_response.etag
+                )
+                session.add(new_issue)
+                session.flush() # Flush to get the new ID
+                issue_db_id = new_issue.id
+                issue_data_to_use = {"id": issue_db_id, "state": new_issue.state}
+            elif api_response.status_code in [404, 410]:
+                logger.warning(f"Issue #{issue_number}: Not found on GitHub ({api_response.status_code}). Skipping linking.")
+                # Optionally insert a 'deleted' record here if desired to prevent future checks
+                needs_linking = False
+            else: # API Error
+                logger.error(f"Issue #{issue_number}: API fetch failed for new issue (Status: {api_response.status_code}). Cannot link. Error: {api_response.error_message}")
+                needs_linking = False
+
+
+        # 4. Link Association (if issue DB ID is known and linking needed)
+        if issue_db_id is not None and needs_linking:
             try:
-                # --- This call now handles rate limit waits internally ---
-                earliest_ts = fetcher.get_earliest_issue_open_timestamp(owner, repo_name, issue_ids)
-                # --- Removed GitHubRateLimitError handling here ---
+                # Use PostgreSQL's ON CONFLICT DO NOTHING for efficiency
+                # insert_stmt = pg_insert(commit_github_issue_association_table).values(
+                #     commit_guru_metric_id=commit_metric_id,
+                #     github_issue_id=issue_db_id
+                # )
+                # Specify the constraint name for ON CONFLICT target
+                # Assuming the PK constraint is named 'commit_github_issue_association_pkey'
+                # Adjust if your naming convention is different
+                # If you don't know the name, you might target columns: ON CONFLICT (col1, col2)
+                # Check your actual constraint name after migration.
+                # Default name is usually tablename_pkey
+                # do_nothing_stmt = insert_stmt.on_conflict_do_nothing(
+                #     constraint='commit_github_issue_association_pkey'
+                # )
+                # session.execute(do_nothing_stmt)
+                # linked_issue_db_ids.append(issue_db_id)
+                # logger.debug(f"Linked commit {commit_metric_id} to issue #{issue_number} (DB ID: {issue_db_id})")
 
-                if earliest_ts is not None:
-                    commit['github_earliest_issue_open_timestamp'] = earliest_ts
-                    logger.debug(f"Task {task_id}: Earliest issue timestamp for {commit_hash_short}: {earliest_ts}")
-                elif earliest_ts is None and issue_ids: # Check if fetch failed for existing IDs
-                    logger.warning(f"Task {task_id}: Failed to fetch earliest timestamp for issues {issue_ids} in commit {commit_hash_short} (check previous logs for errors/retries).")
+                # --- OR --- Check existence ORM approach (less efficient but maybe simpler):
+                link_exists = session.query(commit_github_issue_association_table).filter_by(
+                    commit_guru_metric_id=commit_metric_id,
+                    github_issue_id=issue_db_id
+                ).count() > 0
+                if not link_exists:
+                    # Need the CommitGuruMetric object to append to relationship
+                    commit_metric_obj = session.get(CommitGuruMetric, commit_metric_id)
+                    issue_obj = session.get(GitHubIssue, issue_db_id) # Get managed objects
+                    if commit_metric_obj and issue_obj:
+                         commit_metric_obj.github_issues.append(issue_obj)
+                         session.add(commit_metric_obj) # Ensure change is tracked
+                         linked_issue_db_ids.append(issue_db_id)
+                         logger.debug(f"Linked commit {commit_metric_id} to issue #{issue_number} (DB ID: {issue_db_id}) via ORM")
 
-            except Exception as e: # Catch other unexpected errors during timestamp processing
-                logger.error(f"Task {task_id}: Unexpected error processing GitHub issues for commit {commit_hash_short}: {e}", exc_info=True)
+            except Exception as link_err:
+                 logger.error(f"Failed to link commit {commit_metric_id} to issue DB ID {issue_db_id}: {link_err}", exc_info=True)
+                 session.rollback() # Rollback partial changes within this issue processing
+                 # Decide whether to continue with other issues or re-raise
+                 # For now, log and continue
 
-        processed_count += 1
-        if processed_count % 100 == 0:
-             logger.info(f"Task {task_id}: Processed GitHub issues for {processed_count}/{total_commits} commits...")
 
-    logger.info(f"Task {task_id}: Finished GitHub issue processing.")
+    # Commit the session changes *after processing all issues for this commit*
+    # Moved commit logic outside this helper to the main loop
+
+    return linked_issue_db_ids
+
+def _get_earliest_linked_issue_timestamp(session: Session, commit_metric_id: int) -> Optional[int]:
+    """Queries the DB for the minimum created_at_timestamp among issues linked to a commit."""
+    stmt = (
+        select(func.min(GitHubIssue.created_at_timestamp))
+        .join(commit_github_issue_association_table, GitHubIssue.id == commit_github_issue_association_table.c.github_issue_id)
+        .where(commit_github_issue_association_table.c.commit_guru_metric_id == commit_metric_id)
+        .where(GitHubIssue.created_at_timestamp.isnot(None)) # Ensure we only consider issues with a timestamp
+    )
+    earliest_ts = session.execute(stmt).scalar_one_or_none()
+    return earliest_ts
 
 def calculate_and_save_guru_metrics(
     task: Task,
-    task_id: str,
     repository_id: int,
     repo_local_path: Path,
     git_url: str 
 ) -> Tuple[int, List[Dict[str, Any]], str | None]: # Return inserted count, data list, warning
-    """Calculates, links, fetches issue data, and saves Commit Guru metrics."""
+    """
+    Calculates Commit Guru metrics, processes/links GitHub issues using DB cache,
+    identifies bug links, and saves metrics to the database.
+    """
+
+    task_id = task.request.id
+
+    # --- Extract Owner/Repo ---
+    repo_info = extract_repo_owner_name(git_url)
+    if not repo_info:
+        msg = f"Cannot process GitHub issues, failed to extract owner/repo from URL: {git_url}"
+        logger.error(msg)
+        # Decide: fail task or proceed without issue linking? Let's proceed with warning.
+        update_task_state(task, 'STARTED', 'Owner/Repo extraction failed. Skipping issue linking.', 40, warning=msg)
+        owner, repo_name = None, None
+    else:
+        owner, repo_name = repo_info
 
     # --- Calculate Metrics ---
     update_task_state(task, 'STARTED', 'Calculating Commit Guru metrics...', 20)
     logger.info(f"Task {task_id}: Calculating Commit Guru metrics...")
     try:
-        commit_guru_data_list = calculate_commit_guru_metrics(repo_local_path)
+        # This function calculates the raw metrics from git log
+        commit_guru_raw_data_list = calculate_commit_guru_metrics(repo_local_path)
     except Exception as e:
         logger.error(f"Task {task_id}: Failed during Commit Guru metric calculation: {e}", exc_info=True)
         raise
 
-    total_commits_found = len(commit_guru_data_list)
+    total_commits_found = len(commit_guru_raw_data_list)
+    if not total_commits_found:
+        logger.info(f"Task {task_id}: No commits found by Commit Guru. Nothing to save.")
+        update_task_state(task, 'STARTED', 'No commits found by Commit Guru.', 95)
+        return 0, [], None # Return empty list for raw data
+
     logger.info(f"Task {task_id}: Found {total_commits_found} commits for Commit Guru analysis.")
-    update_task_state(task, 'STARTED', f'Found {total_commits_found} commits. Linking bugs & fetching issues...', 40)
+    update_task_state(task, 'STARTED', f'Found {total_commits_found} commits. Processing issues & saving...', 40)
 
-    # --- Fetch GitHub Issue Data (Modifies commit_guru_data_list in place) ---
-    _fetch_and_process_github_issues(task_id, git_url, commit_guru_data_list)
-    # Note: Rate limit errors during issue fetch might cause subsequent steps to have incomplete data
+    # --- Initialize GitHub Fetcher ---
+    # Pass token from settings
+    fetcher = GitHubIssueFetcher(token=settings.GITHUB_TOKEN)
 
-    # --- Link Bugs ---
-    logger.info(f"Task {task_id}: Identifying corrective commits and linking bugs...")
+    # --- Save Metrics & Process Issues Iteratively ---
+    inserted_count = 0
+    processed_count = 0
+    # Store commit_metric_id -> list of linked issue DB IDs
+    commit_to_linked_issues_map: Dict[int, List[int]] = {}
+    # Store commit_hash -> commit_metric_id for bug linking phase
+    commit_hash_to_id_map: Dict[str, int] = {}
+    # Store commit_hash -> is_fix_keyword_present
+    commit_fix_keyword_map: Dict[str, bool] = {}
 
-    # Prepare info for the linker: map corrective hash -> earliest issue timestamp
-    corrective_commits_info: Dict[str, Optional[int]] = {}
-    for commit in commit_guru_data_list:
-        commit_hash = commit.get('commit_hash')
-        # Use the 'fix' flag calculated earlier
-        if commit.get('fix') and commit_hash:
-            corrective_commits_info[commit_hash] = commit.get('github_earliest_issue_open_timestamp') # Will be None if no issue found
-
-    logger.info(f"Task {task_id}: Found {len(corrective_commits_info)} potential corrective commits for linking.")
-
-    bug_link_map: Dict[str, List[str]] = {}
-    warning_msg = None
-    if corrective_commits_info: # Check if there are any corrective commits
+    with get_worker_sync_session() as session:
         try:
+            for i, raw_commit_data in enumerate(commit_guru_raw_data_list):
+                processed_count += 1
+                commit_hash = raw_commit_data.get('commit_hash')
+                if not commit_hash:
+                    logger.warning(f"Skipping raw commit data entry due to missing hash: {raw_commit_data.get('author_name')}")
+                    continue
+
+                commit_hash_to_id_map[commit_hash] = -1 # Placeholder ID initially
+                commit_fix_keyword_map[commit_hash] = raw_commit_data.get('fix', False)
+
+                # Check existence efficiently before creating ORM object
+                exists_stmt = select(CommitGuruMetric.id).where(
+                    CommitGuruMetric.repository_id == repository_id,
+                    CommitGuruMetric.commit_hash == commit_hash
+                ).limit(1)
+                existing_id = session.execute(exists_stmt).scalar_one_or_none()
+
+                if existing_id is not None:
+                    commit_hash_to_id_map[commit_hash] = existing_id # Store existing ID
+                    # Still need to potentially link issues even if metric exists
+                    # Extract issues and link if owner/repo known
+                    if owner and repo_name:
+                         message = raw_commit_data.get('commit_message')
+                         issue_numbers = extract_issue_ids(message)
+                         if issue_numbers:
+                             linked_ids = _process_and_link_commit_issues(
+                                 session, repository_id, existing_id, owner, repo_name, issue_numbers, fetcher
+                             )
+                             commit_to_linked_issues_map[existing_id] = linked_ids
+                    continue # Skip inserting the metric again
+
+                # --- Create and Insert New CommitGuruMetric ---
+                # Prepare data, excluding fields handled by relationships or calculated later
+                metric_instance_data = {
+                    "repository_id": repository_id, "commit_hash": commit_hash,
+                    "parent_hashes": raw_commit_data.get('parent_hashes'),
+                    "author_name": raw_commit_data.get('author_name'),
+                    "author_email": raw_commit_data.get('author_email'),
+                    "author_date": raw_commit_data.get('author_date'),
+                    "author_date_unix_timestamp": raw_commit_data.get('author_date_unix_timestamp'),
+                    "commit_message": raw_commit_data.get('commit_message'),
+                    "is_buggy": False, # Will be updated after bug linking
+                    "fix": raw_commit_data.get('fix'), # From keyword check
+                    "fixing_commit_hashes": None, # Will be updated after bug linking
+                    "files_changed": raw_commit_data.get('files_changed'),
+                    # Include raw Guru metrics
+                    "ns": raw_commit_data.get('ns'), "nd": raw_commit_data.get('nd'),
+                    "nf": raw_commit_data.get('nf'), "entropy": raw_commit_data.get('entropy'),
+                    "la": raw_commit_data.get('la'), "ld": raw_commit_data.get('ld'),
+                    "lt": raw_commit_data.get('lt'), "ndev": raw_commit_data.get('ndev'),
+                    "age": raw_commit_data.get('age'), "nuc": raw_commit_data.get('nuc'),
+                    "exp": raw_commit_data.get('exp'), "rexp": raw_commit_data.get('rexp'),
+                    "sexp": raw_commit_data.get('sexp'),
+                }
+                try:
+                    metric_instance = CommitGuruMetric(**metric_instance_data)
+                    session.add(metric_instance)
+                    session.flush() # Flush to get the new ID
+                    new_id = metric_instance.id
+                    commit_hash_to_id_map[commit_hash] = new_id # Store the new ID
+                    inserted_count += 1
+
+                    # --- Process & Link Issues for the NEWLY inserted metric ---
+                    if owner and repo_name:
+                        message = raw_commit_data.get('commit_message')
+                        issue_numbers = extract_issue_ids(message)
+                        if issue_numbers:
+                            linked_ids = _process_and_link_commit_issues(
+                                session, repository_id, new_id, owner, repo_name, issue_numbers, fetcher
+                            )
+                            commit_to_linked_issues_map[new_id] = linked_ids
+
+                except Exception as e:
+                    logger.error(f"Error creating/linking issues for CommitGuruMetric {commit_hash[:7]}: {e}", exc_info=True)
+                    logger.debug(f"Data causing error: {metric_instance_data}")
+                    session.rollback() # Rollback metric insert and issue links for this commit
+                    # Continue to next commit? Or raise? Let's continue for robustness.
+
+                # Update progress periodically
+                if (processed_count) % 100 == 0:
+                    progress = 40 + int(40 * (processed_count / total_commits_found))
+                    update_task_state(task, 'STARTED', f'Saving Commit Guru metrics & issues ({processed_count}/{total_commits_found})...', progress)
+
+            # Commit transaction after processing all commits in the batch
+            session.commit()
+
+        except Exception as outer_err:
+             logger.error(f"Error during batch commit guru processing/saving: {outer_err}", exc_info=True)
+             session.rollback()
+             raise # Re-raise to fail the task if batch fails
+
+    logger.info(f"Task {task.request.id}: Finished initial saving/issue linking. Inserted {inserted_count} new Commit Guru metric records.")
+
+    # --- Phase: Link Bugs ---
+    update_task_state(task, 'STARTED', 'Identifying bug links...', 85)
+    logger.info(f"Task {task_id}: Identifying corrective commits and linking bugs...")
+    bug_link_warning = None
+    bug_introducing_commit_ids: Set[int] = set() # Store IDs of buggy commits
+    fixing_commit_map_for_update: Dict[int, List[str]] = {} # buggy_commit_id -> [fixing_hash1, ...]
+
+    try:
+        # Prepare info for the linker: corrective_hash -> earliest_linked_issue_ts
+        corrective_commits_info: Dict[str, Optional[int]] = {}
+        with get_worker_sync_session() as session: # New session for timestamp queries
+             for commit_hash, commit_id in commit_hash_to_id_map.items():
+                 if commit_id != -1 and commit_fix_keyword_map.get(commit_hash, False):
+                     # Query for the earliest timestamp for this corrective commit
+                     earliest_ts = _get_earliest_linked_issue_timestamp(session, commit_id)
+                     corrective_commits_info[commit_hash] = earliest_ts
+
+        logger.info(f"Task {task_id}: Found {len(corrective_commits_info)} potential corrective commits for linking.")
+
+        bug_link_map_hash: Dict[str, List[str]] = {} # buggy_hash -> [fixing_hash1,...]
+        if corrective_commits_info:
             linker = GitCommitLinker(repo_local_path)
-            # Pass the dictionary with timestamps to the linker
-            bug_link_map = linker.link_corrective_commits(corrective_commits_info)
-            logger.info(f"Task {task_id}: Bug linking identified {len(bug_link_map)} potential bug-introducing commits.")
-        except Exception as e:
-            logger.error(f"Task {task_id}: Failed during bug linking: {e}", exc_info=True)
-            warning_msg = 'Bug linking failed, proceeding...'
-            update_task_state(task, 'STARTED', warning_msg, 45, warning=warning_msg)
-    else:
-        logger.info(f"Task {task_id}: No corrective commits found, skipping bug linking.")
+            bug_link_map_hash = linker.link_corrective_commits(corrective_commits_info)
+            logger.info(f"Task {task_id}: Bug linking identified {len(bug_link_map_hash)} potential bug-introducing commits (by hash).")
+
+            # Convert buggy hashes to buggy IDs for DB update
+            for buggy_hash, fixing_hashes in bug_link_map_hash.items():
+                buggy_id = commit_hash_to_id_map.get(buggy_hash, -1)
+                if buggy_id != -1:
+                    bug_introducing_commit_ids.add(buggy_id)
+                    fixing_commit_map_for_update[buggy_id] = fixing_hashes
+        else:
+            logger.info(f"Task {task_id}: No corrective commits found or processed, skipping bug linking.")
+
+        # --- Update is_buggy flag and fixing_commit_hashes in DB ---
+        if bug_introducing_commit_ids:
+            logger.info(f"Task {task_id}: Updating {len(bug_introducing_commit_ids)} commits identified as bug-introducing...")
+            with get_worker_sync_session() as session:
+                try:
+                    # Bulk update 'is_buggy'
+                    update_buggy_stmt = (
+                        update(CommitGuruMetric)
+                        .where(CommitGuruMetric.id.in_(bug_introducing_commit_ids))
+                        .values(is_buggy=True)
+                    )
+                    session.execute(update_buggy_stmt)
+
+                    # Update fixing_commit_hashes individually (easier than complex bulk update)
+                    for buggy_id, fixing_hashes in fixing_commit_map_for_update.items():
+                         update_fixing_stmt = (
+                             update(CommitGuruMetric)
+                             .where(CommitGuruMetric.id == buggy_id)
+                             .values(fixing_commit_hashes={"hashes": fixing_hashes})
+                         )
+                         session.execute(update_fixing_stmt)
+
+                    session.commit()
+                    logger.info(f"Task {task_id}: Successfully updated bug flags and fixing hashes.")
+                except Exception as update_err:
+                     logger.error(f"Task {task_id}: Failed during DB update for bug linking: {update_err}", exc_info=True)
+                     session.rollback()
+                     bug_link_warning = "Failed to update bug link flags in DB."
+
+    except Exception as e:
+        logger.error(f"Task {task_id}: Failed during bug linking phase: {e}", exc_info=True)
+        bug_link_warning = 'Bug linking process failed.'
+        # Allow task to continue, but report warning
+
+    if bug_link_warning:
+        update_task_state(task, 'STARTED', bug_link_warning, 88, warning=bug_link_warning)
 
 
-    buggy_hashes_set = set(bug_link_map.keys())
-
-    # --- Save Metrics ---
-    update_task_state(task, 'STARTED', 'Saving Commit Guru metrics...', 50)
-    inserted_count = _save_commit_guru_metrics(
-        task, repository_id, commit_guru_data_list, bug_link_map, buggy_hashes_set
-    )
-
-    return inserted_count, commit_guru_data_list, warning_msg
+    # Return inserted count, RAW data list (for CK), and any warning
+    return inserted_count, commit_guru_raw_data_list, bug_link_warning
 
 def _save_commit_guru_metrics(
     task: Task,

@@ -1,14 +1,19 @@
 # shared/db/models/commit_guru_metric.py
 from sqlalchemy import (
     ARRAY, Column, Integer, String, Float, Boolean, ForeignKey, BigInteger, JSON, Index, UniqueConstraint, Text
-) # Import Text
+)
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
 from datetime import datetime
 
 from shared.db.base_class import Base
-from shared.db.models.repository import Repository
-# No need to import Repository here if only using string reference in Mapped relationship
+# from shared.db.models.repository import Repository # Use string ref below
+# Import the association table explicitly IF needed elsewhere, but relationship handles it
+from .commit_github_issue_association import commit_github_issue_association_table
+
+if TYPE_CHECKING:
+    from .repository import Repository # noqa: F401
+    from .github_issue import GitHubIssue # noqa: F401
 
 class CommitGuruMetric(Base):
     __tablename__ = 'commit_guru_metrics'
@@ -20,16 +25,16 @@ class CommitGuruMetric(Base):
     # --- Contextual Information ---
     parent_hashes: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     author_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    author_email: Mapped[Optional[str]] = mapped_column(String, nullable=True) 
-    author_date: Mapped[Optional[str]] = mapped_column(String, nullable=True) 
+    author_email: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    author_date: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     author_date_unix_timestamp: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     commit_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # --- Bug Linking & Keyword Info ---
-    is_buggy: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True) # Renamed from contains_bug
+    is_buggy: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
     fix: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
-    fixing_commit_hashes: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True) # Renamed from fixes
-    # linked: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True) # Deferring 'linked' status
+    # Renamed from fixes, holds hashes of commits *this commit* fixes (if it's a buggy commit)
+    fixing_commit_hashes: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
 
     # --- Commit Information ---
     files_changed: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), nullable=True)
@@ -49,23 +54,29 @@ class CommitGuruMetric(Base):
     rexp: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     sexp: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
-    # --- GitHub Issue Linking Info ---
-    github_issue_ids: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True) # Store list of found IDs
-    github_earliest_issue_open_timestamp: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True) # Earliest open date
 
-    # --- Deferred Columns ---
-    # classification: Mapped[Optional[str]] = mapped_column(String, nullable=True) # Requires classifier logic
-    # glm_probability: Mapped[Optional[float]] = mapped_column(Float, nullable=True) # Requires GLM logic
 
     # --- Relationships ---
-    # Use string reference to avoid circular import if Repository imports CommitGuruMetric
-    repository: Mapped["Repository"] = relationship("Repository")
+    repository: Mapped["Repository"] = relationship("Repository") # Add back_populates if needed on Repository
+
+    # Many-to-Many relationship with GitHubIssue
+    # Corrected secondary table name reference
+    github_issues: Mapped[List["GitHubIssue"]] = relationship(
+        secondary="commit_github_issue_association",
+        back_populates="commit_metrics",
+        # Eager loading can be useful but consider performance impact
+        # lazy="selectin" # Example: Use selectin loading
+    )
 
     # --- Table Args ---
     __table_args__ = (UniqueConstraint('repository_id', 'commit_hash', name='uq_commit_guru_metric'),)
 
     def __repr__(self):
         buggy_status = "Buggy" if self.is_buggy else "Not Buggy"
-        fix = "Fix" if self.fix else ""
-        issue_info = f" Issues: {self.github_issue_ids['ids']}" if self.github_issue_ids else ""
-        return f"<CommitGuruMetric(repo={self.repository_id}, commit='{self.commit_hash[:7]}', {buggy_status} {fix} {issue_info})>"
+        fix_info = "Fix" if self.fix else ""
+        # Note: Accessing self.github_issues here might trigger a lazy load
+        # issue_count = len(self.github_issues) if self.id else 0 # Check id avoids query before flush
+        # issue_info = f" Issues linked: {issue_count}" if issue_count > 0 else ""
+        # Avoid accessing lazy loaded relationship in repr
+        return (f"<CommitGuruMetric(repo={self.repository_id}, "
+                f"commit='{self.commit_hash[:7]}', {buggy_status} {fix_info})>")
