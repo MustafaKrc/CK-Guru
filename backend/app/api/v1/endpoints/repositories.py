@@ -79,14 +79,55 @@ async def read_repository_endpoint(
     return db_repo
 
 # Add Update and Delete endpoints later if needed
+@router.put(
+    "/{repo_id}",
+    response_model=schemas.RepositoryRead,
+    summary="Update a repository",
+    description="Updates an existing repository's information.",
+    responses={404: {"description": "Repository not found"}},
+)
+async def update_repository_endpoint(
+    repo_id: int,
+    repo_in: schemas.RepositoryUpdate,
+    db: AsyncSession = Depends(deps.get_db_session),
+):
+    """
+    Update a repository's details.
+    """
+    db_repo = await crud.crud_repository.get_repository(db, repo_id=repo_id)
+    if db_repo is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Repository not found")
+    
+    repository = await crud.crud_repository.update_repository(db=db, db_obj=db_repo, obj_in=repo_in)
+    return repository
+
+
+@router.delete(
+    "/{repo_id}",
+    response_model=schemas.RepositoryRead,
+    summary="Delete a repository",
+    description="Removes a repository from the system.",
+    responses={404: {"description": "Repository not found"}},
+)
+async def delete_repository_endpoint(
+    repo_id: int,
+    db: AsyncSession = Depends(deps.get_db_session),
+):
+    """
+    Delete a repository.
+    """
+    db_repo = await crud.crud_repository.delete_repository(db, repo_id=repo_id)
+    if db_repo is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Repository not found")
+    return db_repo
 
 @router.post(
-    "/{repo_id}/create-dataset",
+    "/{repo_id}/ingest",
     response_model=schemas.TaskResponse,
     status_code=status.HTTP_202_ACCEPTED,
     # ... (rest of definition) ...
 )
-async def trigger_create_dataset_task(
+async def trigger_ingest_task(
     repo_id: int,
     db: AsyncSession = Depends(deps.get_db_session),
 ):
@@ -99,7 +140,7 @@ async def trigger_create_dataset_task(
 
     # Define the registered name of the task in the worker
     # This MUST match the 'name' argument in @shared_task in the worker code
-    task_name = "tasks.create_repository_dataset"
+    task_name = "tasks.ingest_repository"
 
     try:
         # Send the task using send_task("task_name", args=[...], kwargs={...})
@@ -112,7 +153,7 @@ async def trigger_create_dataset_task(
 
         # Optional: Update repository status in DB here if desired
 
-        return schemas.TaskResponse(task_id=task.id, message="Dataset creation task submitted.")
+        return schemas.TaskResponse(task_id=task.id, message="Repository ingestion task submitted.")
 
     except Exception as e:
         logger.error(f"Failed to submit Celery task '{task_name}' for repo ID {repo_id}: {e}", exc_info=True)

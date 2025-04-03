@@ -1,10 +1,19 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import repositories, tasks
+from app.api.v1.endpoints import repositories, tasks, datasets, bot_patterns
 
 api_router = APIRouter()
 
 # Include routers from endpoint files
 api_router.include_router(repositories.router, prefix="/repositories", tags=["Repositories"])
 api_router.include_router(tasks.router, prefix="/tasks", tags=["Tasks"]) # Add tasks router
-# Add other endpoint routers here later (datasets, models, etc.)
-# api_router.include_router(datasets.router, prefix="/datasets", tags=["Datasets"])
+
+
+# Datasets endpoints (includes /datasets/available-cleaning-rules)
+api_router.include_router(datasets.router, prefix="", tags=["Datasets"]) # Use prefix="" as paths are defined with /datasets already
+
+# Bot Patterns endpoints (global and repo-specific might be defined within)
+# If bot_patterns.py defines both /bot-patterns and /repositories/{id}/bot-patterns:
+api_router.include_router(bot_patterns.router, prefix="", tags=["Bot Patterns"])
+# Alternatively, if they were split:
+# api_router.include_router(global_bot_patterns.router, prefix="/bot-patterns", tags=["Global Bot Patterns"])
+# api_router.include_router(repo_bot_patterns.router, prefix="/repositories", tags=["Repository Bot Patterns"])

@@ -10,6 +10,8 @@ from typing import Optional, List, TYPE_CHECKING
 
 from shared.db.base_class import Base
 
+from .commit_github_issue_association import commit_github_issue_association_table
+
 # Avoid circular imports for type checking relationships
 if TYPE_CHECKING:
     from .repository import Repository  # noqa: F401

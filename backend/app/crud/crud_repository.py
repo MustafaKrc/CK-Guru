@@ -57,22 +57,20 @@ async def create_repository(db: AsyncSession, *, obj_in: RepositoryCreate) -> Re
     await db.refresh(db_obj)
     return db_obj
 
-# --- Update Function (Example - Implement if needed) ---
-# async def update_repository(db: AsyncSession, *, db_obj: Repository, obj_in: RepositoryUpdate) -> Repository:
-#     """Update an existing repository."""
-#     update_data = obj_in.model_dump(exclude_unset=True) # Use Pydantic V2 method
-#     for field, value in update_data.items():
-#         setattr(db_obj, field, value)
-#     db.add(db_obj)
-#     await db.commit()
-#     await db.refresh(db_obj)
-#     return db_obj
+async def update_repository(db: AsyncSession, *, db_obj: Repository, obj_in: RepositoryUpdate) -> Repository:
+    """Update an existing repository."""
+    update_data = obj_in.model_dump(exclude_unset=True) # Use Pydantic V2 method
+    for field, value in update_data.items():
+        setattr(db_obj, field, value)
+    db.add(db_obj)
+    await db.commit()
+    await db.refresh(db_obj)
+    return db_obj
 
-# --- Delete Function (Example - Implement if needed) ---
-# async def delete_repository(db: AsyncSession, *, repo_id: int) -> Optional[Repository]:
-#    """Delete a repository by ID."""
-#    db_obj = await get_repository(db, repo_id)
-#    if db_obj:
-#        await db.delete(db_obj)
-#        await db.commit()
-#    return db_obj
+async def delete_repository(db: AsyncSession, *, repo_id: int) -> Optional[Repository]:
+   """Delete a repository by ID."""
+   db_obj = await get_repository(db, repo_id)
+   if db_obj:
+       await db.delete(db_obj)
+       await db.commit()
+   return db_obj

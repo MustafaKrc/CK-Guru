@@ -9,7 +9,8 @@ from typing import List, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .github_issue import GitHubIssue # noqa: F401
-    # Add other related models if needed
+    from.bot_pattern import BotPattern
+    from.dataset import Dataset
 
 class Repository(Base):
     __tablename__ = "repositories"
@@ -19,6 +20,10 @@ class Repository(Base):
     git_url: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    bot_patterns: Mapped[List["BotPattern"]] = relationship("BotPattern", back_populates="repository", cascade="all, delete-orphan")
+    datasets: Mapped[List["Dataset"]] = relationship("Dataset", back_populates="repository", cascade="all, delete-orphan")
+    github_issues: Mapped[List["GitHubIssue"]] = relationship("GitHubIssue", back_populates="repository", cascade="all, delete-orphan")
 
 
     # --- Relationships ---

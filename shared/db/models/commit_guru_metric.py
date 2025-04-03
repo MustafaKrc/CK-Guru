@@ -62,10 +62,10 @@ class CommitGuruMetric(Base):
     # Many-to-Many relationship with GitHubIssue
     # Corrected secondary table name reference
     github_issues: Mapped[List["GitHubIssue"]] = relationship(
+        "GitHubIssue",
         secondary="commit_github_issue_association",
         back_populates="commit_metrics",
-        # Eager loading can be useful but consider performance impact
-        # lazy="selectin" # Example: Use selectin loading
+        lazy="selectin" # Or 'select' or 'joined' depending on query needs
     )
 
     # --- Table Args ---

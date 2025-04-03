@@ -3,13 +3,13 @@
 # --- Core ---
 celery[librabbitmq,redis]>=5.0
 redis>=4.0
-pydantic
-pydantic-settings
+pydantic>=2.0
+pydantic-settings>=2.0
 
-# --- Git & Data (From your script) ---
+# --- Git & Data  ---
 GitPython>=3.1.30
 pandas>=1.5
-numpy>=1.20 # Added from your script
+numpy>=1.20 
 
 # --- Database ---
 sqlalchemy>=2.0
@@ -20,11 +20,19 @@ psycopg2-binary # Sometimes needed by Alembic even if using asyncpg
 requests>=2.20.0
 python-dateutil>=2.8.0
 
-# --- ML/Other (Add your specific libraries) ---
-# scikit-learn
-# torch # Or tensorflow[and-cuda] - ensure GPU/CUDA compatibility!
-# etc.
+# --- Dataset Generation ---
+scikit-learn>=1.0 # For KMeans clustering
+pyarrow>=10.0 # For efficient Parquet writing/reading
 
-# --- Optional (if worker needs DB directly) ---
-# sqlalchemy>=2.0
-# asyncpg # Or psycopg[binary]
+# --- ML/Other (Add your specific libraries later) ---
+# Example:
+# torch==2.1.0+cu118 # Ensure GPU/CUDA compatibility! Find correct command on PyTorch website
+# torchvision==0.16.0+cu118
+# torchaudio==2.1.0+cu118
+# transformers>=4.0.0
+# Or TensorFlow:
+# tensorflow[and-cuda]>=2.10 # Check TF docs for correct version
+
+# --- Optional Dev/Debugging ---
+# ipython
+# ipdb

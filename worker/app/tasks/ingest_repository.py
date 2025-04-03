@@ -1,4 +1,4 @@
-# worker/app/tasks/repository_tasks.py
+# worker/app/tasks/ingest_repository.py
 from pathlib import Path
 from typing import Dict, List, Any, Tuple, Optional, Set
 
@@ -16,8 +16,8 @@ logger = get_task_logger(__name__)
 
 
 # === Main Celery Task (Orchestrator) ===
-@shared_task(bind=True, name='tasks.create_repository_dataset')
-def create_repository_dataset_task(self: Task, repository_id: int, git_url: str):
+@shared_task(bind=True, name='tasks.ingest_repository')
+def ingest_repository_task(self: Task, repository_id: int, git_url: str):
     """
     Orchestrates data extraction: Repo prep, Commit Guru metrics (with GitHub issue cache),
     bug linking, CK analysis.
