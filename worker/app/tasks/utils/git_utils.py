@@ -3,7 +3,8 @@ import logging
 import subprocess
 from pathlib import Path
 from typing import Optional
-import git # Import GitPython
+
+import git
 
 logger = logging.getLogger(__name__)
 
@@ -67,3 +68,56 @@ def find_commit_hash_before_timestamp(repo_path: Path, timestamp: int) -> Option
     except Exception as e:
         logger.error(f"Error finding commit before timestamp {timestamp}: {e}", exc_info=True)
         return None
+    
+def checkout_commit(repo: git.Repo, commit_hash: str) -> bool:
+    """Checks out the repository at the specified commit. Returns True on success."""
+    try:
+        logger.debug(f"Checking out commit {commit_hash}...")
+        # Clean state before checkout is crucial
+        repo.git.reset('--hard')
+        repo.git.clean('-fdx')
+        repo.git.checkout(commit_hash, force=True)
+        logger.debug(f"Checkout successful for {commit_hash}.")
+        return True
+    except git.GitCommandError as e:
+        logger.error(f"Error checking out commit {commit_hash}: {e.stderr}")
+        return False
+    except Exception as e:
+         logger.error(f"Unexpected error during checkout of {commit_hash}: {e}", exc_info=True)
+         return False
+    
+def determine_default_branch(repo: git.Repo) -> str:
+    """Determines the default branch name."""
+    try:
+        origin = repo.remotes.origin
+        if not repo.heads and not origin.refs: # Handle empty repo
+             logger.warning(f"No local heads or remote refs found. Fetching explicitly.")
+             origin.fetch()
+
+        remote_refs = {r.name: r for r in origin.refs} # Map name to ref object
+
+        # Try common names first
+        for name in ['origin/main', 'origin/master']:
+            if name in remote_refs:
+                logger.info(f"Using default branch: {name}")
+                return name
+
+        # Try origin/HEAD symbolic reference
+        head_symref = remote_refs.get('origin/HEAD')
+        if head_symref and hasattr(head_symref, 'reference'):
+             ref_name = head_symref.reference.name
+             logger.info(f"Determined default branch via origin/HEAD: {ref_name}")
+             return ref_name
+
+        # Last resort: pick the first available remote branch (excluding HEAD)
+        available_refs = [name for name in remote_refs if name != 'origin/HEAD']
+        if available_refs:
+            fallback_ref = sorted(available_refs)[0] # Sort for some determinism
+            logger.warning(f"Could not determine default branch (main/master/HEAD). Using fallback ref: {fallback_ref}")
+            return fallback_ref
+        else:
+            raise ValueError("No suitable remote branch reference found for CK analysis.")
+
+    except (git.GitCommandError, AttributeError, ValueError, Exception) as e:
+        logger.error(f"Error determining default branch: {e}", exc_info=True)
+        raise ValueError("Failed to determine default branch.") from e

@@ -24,7 +24,7 @@ RATE_LIMIT_BUFFER_SECONDS = 10 # Extra seconds to wait after reset time
 # Simple owner/repo extraction (might need refinement for complex URLs)
 REPO_URL_REGEX = re.compile(r'github\.com[/:]([\w.-]+)/([\w.-]+?)(?:\.git)?$')
 
-def _extract_repo_owner_name(git_url: str) -> Optional[Tuple[str, str]]:
+def extract_repo_owner_name(git_url: str) -> Optional[Tuple[str, str]]:
     """Extracts owner and repo name from a GitHub URL."""
     match = REPO_URL_REGEX.search(git_url)
     if match:
