@@ -52,6 +52,7 @@ def generate_dataset_task(self: Task, dataset_id: int):
     bot_patterns: List[BotPattern] = []
     total_rows_processed = 0
     total_rows_written = 0
+    all_batches_data: List[pd.DataFrame] = [] # Accumulator for DataFrames
 
     try:
         # Use a single synchronous session for the entire task
@@ -114,8 +115,6 @@ def generate_dataset_task(self: Task, dataset_id: int):
                 bot_condition = get_bot_filter_condition(bot_patterns, cgm)
                 base_query = base_query.where(sa.not_(bot_condition))
 
-            # TODO: Add file type filtering (e.g., ckm.file.like('%.java')) if needed based on config
-
             # 4. Batch Processing with Streaming
             batch_size = 1000 # Adjust batch size based on memory/performance
             logger.info(f"Task {task_id}: Starting data processing in batches of {batch_size}...")
@@ -150,13 +149,15 @@ def generate_dataset_task(self: Task, dataset_id: int):
                 # Log error but proceed - maybe bucket doesn't exist yet or permissions issue
                 logger.error(f"Task {task_id}: Could not ensure removal of existing object at {object_storage_uri}: {overwrite_err}. Proceeding anyway.")
 
+            est_total_rows = session.execute(select(func.count()).select_from(base_query.subquery())).scalar() or 1
 
             for i, result_batch in enumerate(stream.partitions(batch_size)):
+                num_batches = i + 1
                 start_time_batch = time.time()
                 if not result_batch: continue
 
                 logger.debug(f"Task {task_id}: Processing batch {i+1}...")
-                update_task_state(self, 'STARTED', f'Processing batch {i+1}...', 10 + int(80 * (i * batch_size) / (session.execute(select(func.count()).select_from(base_query.subquery())).scalar() or 1))) # Estimate progress
+                update_task_state(self, 'STARTED', f'Processing batch {i+1}...', 5 + int(45 * (total_rows_processed / est_total_rows)))
 
                 # Combine results into a DataFrame
                 # Extract data correctly based on the select(cgm, ckm) structure
@@ -172,6 +173,35 @@ def generate_dataset_task(self: Task, dataset_id: int):
                 if not batch_data: continue
                 batch_df = pd.DataFrame(batch_data)
                 total_rows_processed += len(batch_df)
+
+                # -- Metric File Filtering --
+
+                logger.debug(f"Task {task_id}: Batch {num_batches} - Applying file filters...")
+                initial_batch_len = len(batch_df)
+
+                # Ensure 'file' column exists and handle potential NaNs
+                if 'file' not in batch_df.columns:
+                    logger.warning(f"Task {task_id}: Batch {num_batches} - 'file' column missing, skipping file filtering.")
+                else:
+                    # Apply filters using boolean indexing
+                    is_java = batch_df['file'].str.endswith('.java', na=False)
+                    is_not_package_info = ~batch_df['file'].str.endswith('package-info.java', na=False)
+                    # Handle potential non-string types before .lower() and contains()
+                    file_lower = batch_df['file'].astype(str).str.lower()
+                    is_not_test = ~file_lower.str.contains("test", na=False)
+                    is_not_example = ~file_lower.str.contains("example", na=False)
+
+                    valid_file_mask = is_java & is_not_package_info & is_not_test & is_not_example
+                    batch_df = batch_df[valid_file_mask]
+
+                    dropped_files = initial_batch_len - len(batch_df)
+                    if dropped_files > 0:
+                        logger.debug(f"Task {task_id}: Batch {num_batches} - Dropped {dropped_files} rows based on file filters.")
+
+                # Check if batch became empty after filtering
+                if batch_df.empty:
+                    logger.debug(f"Task {task_id}: Batch {num_batches} - Became empty after file filtering. Skipping rest of batch processing.")
+                    continue
 
                 # -- Calculate `changed_file_count` --
                 # files_changed is already a list in CommitGuruMetric model if parsed correctly
@@ -224,54 +254,87 @@ def generate_dataset_task(self: Task, dataset_id: int):
                      if dropped > 0:
                           logger.debug(f"Dropped {dropped} rows due to missing parent metrics.")
 
-                # -- Feature Selection --
-                # Ensure target column is included for potential use, even if not listed as a feature
-                final_columns = list(set(feature_columns + ([target_column] if target_column else [])))
-                # Only select columns that actually exist in the dataframe after processing
-                available_final_columns = [col for col in final_columns if col in cleaned_batch_df.columns]
-                if not available_final_columns:
-                     logger.warning(f"Task {task_id}: Batch {i+1} - No requested feature/target columns remain after processing. Skipping batch write.")
-                     continue
+                if not cleaned_batch_df.empty:
+                    all_batches_data.append(cleaned_batch_df)
 
-                final_batch_df = cleaned_batch_df[available_final_columns]
+            # --- Global Rule Processing ---
+            # If any global rules are defined, apply them to the entire dataset
 
-                # -- Append to Object Storage (using pandas.to_parquet) --
-            if not final_batch_df.empty:
-                logger.debug(f"Task {task_id}: Batch {i+1} - Writing {len(final_batch_df)} rows to {object_storage_uri}...")
-                try:
-                    if first_batch:
-                         # Write first batch, creating the file & schema
-                         final_batch_df.to_parquet(
-                             object_storage_uri,
-                             engine='pyarrow',
-                             compression='snappy', # Or other compression
-                             index=False,
-                             storage_options=storage_options
-                             # schema=arrow_schema # let pandas infer schema on first write
-                         )
-                         # We don't strictly need the schema variable anymore
-                         # arrow_schema = pa.Table.from_pandas(final_batch_df).schema
-                         first_batch = False
-                         logger.info(f"Task {task_id}: Wrote first batch to {object_storage_uri}")
-                    else:
-                         # Append subsequent batches
-                         final_batch_df.to_parquet(
-                             object_storage_uri,
-                             engine='pyarrow',
-                             compression='snappy',
-                             index=False,
-                             storage_options=storage_options,
-                             append=True # Use append=True (requires pandas >= 1.5)
-                         )
-                    total_rows_written += len(final_batch_df)
-                except Exception as write_err:
-                    logger.error(f"Task {task_id}: Batch {i+1} - Error writing to object storage {object_storage_uri}: {write_err}", exc_info=True)
-                    # If write fails, subsequent appends might corrupt file - fail task
-                    raise write_err
+            if not all_batches_data:
+                logger.warning(f"Task {task_id}: No data accumulated after batch processing. Dataset will be empty.")
+                full_df = pd.DataFrame() # Create empty dataframe
+            else:
+                update_task_state(self, 'STARTED', 'Combining batches...', 51)
+                logger.info(f"Task {task_id}: Starting global rules processing - Combining {len(all_batches_data)} batches in memory...")
+                full_df = pd.concat(all_batches_data, ignore_index=True)
+                del all_batches_data # Release memory
+                logger.info(f"Task {task_id}: Combined DataFrame shape: {full_df.shape}")
 
-                batch_duration = time.time() - start_time_batch
-                logger.debug(f"Task {task_id}: Batch {i+1} processed in {batch_duration:.2f} seconds.")
-                # --- End Batch Loop ---
+            update_task_state(self, 'STARTED', 'Applying global rules...', 60)
+            logger.info(f"Task {task_id}: Applying globally-aware cleaning rules...")
+
+            rules_to_apply = dataset_config.get('cleaning_rules', [])
+
+            for rule_config in rules_to_apply:
+                rule_name = rule_config.get("name")
+                is_enabled = rule_config.get("enabled", False)
+                params = rule_config.get("params", {})
+
+                if not is_enabled:
+                    continue
+
+                rule_instance = get_rule_instance(rule_name) # Get instance from registry
+                if rule_instance:
+                    # Apply global rules
+                    if rule_instance and not rule_instance.is_batch_safe:
+                        try:
+                            logger.debug(f"Applying global rule: {rule_name}")
+                            full_df = rule_instance.apply(full_df, params, dataset_config) # Apply to full_df
+                            logger.info(f"Global rule '{rule_name}' applied. Shape after: {full_df.shape}")
+                        except Exception as e:
+                            logger.error(f"Error applying global rule '{rule_name}': {e}", exc_info=True)
+                            raise ValueError(f"Error applying global rule '{rule_name}': {e}") from e
+                else:
+                        logger.warning(f"Rule '{rule_name}' is enabled in config but no implementation was registered.")
+
+
+            update_task_state(self, 'STARTED', 'Selecting final features...', 90)
+
+            # Final Feature Selection
+            final_columns_requested = list(set(feature_columns + ([target_column] if target_column else [])))
+            available_final_columns = [col for col in final_columns_requested if col in full_df.columns]
+
+            if not available_final_columns:
+                # Check if full_df was empty to begin with
+                if full_df.empty:
+                    logger.warning("Dataset is empty after all processing, writing empty file.")
+                    final_df = pd.DataFrame(columns=final_columns_requested) # Ensure schema consistency if possible
+                else:
+                    raise ValueError("No requested feature/target columns remain after global processing.")
+            else:
+                final_df = full_df[available_final_columns].copy()
+
+            update_task_state(self, 'STARTED', 'Writing final dataset...', 95)
+
+
+            # Write Final Output to S3 (Single Write)
+            logger.info(f"Task {task_id}: Writing final dataset ({len(final_df)} rows) to {object_storage_uri}")
+            try:
+                # Ensure target directory exists (needed by to_parquet with s3fs sometimes)
+                # fs.mkdirs(final_s3_path.rsplit('/', 1)[0], exist_ok=True) # Ensure parent exists
+                final_df.to_parquet(
+                    object_storage_uri,
+                    engine='pyarrow',
+                    compression='snappy',
+                    index=False,
+                    storage_options=storage_options
+                )
+                total_rows_written = len(final_df)
+                logger.info(f"Task {task_id}: Successfully wrote final dataset.")
+            except Exception as write_err:
+                logger.error(f"Task {task_id}: Error writing final dataset to {object_storage_uri}: {write_err}", exc_info=True)
+                raise write_err
+
 
             logger.info(f"Task {task_id}: Finished processing {total_rows_processed} rows. Written {total_rows_written} rows to {object_storage_uri}.")
 

@@ -423,7 +423,7 @@ class RuleClusterLargeCommits(CleaningRuleBase):
     parameters = [
         RuleParamDefinition(name="threshold", type="integer", description="File count threshold to trigger clustering.", default=10)
     ]
-    is_batch_safe = False # Assuming commits aren't split across batches for this rule
+    is_batch_safe = False # Assuming commits are split across batches
 
     def apply(self, df: pd.DataFrame, params: Dict[str, Any], config: Dict[str, Any]) -> pd.DataFrame:
         threshold = params.get('threshold', 10)
