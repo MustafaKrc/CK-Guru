@@ -322,7 +322,7 @@ def generate_dataset_task(self: Task, dataset_id: int):
 @shared_task(
     bind=True,
     name='tasks.delete_storage_object',
-    autoretry_for=(s3fs.errors.S3ConnectionError, TimeoutError), # Example transient errors
+    autoretry_for=(ConnectionError, TimeoutError), # Common network errors
     retry_kwargs={'max_retries': 3, 'countdown': 60} # Retry 3 times, wait 60s
 )
 def delete_storage_object_task(self: Task, object_storage_uri: str):

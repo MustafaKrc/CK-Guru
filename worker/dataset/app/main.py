@@ -78,7 +78,7 @@ def update_rule_registry_in_db():
 
 # --- Worker Initialization ---
 logger.info("Dataset worker starting up...")
-discover_rules(module_path="logic.cleaning_rules") # Discover rules first
+discover_rules(module_path="services.cleaning_rules") # Discover rules first
 update_rule_registry_in_db() # Update DB with discovered rules
 
 # Create Celery app instance
