@@ -1,11 +1,12 @@
 # backend/app/api/v1/endpoints/tasks.py
 import logging
-from fastapi import APIRouter, HTTPException, status, Depends
-from celery.result import AsyncResult
 from typing import Any, Optional # Import Any for result type hint
 
-from app.core.celery_app import backend_celery_app as celery_app # Import the Celery app instance
+from fastapi import APIRouter, HTTPException, status, Depends
+from celery.result import AsyncResult
+
 from app import schemas # Use schemas module directly
+from app.core.celery_app import backend_celery_app as celery_app # Import the Celery app instance
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

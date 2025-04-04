@@ -1,34 +1,31 @@
 # worker/app/tasks/feature_extraction.py
-from datetime import datetime, timezone
-import logging
-import math
 import os
+import math
 import shutil
-import subprocess
+import logging
 import tempfile
-from pathlib import Path
+import subprocess
+import dateutil.parser
 from typing import Any, Dict, List, Optional, Set, Tuple
+from pathlib import Path
+from datetime import datetime, timezone
 
-import git
 import pandas as pd
 from celery import Task
 from git import Repo, GitCommandError
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-import dateutil.parser
 
-from ...core.config import settings
-from ...db.session import get_worker_sync_session
+from shared.core.config import settings
+from shared.db_session import get_sync_db_session
 from shared.db.models.ck_metric import CKMetric
 from shared.db.models.commit_guru_metric import CommitGuruMetric
 from shared.db.models.github_issue import GitHubIssue
 from shared.db.models.commit_github_issue_association import commit_github_issue_association_table
-
-from ..utils.commit_guru_utils import GitCommitLinker, calculate_commit_guru_metrics
-from ..utils.git_utils import determine_default_branch, checkout_commit
-from ..utils.github_utils import GitHubIssueFetcher, extract_issue_ids, extract_repo_owner_name, GitHubAPIResponse
-from ..utils.task_utils import update_task_state
+from shared.utils.commit_guru_utils import GitCommitLinker, calculate_commit_guru_metrics
+from shared.utils.git_utils import determine_default_branch, checkout_commit
+from shared.utils.github_utils import GitHubIssueFetcher, extract_issue_ids, extract_repo_owner_name, GitHubAPIResponse
+from shared.utils.task_utils import update_task_state
 
 
 logger = logging.getLogger(__name__)
@@ -145,26 +142,26 @@ def _run_ck_tool(repo_dir: Path, commit_hash: str) -> pd.DataFrame:
 
     return metrics_df
 
-def prepare_repository(git_url: str, repo_local_path: Path) -> git.Repo:
+def prepare_repository(git_url: str, repo_local_path: Path) -> Repo:
     """Clones or updates the local repository."""
     if repo_local_path.exists():
         logger.info(f"Found existing clone at {repo_local_path}. Fetching updates...")
         try:
-            repo = git.Repo(repo_local_path)
+            repo = Repo(repo_local_path)
             repo.git.reset('--hard')
             repo.git.clean('-fdx')
             origin = repo.remotes.origin
             origin.fetch(prune=True) # Prune deleted remote branches
             logger.info(f"Fetch complete.")
             return repo
-        except (git.GitCommandError, Exception) as e:
+        except (GitCommandError, Exception) as e:
             logger.warning(f"Error updating existing repo at {repo_local_path}. Re-cloning. Error: {e}")
             shutil.rmtree(repo_local_path) # Clean up problematic clone
             # Fall through to clone
     # Clone if it doesn't exist or update failed
     logger.info(f"Cloning {git_url} to {repo_local_path}...")
     # Consider adding depth for large repos if full history isn't always needed immediately
-    repo = git.Repo.clone_from(git_url, repo_local_path, no_checkout=True)
+    repo = Repo.clone_from(git_url, repo_local_path, no_checkout=True)
     logger.info(f"Cloning complete.")
     return repo
 
@@ -401,7 +398,7 @@ def calculate_and_save_guru_metrics(
     # Store commit_hash -> is_fix_keyword_present
     commit_fix_keyword_map: Dict[str, bool] = {}
 
-    with get_worker_sync_session() as session:
+    with get_sync_db_session() as session:
         try:
             for i, raw_commit_data in enumerate(commit_guru_raw_data_list):
                 processed_count += 1
@@ -506,7 +503,7 @@ def calculate_and_save_guru_metrics(
     try:
         # Prepare info for the linker: corrective_hash -> earliest_linked_issue_ts
         corrective_commits_info: Dict[str, Optional[int]] = {}
-        with get_worker_sync_session() as session: # New session for timestamp queries
+        with get_sync_db_session() as session: # New session for timestamp queries
              for commit_hash, commit_id in commit_hash_to_id_map.items():
                  if commit_id != -1 and commit_fix_keyword_map.get(commit_hash, False):
                      # Query for the earliest timestamp for this corrective commit
@@ -533,7 +530,7 @@ def calculate_and_save_guru_metrics(
         # --- Update is_buggy flag and fixing_commit_hashes in DB ---
         if bug_introducing_commit_ids:
             logger.info(f"Task {task_id}: Updating {len(bug_introducing_commit_ids)} commits identified as bug-introducing...")
-            with get_worker_sync_session() as session:
+            with get_sync_db_session() as session:
                 try:
                     # Bulk update 'is_buggy'
                     update_buggy_stmt = (
@@ -574,7 +571,7 @@ def calculate_and_save_guru_metrics(
 def run_ck_analysis(
     task: Task,
     repository_id: int,
-    repo: git.Repo,
+    repo: Repo,
     repo_local_path: Path,
 ) -> int:
     """Runs CK analysis on all commits of the default branch."""
@@ -597,7 +594,7 @@ def run_ck_analysis(
         logger.info(f"Checked out {local_branch_name} for CK analysis.")
 
         commits_iterator = repo.iter_commits(rev=default_branch_ref_name)
-    except (git.GitCommandError, ValueError, IndexError, AttributeError, Exception) as e:
+    except (GitCommandError, ValueError, IndexError, AttributeError, Exception) as e:
         logger.error(f"Task {task_id}: Error setting up commit iteration or checkout for CK: {e}", exc_info=True)
         # Decide if CK failure is fatal - let's allow task to succeed without CK for now
         update_task_state(task, 'STARTED', 'CK setup failed, skipping CK analysis.', 98, warning="CK setup failed")
@@ -614,7 +611,7 @@ def run_ck_analysis(
          logger.warning(f"Task {task_id}: Could not estimate total commits for CK progress: {count_err}. Progress reporting will be less granular.")
          total_commits_for_ck = 0 # Indicate unknown total
 
-    with get_worker_sync_session() as session:
+    with get_sync_db_session() as session:
         for commit in commits_iterator:
             ck_commit_hash = commit.hexsha
             if ck_commit_hash in processed_hashes_this_run:

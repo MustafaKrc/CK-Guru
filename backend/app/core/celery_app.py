@@ -1,20 +1,11 @@
 # backend/app/core/celery_app.py
-from celery import Celery
-from .config import settings # Import your backend settings
+from shared.celery_config.app import create_celery_app
 
-# Define a Celery app instance configured for the backend's use
-# It connects to the same broker and result backend as the worker
-backend_celery_app = Celery(
-    "backend_tasks", # Give it a distinct name (doesn't affect task routing)
-    broker=str(settings.CELERY_BROKER_URL),
-    backend=str(settings.CELERY_RESULT_BACKEND),
-    # Important: Set ignore_result=False if you want results/status
-    # (Celery default is True if no backend is specified, but explicit is good)
-    # By default, this instance doesn't need to know about task implementations
-    # include=[] # No need to include worker task modules here
-)
+# Create the backend app instance - it doesn't need 'include' as it only sends
+backend_celery_app = create_celery_app(main_name="backend_sender")
 
-# Optional: Update with specific backend settings if needed
-# backend_celery_app.conf.update(...)
-
-# Note: This instance does NOT run tasks, it only sends them and checks results.
+# Ensure result backend is enabled if tasks endpoint needs it
+if not backend_celery_app.conf.result_backend:
+    # Log warning or raise error depending on requirements
+    import logging
+    logging.getLogger(__name__).warning("Celery result backend is not configured for the backend sender. Task status polling will not work.")

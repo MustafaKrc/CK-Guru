@@ -29,39 +29,83 @@ services:
         condition: service_started
       minio:
         condition: service_healthy
+
   #################
-  # Celery Worker
+  # Ingestion Worker
   #################
-  worker:
+  ingestion-worker:
     build:
-      context: .
-      dockerfile: worker/Dockerfile
-    container_name: ckguru_worker
+      context: . # Build context is root
+      dockerfile: worker/ingestion/Dockerfile # Path to specific Dockerfile
+    container_name: ckguru_ingestion_worker
     volumes:
-      - ./worker/app:/app/app # Optional: hot-reload 
-      - ./shared:/app/shared # Shared directory hot-reload 
-      - app_data:/app/persistent_data # For git clones
+      - ./worker/ingestion/app:/app/app # Worker-specific code hot-reload
+      - ./shared:/app/shared           # Shared code hot-reload
+      - app_data:/app/persistent_data # Volume for git clones
     env_file:
       - .env
     environment:
-      STORAGE_BASE_PATH: /app/persistent_data
-      # Ensure CUDA devices are visible (often handled by deploy key, but can be explicit)
-      # NVIDIA_VISIBLE_DEVICES: all # Set this if needed
-      NVIDIA_DRIVER_CAPABILITIES: compute,utility # Often needed
+      STORAGE_BASE_PATH: /app/persistent_data # Needed for clone path logic
     depends_on:
       - broker
       - db
-      - redis
+      - minio # Does ingestion *need* minio? Maybe not directly. Keep if utils access it.
+      - redis # For results backend if enabled
+
+  #################
+  # Dataset Worker
+  #################
+  dataset-worker:
+    build:
+      context: .
+      dockerfile: worker/dataset/Dockerfile
+    container_name: ckguru_dataset_worker
+    volumes:
+      - ./worker/dataset/app:/app/app
+      - ./shared:/app/shared
+      # No app_data needed unless it reads clones directly (it shouldn't)
+    env_file:
+      - .env
+    depends_on:
+      - broker
+      - db
       - minio
-    # <<< --- GPU Configuration --- >>>
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              # count: 1 # Request exactly one GPU
-              count: all # Request all available GPUs
-              capabilities: [gpu] # Request GPU capabilities
+      - redis
+
+  ######################### Commented out for future gpu bounded worker
+  # #################
+  # # Celery Worker
+  # #################
+  # worker:
+  #   build:
+  #     context: .
+  #     dockerfile: worker/Dockerfile
+  #   container_name: ckguru_worker
+  #   volumes:
+  #     - ./worker/app:/app/app # Optional: hot-reload 
+  #     - ./shared:/app/shared # Shared directory hot-reload 
+  #     - app_data:/app/persistent_data # For git clones
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     STORAGE_BASE_PATH: /app/persistent_data
+  #     # Ensure CUDA devices are visible (often handled by deploy key, but can be explicit)
+  #     # NVIDIA_VISIBLE_DEVICES: all # Set this if needed
+  #     NVIDIA_DRIVER_CAPABILITIES: compute,utility # Often needed
+  #   depends_on:
+  #     - broker
+  #     - db
+  #     - redis
+  #     - minio
+  #   # <<< --- GPU Configuration --- >>>
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             # count: 1 # Request exactly one GPU
+  #             count: all # Request all available GPUs
+  #             capabilities: [gpu] # Request GPU capabilities
 
   #################
   # Object Storage (MinIO)

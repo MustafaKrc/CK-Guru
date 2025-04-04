@@ -1,16 +1,20 @@
 # worker/app/tasks/ingest_repository.py
+from typing import Dict, List, Any, Optional
 from pathlib import Path
-from typing import Dict, List, Any, Tuple, Optional, Set
 
 import git
 from celery import shared_task, Task # Import Task for type hinting self
 from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
 
-from ..core.config import settings
-from .data_processing.feature_extraction import calculate_and_save_guru_metrics, run_ck_analysis
-from .utils.task_utils import update_task_state
-from .data_processing.feature_extraction import prepare_repository
+from shared.core.config import settings
+from shared.utils.task_utils import update_task_state
+
+from services.ingestion_steps import (
+    prepare_repository,
+    calculate_and_save_guru_metrics,
+    run_ck_analysis,
+)
 
 logger = get_task_logger(__name__)
 

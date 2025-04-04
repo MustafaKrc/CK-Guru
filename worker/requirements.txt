@@ -1,7 +1,7 @@
 # worker/requirements.txt
 
 # --- Core ---
-celery[librabbitmq,redis]>=5.0
+celery[redis]>=5.0
 redis>=4.0
 pydantic>=2.0
 pydantic-settings>=2.0

@@ -1,12 +1,14 @@
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from sqlalchemy.orm import selectinload # If needed for eager loading relationships later
-from typing import List, Optional, Sequence
 import re
 import logging
+from typing import List, Optional, Sequence
+
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload # If needed for eager loading relationships later
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.schemas.repository import RepositoryCreate, RepositoryUpdate
 
 from shared.db.models import Repository
-from app.schemas.repository import RepositoryCreate, RepositoryUpdate
 
 logger = logging.getLogger(__name__)
 

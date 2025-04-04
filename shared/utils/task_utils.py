@@ -1,4 +1,5 @@
 from typing import Optional
+
 from celery import Task
 
 def update_task_state(task: Task, state: str, status: str, progress: int, warning: Optional[str] = None):

@@ -1,9 +1,11 @@
 # shared/db/models/bot_pattern.py
+import enum
+from typing import TYPE_CHECKING, Optional
+
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Enum, Text, UniqueConstraint
 from sqlalchemy.orm import relationship, Mapped, mapped_column
+
 from shared.db.base_class import Base
-from typing import TYPE_CHECKING, Optional
-import enum
 
 if TYPE_CHECKING:
     from .repository import Repository # noqa

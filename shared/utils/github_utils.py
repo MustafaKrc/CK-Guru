@@ -1,16 +1,14 @@
 # worker/app/tasks/utils/github_utils.py
-from datetime import datetime
 import re
 import time
 import logging
 from typing import Optional, List, Dict, Any, Tuple, NamedTuple
-from datetime import datetime, timezone
+from datetime import datetime
 
 import requests
-import dateutil.parser
 from requests.exceptions import RequestException, Timeout, ConnectionError
 
-from ...core.config import settings # Access settings for token
+from shared.core.config import settings # Access settings for token
 
 logger = logging.getLogger(__name__)
 

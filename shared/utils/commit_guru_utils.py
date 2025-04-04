@@ -1,10 +1,9 @@
 # worker/app/tasks/utils/commit_guru_utils.py
-import os
-import subprocess
-import json
-import logging
-import math
 import re
+import json
+import math
+import logging
+import subprocess
 from pathlib import Path
 from typing import Dict, List, Mapping, Set, Any, Optional, Tuple, NamedTuple
 

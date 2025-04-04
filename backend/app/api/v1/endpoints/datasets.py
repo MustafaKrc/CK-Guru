@@ -1,9 +1,9 @@
 # backend/app/api/v1/endpoints/datasets.py
 import io
+import csv
 import logging
 from typing import Any, Dict, List, Optional, AsyncGenerator
 
-import csv
 import s3fs
 import pandas as pd
 import pyarrow.parquet as pq
@@ -11,10 +11,11 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings 
 from app import schemas, crud
-from app.api import deps
 from app.core.celery_app import backend_celery_app
+
+from shared.core.config import settings 
+from shared.db_session import get_async_db_session 
 from shared.db.models.dataset import DatasetStatusEnum 
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ router = APIRouter()
     summary="Get Available Dataset Cleaning Rules",
     description="Lists the cleaning rules that can be configured during dataset creation."
 )
+# TODO: This is a placeholder. Implement actual logic to fetch available rules.
 async def get_available_cleaning_rules():
     # (Keep the same implementation returning the list of RuleDefinition schemas as before)
     return [
@@ -55,7 +57,7 @@ async def get_available_cleaning_rules():
 async def create_dataset_endpoint(
     repo_id: int,
     dataset_in: schemas.DatasetCreate,
-    db: AsyncSession = Depends(deps.get_db_session),
+    db: AsyncSession = Depends(get_async_db_session),
 ):
     """Create a dataset definition and dispatch the generation task."""
     # Check if repository exists
@@ -79,6 +81,7 @@ async def create_dataset_endpoint(
         task = backend_celery_app.send_task(
             task_name,
             args=[db_dataset.id], # Pass the dataset ID to the task
+            queue='dataset'
         )
         logger.info(f"Dispatched task '{task_name}' for dataset ID {db_dataset.id}, task ID: {task.id}")
         return schemas.DatasetTaskResponse(dataset_id=db_dataset.id, task_id=task.id)
@@ -106,7 +109,7 @@ async def create_dataset_endpoint(
 )
 async def list_repository_datasets_endpoint(
     repo_id: int,
-    db: AsyncSession = Depends(deps.get_db_session),
+    db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=200),
 ):
@@ -129,7 +132,7 @@ async def list_repository_datasets_endpoint(
 )
 async def get_dataset_endpoint(
     dataset_id: int,
-    db: AsyncSession = Depends(deps.get_db_session),
+    db: AsyncSession = Depends(get_async_db_session),
 ):
     """Retrieve details and status for a specific dataset definition."""
     db_dataset = await crud.crud_dataset.get_dataset(db, dataset_id=dataset_id)
@@ -145,7 +148,7 @@ async def get_dataset_endpoint(
 )
 async def delete_dataset_endpoint(
     dataset_id: int,
-    db: AsyncSession = Depends(deps.get_db_session),
+    db: AsyncSession = Depends(get_async_db_session),
 ):
     """
     Delete a dataset definition from the database.
@@ -188,7 +191,7 @@ async def get_valid_dataset_uri(dataset_id: int, db: AsyncSession) -> str:
 )
 async def view_dataset_content(
     dataset_id: int,
-    db: AsyncSession = Depends(deps.get_db_session),
+    db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0, description="Number of rows to skip."),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of rows to return."),
 ):
@@ -257,7 +260,7 @@ async def view_dataset_content(
 )
 async def download_dataset_file_as_csv(
     dataset_id: int,
-    db: AsyncSession = Depends(deps.get_db_session),
+    db: AsyncSession = Depends(get_async_db_session),
 ):
     """Streams dataset content as CSV from Parquet stored in object storage."""
     object_storage_uri = await get_valid_dataset_uri(dataset_id, db)

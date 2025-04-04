@@ -1,5 +1,6 @@
 # shared/db/models/commit_github_issue_association.py
 from sqlalchemy import Table, Column, Integer, ForeignKey, PrimaryKeyConstraint
+
 from shared.db.base_class import Base # Needed for metadata
 
 # Define the association table explicitly using SQLAlchemy Core Table construct

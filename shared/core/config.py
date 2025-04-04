@@ -1,12 +1,12 @@
 # worker/app/core/config.py
 import os
-from pathlib import Path
 from typing import Any, Dict, Optional # Use Optional for clarity, same as | None
+from pathlib import Path
 
 # Using pydantic-settings (recommended for Pydantic v2+)
 # If using Pydantic v1, use `from pydantic import BaseSettings`
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, AmqpDsn, PostgresDsn, RedisDsn, SecretStr  # For URL validation
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     """

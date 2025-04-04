@@ -1,11 +1,12 @@
 # shared/db/models/repository.py
-from sqlalchemy import Column, Integer, String, DateTime, UniqueConstraint
-from sqlalchemy.orm import relationship, Mapped, mapped_column
-from sqlalchemy.sql import func
-from shared.db.base_class import Base
-from datetime import datetime
 from typing import List, TYPE_CHECKING
+from datetime import datetime
 
+from sqlalchemy import Column, Integer, String, DateTime, UniqueConstraint
+from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship, Mapped, mapped_column
+
+from shared.db.base_class import Base
 
 if TYPE_CHECKING:
     from .github_issue import GitHubIssue # noqa: F401

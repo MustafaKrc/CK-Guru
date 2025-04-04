@@ -1,13 +1,14 @@
+import logging
+from typing import List, Sequence
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Sequence
-import logging
 
 from app import schemas # Use schemas module directly
 from app import crud    # Use crud module directly
-from app.api import deps
-
 from app.core.celery_app import backend_celery_app
+
+from shared.db_session import get_async_db_session 
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ router = APIRouter()
 )
 async def create_repository_endpoint(
     *,
-    db: AsyncSession = Depends(deps.get_db_session),
+    db: AsyncSession = Depends(get_async_db_session),
     repo_in: schemas.RepositoryCreate,
 ):
     """
@@ -45,7 +46,7 @@ async def create_repository_endpoint(
     description="Retrieves a list of repositories with pagination.",
 )
 async def read_repositories_endpoint(
-    db: AsyncSession = Depends(deps.get_db_session),
+    db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0, description="Number of records to skip for pagination"),
     limit: int = Query(100, ge=1, le=200, description="Maximum number of records to return"),
 ):
@@ -68,7 +69,7 @@ async def read_repositories_endpoint(
 )
 async def read_repository_endpoint(
     repo_id: int,
-    db: AsyncSession = Depends(deps.get_db_session),
+    db: AsyncSession = Depends(get_async_db_session),
 ):
     """
     Get repository by ID.
@@ -89,7 +90,7 @@ async def read_repository_endpoint(
 async def update_repository_endpoint(
     repo_id: int,
     repo_in: schemas.RepositoryUpdate,
-    db: AsyncSession = Depends(deps.get_db_session),
+    db: AsyncSession = Depends(get_async_db_session),
 ):
     """
     Update a repository's details.
@@ -111,7 +112,7 @@ async def update_repository_endpoint(
 )
 async def delete_repository_endpoint(
     repo_id: int,
-    db: AsyncSession = Depends(deps.get_db_session),
+    db: AsyncSession = Depends(get_async_db_session),
 ):
     """
     Delete a repository.
@@ -129,7 +130,7 @@ async def delete_repository_endpoint(
 )
 async def trigger_ingest_task(
     repo_id: int,
-    db: AsyncSession = Depends(deps.get_db_session),
+    db: AsyncSession = Depends(get_async_db_session),
 ):
     """
     Submits a Celery task to create a dataset for the specified repository.
@@ -147,6 +148,7 @@ async def trigger_ingest_task(
         task = backend_celery_app.send_task(
             task_name,
             args=[db_repo.id, str(db_repo.git_url)], # Positional arguments
+            queue='ingestion'
             # kwargs={'repo_id': db_repo.id, 'git_url': str(db_repo.git_url)} # Alternatively, use keyword arguments
         )
         logger.info(f"Dispatched task '{task_name}' for repo ID {repo_id}, task ID: {task.id}")

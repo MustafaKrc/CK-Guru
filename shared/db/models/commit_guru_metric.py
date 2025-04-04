@@ -1,15 +1,17 @@
 # shared/db/models/commit_guru_metric.py
+from datetime import datetime
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
+
 from sqlalchemy import (
     ARRAY, Column, Integer, String, Float, Boolean, ForeignKey, BigInteger, JSON, Index, UniqueConstraint, Text
 )
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from typing import Optional, List, Dict, Any, TYPE_CHECKING
-from datetime import datetime
+
+from .commit_github_issue_association import commit_github_issue_association_table
 
 from shared.db.base_class import Base
 # from shared.db.models.repository import Repository # Use string ref below
 # Import the association table explicitly IF needed elsewhere, but relationship handles it
-from .commit_github_issue_association import commit_github_issue_association_table
 
 if TYPE_CHECKING:
     from .repository import Repository # noqa: F401

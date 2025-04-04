@@ -1,12 +1,14 @@
 # backend/app/crud/crud_bot_pattern.py
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete, ColumnElement
-from sqlalchemy.orm import selectinload
+import logging
 from typing import Sequence, List, Optional
 
-from shared.db.models.bot_pattern import BotPattern
+from sqlalchemy import select, delete, ColumnElement
+from sqlalchemy.orm import selectinload
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.schemas.bot_pattern import BotPatternCreate, BotPatternUpdate
-import logging
+
+from shared.db.models.bot_pattern import BotPattern
 
 logger = logging.getLogger(__name__)
 

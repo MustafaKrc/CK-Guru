@@ -1,6 +1,8 @@
 # backend/app/schemas/bot_pattern.py
-from pydantic import BaseModel, Field
 from typing import Optional
+
+from pydantic import BaseModel, Field
+
 from shared.db.models.bot_pattern import PatternTypeEnum # Import Enum
 
 class BotPatternBase(BaseModel):

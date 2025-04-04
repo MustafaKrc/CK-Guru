@@ -1,11 +1,13 @@
 # shared/db/models/dataset.py
-from sqlalchemy import Column, Integer, String, ForeignKey, Text, JSON, DateTime, Enum
-from sqlalchemy.orm import relationship, Mapped, mapped_column
-from sqlalchemy.sql import func
-from shared.db.base_class import Base
+import enum
 from typing import TYPE_CHECKING, Dict, Any, List
 from datetime import datetime
-import enum
+
+from sqlalchemy import Column, Integer, String, ForeignKey, Text, JSON, DateTime, Enum
+from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship, Mapped, mapped_column
+
+from shared.db.base_class import Base
 
 if TYPE_CHECKING:
     from .repository import Repository # noqa

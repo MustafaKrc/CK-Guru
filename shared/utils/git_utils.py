@@ -1,8 +1,8 @@
 # worker/app/tasks/utils/git_utils.py
 import logging
 import subprocess
-from pathlib import Path
 from typing import Optional
+from pathlib import Path
 
 import git
 

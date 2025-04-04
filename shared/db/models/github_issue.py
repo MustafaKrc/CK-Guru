@@ -1,16 +1,16 @@
 # shared/db/models/github_issue.py
-from datetime import datetime
 import logging
+from typing import Optional, List, TYPE_CHECKING
+from datetime import datetime
 
 from sqlalchemy import (Column, Integer, String, BigInteger, DateTime, ForeignKey,
                       UniqueConstraint, Index)
-from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.sql import func
-from typing import Optional, List, TYPE_CHECKING
-
-from shared.db.base_class import Base
+from sqlalchemy.orm import relationship, Mapped, mapped_column
 
 from .commit_github_issue_association import commit_github_issue_association_table
+
+from shared.db.base_class import Base
 
 # Avoid circular imports for type checking relationships
 if TYPE_CHECKING:

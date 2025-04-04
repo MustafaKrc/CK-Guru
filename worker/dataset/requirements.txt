@@ -1,25 +1,22 @@
-# backend/requirements.txt
+# Dataset Worker Dependencies
 
 # --- Core ---
 celery[redis]>=5.0
-fastapi>=0.104.0,<0.111.0
-uvicorn[standard]>=0.23.2
-redis>=4.0
+psycopg2-binary>=2.9
 pydantic>=2.0
 pydantic-settings>=2.0
-python-dotenv>=1.0.0
-email-validator>=2.0.0
 
 # --- Database ---
 sqlalchemy>=2.0
 asyncpg>=0.25.0 # For async PostgreSQL access
-alembic>=1.12.0
 psycopg2-binary # Sometimes needed by Alembic even if using asyncpg
+
+# --- Data ---
+pandas>=1.5,<3.0
+numpy>=1.20
+scikit-learn>=1.0
+pyarrow>=10.0
 
 # --- Data Storage ---
 fsspec>=2023.0.0
 s3fs>=2023.0.0
-
-# --- Data ---
-pandas>=1.5,<3.0
-pyarrow>=10.0

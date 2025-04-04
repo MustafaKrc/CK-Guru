@@ -35,8 +35,10 @@ COPY ./nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 
 # Make sure files are owned by nginx user
-RUN chown -R nginx:nginx /usr/share/nginx/html && \
-    chmod -R 755 /usr/share/nginx/html
+RUN mkdir -p /var/cache/nginx/client_temp \
+    && chown -R nginx:nginx /var/cache/nginx \
+    && chown -R nginx:nginx /usr/share/nginx/html \
+    && chmod -R 755 /usr/share/nginx/html
 
 # Switch to non-root user
 USER nginx

@@ -1,9 +1,10 @@
 # worker/app/tasks/data_processing/cleaning_rules.py
-import pandas as pd
-import numpy as np
-from sklearn.cluster import KMeans
 import logging
 from typing import Dict, List, Any, Optional
+
+import numpy as np
+import pandas as pd
+from sklearn.cluster import KMeans
 
 logger = logging.getLogger(__name__)
 

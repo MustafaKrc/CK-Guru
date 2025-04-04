@@ -25,7 +25,7 @@ from shared.db.models import (
     # Add other models as needed
 )
 
-from app.core.config import settings # Import your settings
+from shared.core.config import settings # Import your settings
 
 
 # this is the Alembic Config object, which provides

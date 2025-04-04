@@ -1,6 +1,8 @@
 from fastapi import FastAPI
+
 from app.api.v1.router import api_router
-from app.core.config import settings # Import settings if needed later for app config
+
+from shared.core.config import settings # Import settings if needed later for app config
 
 # --- Metadata for OpenAPI Docs ---
 description = """

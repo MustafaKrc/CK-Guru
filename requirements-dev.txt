@@ -1,7 +1,9 @@
 # requirements-dev.txt
 
 -r backend/requirements.txt 
--r worker/requirements.txt
+-r worker/data/requirements.txt
+-r worker/ingestion/requirements.txt
+#-r worker/requirements.txt
 
 # Linting & formatting
 ruff

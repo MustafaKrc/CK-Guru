@@ -1,6 +1,7 @@
 # backend/app/schemas/rule_definition.py
-from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
+
+from pydantic import BaseModel, Field
 
 class RuleParamDefinition(BaseModel):
     name: str = Field(..., description="Parameter name used in the config.")

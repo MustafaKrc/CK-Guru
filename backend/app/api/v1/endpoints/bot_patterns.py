@@ -1,11 +1,13 @@
 # backend/app/api/v1/endpoints/bot_patterns.py
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.ext.asyncio import AsyncSession
+import logging
 from typing import List, Optional
 
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app import schemas, crud
-from app.api import deps
-import logging
+
+from shared.db_session import get_async_db_session 
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -20,7 +22,7 @@ router = APIRouter()
 )
 async def create_global_bot_pattern_endpoint(
     pattern_in: schemas.BotPatternCreate,
-    db: AsyncSession = Depends(deps.get_db_session),
+    db: AsyncSession = Depends(get_async_db_session),
 ):
     """Create a new global bot pattern (not tied to a specific repository)."""
     if pattern_in.repository_id is not None:
@@ -41,7 +43,7 @@ async def create_global_bot_pattern_endpoint(
     summary="List Global Bot Patterns",
 )
 async def read_global_bot_patterns_endpoint(
-    db: AsyncSession = Depends(deps.get_db_session),
+    db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=200),
 ):
@@ -62,7 +64,7 @@ async def read_global_bot_patterns_endpoint(
 async def create_repo_bot_pattern_endpoint(
     repo_id: int,
     pattern_in: schemas.BotPatternCreate,
-    db: AsyncSession = Depends(deps.get_db_session),
+    db: AsyncSession = Depends(get_async_db_session),
 ):
     """Create a new bot pattern specifically for a given repository."""
      # Check if repository exists
@@ -84,7 +86,7 @@ async def create_repo_bot_pattern_endpoint(
 async def read_repo_bot_patterns_endpoint(
     repo_id: int,
     include_global: bool = Query(True, description="Include global patterns in the list"),
-    db: AsyncSession = Depends(deps.get_db_session),
+    db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=200),
 ):
@@ -110,7 +112,7 @@ async def read_repo_bot_patterns_endpoint(
 )
 async def read_bot_pattern_endpoint(
     pattern_id: int,
-    db: AsyncSession = Depends(deps.get_db_session),
+    db: AsyncSession = Depends(get_async_db_session),
 ):
     """Retrieve details for a single bot pattern by its ID."""
     db_pattern = await crud.crud_bot_pattern.get_bot_pattern(db, pattern_id=pattern_id)
@@ -127,7 +129,7 @@ async def read_bot_pattern_endpoint(
 async def update_bot_pattern_endpoint(
     pattern_id: int,
     pattern_in: schemas.BotPatternUpdate,
-    db: AsyncSession = Depends(deps.get_db_session),
+    db: AsyncSession = Depends(get_async_db_session),
 ):
     """Update an existing bot pattern."""
     db_pattern = await crud.crud_bot_pattern.get_bot_pattern(db, pattern_id=pattern_id)
@@ -144,7 +146,7 @@ async def update_bot_pattern_endpoint(
 )
 async def delete_bot_pattern_endpoint(
     pattern_id: int,
-    db: AsyncSession = Depends(deps.get_db_session),
+    db: AsyncSession = Depends(get_async_db_session),
 ):
     """Delete a bot pattern by its ID."""
     deleted_pattern = await crud.crud_bot_pattern.delete_bot_pattern(db=db, pattern_id=pattern_id)
