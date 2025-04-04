@@ -1,7 +1,7 @@
 # requirements-dev.txt
 
 -r backend/requirements.txt 
--r worker/data/requirements.txt
+-r worker/dataset/requirements.txt
 -r worker/ingestion/requirements.txt
 #-r worker/requirements.txt
 
@@ -18,3 +18,7 @@ pytest-cov
 # Type stubs (optional)
 types-requests
 types-python-dateutil
+
+# Testing
+pytest
+pytest-mock
