@@ -8,9 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.dataset import DatasetCreate, DatasetUpdate, DatasetStatusUpdate
 
+from shared.core.config import settings
 from shared.db.models.dataset import Dataset, DatasetStatusEnum
 
 logger = logging.getLogger(__name__)
+logger.setLevel(settings.LOG_LEVEL.upper())
+
 
 # --- Get Datasets ---
 async def get_dataset(db: AsyncSession, dataset_id: int) -> Optional[Dataset]:

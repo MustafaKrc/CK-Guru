@@ -8,7 +8,11 @@ from celery.result import AsyncResult
 from app import schemas # Use schemas module directly
 from app.core.celery_app import backend_celery_app as celery_app # Import the Celery app instance
 
+from shared.core.config import settings
+
 logger = logging.getLogger(__name__)
+logger.setLevel(settings.LOG_LEVEL.upper())
+
 router = APIRouter()
 
 @router.get(

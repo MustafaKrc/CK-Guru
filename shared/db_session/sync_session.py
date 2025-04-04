@@ -10,6 +10,7 @@ from sqlalchemy.orm import sessionmaker, Session as SqlaSession # Rename Session
 from shared.core.config import settings # Use shared config
 
 logger = logging.getLogger(__name__)
+logger.setLevel(settings.LOG_LEVEL.upper())
 
 if not settings.DATABASE_URL:
     logger.error("DATABASE_URL is not configured in settings!")

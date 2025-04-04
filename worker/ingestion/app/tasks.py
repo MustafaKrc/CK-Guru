@@ -17,6 +17,7 @@ from services.ingestion_steps import (
 )
 
 logger = get_task_logger(__name__)
+logger.setLevel(settings.LOG_LEVEL.upper())
 
 
 # === Main Celery Task (Orchestrator) ===

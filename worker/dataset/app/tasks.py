@@ -35,6 +35,7 @@ from services.dataset_steps import (
 
 
 logger = get_task_logger(__name__)
+logger.setLevel(settings.LOG_LEVEL.upper())
 
 
 @shared_task(bind=True, name='tasks.generate_dataset')

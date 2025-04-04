@@ -9,8 +9,11 @@ from app import crud    # Use crud module directly
 from app.core.celery_app import backend_celery_app
 
 from shared.db_session import get_async_db_session 
+from shared.core.config import settings
 
 logger = logging.getLogger(__name__)
+logger.setLevel(settings.LOG_LEVEL.upper())
+
 
 router = APIRouter()
 

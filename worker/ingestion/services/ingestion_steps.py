@@ -29,6 +29,8 @@ from shared.utils.task_utils import update_task_state
 
 
 logger = logging.getLogger(__name__)
+logger.setLevel(settings.LOG_LEVEL.upper())
+
 CK_JAR_PATH = Path('/app/third_party/ck.jar')
 
 def _run_ck_tool(repo_dir: Path, commit_hash: str) -> pd.DataFrame:

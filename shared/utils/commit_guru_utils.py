@@ -7,9 +7,12 @@ import subprocess
 from pathlib import Path
 from typing import Dict, List, Mapping, Set, Any, Optional, Tuple, NamedTuple
 
+from shared.core.config import settings
+
 from .git_utils import find_commit_hash_before_timestamp, run_git_command
 
 logger = logging.getLogger(__name__)
+logger.setLevel(settings.LOG_LEVEL.upper())
 
 # --- Constants ---
 # (CODE_FILE_EXTENSIONS, CORRECTIVE_KEYWORDS, COMMIT_GURU_LOG_FORMAT)

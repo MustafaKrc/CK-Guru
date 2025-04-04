@@ -22,6 +22,8 @@ from shared.db.models.dataset import DatasetStatusEnum
 from shared.db.models.cleaning_rule_definitions import CleaningRuleDefinitionDB
 
 logger = logging.getLogger(__name__)
+logger.setLevel(settings.LOG_LEVEL.upper())
+
 router = APIRouter()
 
 # --- Endpoint to list available rules ---

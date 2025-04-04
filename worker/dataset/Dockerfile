@@ -51,5 +51,9 @@ COPY ./shared /app/shared
 COPY ./worker/dataset/app /app/app
 COPY ./worker/dataset/services /app/services
 
-# Command to run the Celery worker
-CMD ["celery", "-A", "app.main.celery_app", "worker", "--loglevel=info", "-Q", "dataset"]
+# Copy and set permissions for the entrypoint script
+COPY ./worker/dataset/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+# Set the ENTRYPOINT
+ENTRYPOINT ["/app/entrypoint.sh"]

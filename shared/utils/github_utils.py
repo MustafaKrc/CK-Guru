@@ -11,6 +11,7 @@ from requests.exceptions import RequestException, Timeout, ConnectionError
 from shared.core.config import settings # Access settings for token
 
 logger = logging.getLogger(__name__)
+logger.setLevel(settings.LOG_LEVEL.upper())
 
 # Regex to find GitHub issue numbers like #123
 ISSUE_ID_REGEX = re.compile(r'#(\d+)')

@@ -7,9 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import schemas, crud
 
+from shared.core.config import settings
 from shared.db_session import get_async_db_session 
 
 logger = logging.getLogger(__name__)
+logger.setLevel(settings.LOG_LEVEL.upper())
+
 router = APIRouter()
 
 # === Global Bot Patterns ===

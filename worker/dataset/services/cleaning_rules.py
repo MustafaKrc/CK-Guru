@@ -6,9 +6,11 @@ import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
 
+from shared.core.config import settings
 from shared.cleaning_rules import CleaningRuleBase, RuleParamDefinition, register_rule
 
 logger = logging.getLogger(__name__)
+logger.setLevel(settings.LOG_LEVEL.upper())
 
 # Define feature sets (can be passed dynamically later, but useful defaults)
 # Keep these aligned with your dataset analysis needs
@@ -136,13 +138,13 @@ class Rule2RemoveRecentCleanLastChange(CleaningRuleBase):
     parameters = [
         RuleParamDefinition(name="gap_seconds", type="integer", description="Time threshold in seconds.", default=2419200)
     ]
-    is_batch_safe = True # The adapted version is batch safe
+    is_batch_safe = False 
 
     def apply(self, df: pd.DataFrame, params: Dict[str, Any], config: Dict[str, Any]) -> pd.DataFrame:
         gap = params.get('gap_seconds', 2419200)
         initial_len = df.shape[0]
         indices_to_drop = []
-        # ... (rest of the logic from the previous function implementation) ...
+
         if df.empty or 'class_name' not in df.columns or 'author_date_unix_timestamp' not in df.columns or 'is_buggy' not in df.columns:
             logger.warning("Rule 2 skipped: Missing required columns (class_name, author_date_unix_timestamp, is_buggy).")
             return df
@@ -421,7 +423,7 @@ class RuleClusterLargeCommits(CleaningRuleBase):
     parameters = [
         RuleParamDefinition(name="threshold", type="integer", description="File count threshold to trigger clustering.", default=10)
     ]
-    is_batch_safe = True # Assuming commits aren't split across batches for this rule
+    is_batch_safe = False # Assuming commits aren't split across batches for this rule
 
     def apply(self, df: pd.DataFrame, params: Dict[str, Any], config: Dict[str, Any]) -> pd.DataFrame:
         threshold = params.get('threshold', 10)

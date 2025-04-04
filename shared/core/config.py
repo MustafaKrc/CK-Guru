@@ -98,6 +98,7 @@ import logging
 logging.basicConfig(level=settings.LOG_LEVEL.upper())
 logger = logging.getLogger(__name__)
 logger.info("Worker settings loaded.")
+logger.info(f"Log Level: {settings.LOG_LEVEL}")
 logger.info(f"Broker URL: {settings.CELERY_BROKER_URL}")
 logger.info(f"Result Backend: {'Configured' if settings.CELERY_RESULT_BACKEND else 'Not Configured'}")
 logger.info(f"Database URL: {'Configured' if settings.DATABASE_URL else 'Not Configured'}")

@@ -9,8 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.repository import RepositoryCreate, RepositoryUpdate
 
 from shared.db.models import Repository
+from shared.core.config import settings
 
 logger = logging.getLogger(__name__)
+logger.setLevel(settings.LOG_LEVEL.upper())
+
 
 def _extract_repo_name(git_url: str) -> str:
     """Extracts a plausible repository name from a Git URL."""

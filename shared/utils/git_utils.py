@@ -6,7 +6,10 @@ from pathlib import Path
 
 import git
 
+from shared.core.config import settings
+
 logger = logging.getLogger(__name__)
+logger.setLevel(settings.LOG_LEVEL.upper())
 
 def run_git_command(cmd: str, cwd: Path) -> str:
     """Helper to run git commands and handle errors."""

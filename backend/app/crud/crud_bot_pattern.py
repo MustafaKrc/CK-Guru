@@ -8,9 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.bot_pattern import BotPatternCreate, BotPatternUpdate
 
+from shared.core.config import settings
 from shared.db.models.bot_pattern import BotPattern
 
 logger = logging.getLogger(__name__)
+logger.setLevel(settings.LOG_LEVEL.upper())
+
 
 # --- Get Bot Patterns ---
 async def get_bot_pattern(db: AsyncSession, pattern_id: int) -> Optional[BotPattern]:

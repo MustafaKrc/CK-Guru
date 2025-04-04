@@ -52,5 +52,9 @@ COPY ./shared /app/shared
 COPY ./worker/ingestion/app /app/app
 COPY ./worker/ingestion/services /app/services
 
-# Run the ingestion Celery worker
-CMD ["celery", "-A", "app.main.celery_app", "worker", "--loglevel=info", "-Q", "ingestion"]
+# Copy and set permissions for the entrypoint script
+COPY ./worker/ingestion/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+# Set the ENTRYPOINT
+ENTRYPOINT ["/app/entrypoint.sh"]

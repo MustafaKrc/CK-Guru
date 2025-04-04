@@ -10,6 +10,7 @@ from sqlalchemy.orm import relationship, Mapped, mapped_column
 
 from .commit_github_issue_association import commit_github_issue_association_table
 
+from shared.core.config import settings
 from shared.db.base_class import Base
 
 # Avoid circular imports for type checking relationships
@@ -18,6 +19,8 @@ if TYPE_CHECKING:
     from .commit_guru_metric import CommitGuruMetric # noqa: F401
 
 logger = logging.getLogger(__name__)
+logger.setLevel(settings.LOG_LEVEL.upper())
+
 
 class GitHubIssue(Base):
     __tablename__ = 'github_issues'

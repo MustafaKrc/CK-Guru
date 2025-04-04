@@ -5,12 +5,15 @@ from typing import List, Dict, Any
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert # Use specific dialect for UPSERT
 
-from shared.celery_config.app import create_celery_app
-from shared.cleaning_rules import discover_rules, WORKER_RULE_REGISTRY, RuleDefinition
-from shared.db_session import get_sync_db_session
 from shared.db.models import CleaningRuleDefinitionDB
+from shared.db_session import get_sync_db_session
+from shared.core.config import settings
+from shared.cleaning_rules import discover_rules, WORKER_RULE_REGISTRY, RuleDefinition
+from shared.celery_config.app import create_celery_app
 
 logger = logging.getLogger(__name__)
+logger.setLevel(settings.LOG_LEVEL.upper())
+
 WORKER_IDENTIFIER = "dataset-worker" # Define an identifier for this worker type
 
 def update_rule_registry_in_db():

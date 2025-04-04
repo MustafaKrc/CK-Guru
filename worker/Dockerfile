@@ -1,3 +1,6 @@
+# This was deprecated worker for older worker. It is kept for future reference.
+# This Dockerfile is for building a Celery worker with Python 3.10 and CUDA 12.8.1
+
 # ===============================
 # Stage 1: Build Stage
 # ===============================
@@ -62,4 +65,4 @@ COPY ./shared /app/shared
 COPY ./worker/app /app/app
 
 # Final entrypoint
-CMD ["celery", "-A", "app.main.celery_app", "worker", "--loglevel=info"]
+CMD ["celery", "-A", "app.main.celery_app", "worker", "--loglevel=${LOG_LEVEL}"]

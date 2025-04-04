@@ -9,8 +9,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, DeclarativeBase
 
 from shared.db.models import BotPattern, CKMetric
+from shared.core.config import settings
 
 logger = logging.getLogger(__name__)
+logger.setLevel(settings.LOG_LEVEL.upper())
 
 # Define columns for CK metrics (adjust if CKMetric model attributes change)
 # Note: Use model attribute names (e.g., class_name, type_, lcom_norm)
