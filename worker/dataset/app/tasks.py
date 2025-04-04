@@ -8,6 +8,7 @@ import pandas as pd
 import sqlalchemy as sa
 from celery import shared_task, Task
 from celery.utils.log import get_task_logger
+from celery.exceptions import Ignore
 from sqlalchemy import Connection, func, select
 from sqlalchemy.orm import aliased
 
@@ -20,11 +21,17 @@ from shared.db.models.commit_guru_metric import CommitGuruMetric
 # Import shared utils/config
 from shared.db_session import get_sync_db_session
 from shared.core.config import settings
+from shared.cleaning_rules import get_rule_instance
 from shared.utils.task_utils import update_task_state
 
 # Import service functions
-from services.cleaning_rules import RULE_FUNCTION_MAP
-from services.dataset_steps import CK_METRIC_COLUMNS, COMMIT_GURU_METRIC_COLUMNS, get_bot_filter_condition, calculate_delta_metrics, get_parent_ck_metrics
+from services.dataset_steps import (
+    CK_METRIC_COLUMNS, 
+    COMMIT_GURU_METRIC_COLUMNS, 
+    get_bot_filter_condition, 
+    calculate_delta_metrics, 
+    get_parent_ck_metrics
+)
 
 
 logger = get_task_logger(__name__)
@@ -180,28 +187,31 @@ def generate_dataset_task(self: Task, dataset_id: int):
 
                 # -- Apply Configured Cleaning Rules --
                 logger.debug(f"Task {task_id}: Batch {i+1} - Applying cleaning rules...")
-                cleaned_batch_df = batch_df_with_deltas.copy() # Start with deltas calculated
-                for rule_config in cleaning_rules_config:
+                cleaned_batch_df = batch_df_with_deltas.copy()
+                rules_to_apply = dataset_config.get('cleaning_rules', [])
+
+                for rule_config in rules_to_apply:
                     rule_name = rule_config.get("name")
-                    is_enabled = rule_config.get("enabled", False) # Default to disabled if flag missing
+                    is_enabled = rule_config.get("enabled", False)
                     params = rule_config.get("params", {})
 
-                    if is_enabled and rule_name in RULE_FUNCTION_MAP:
-                        rule_func = RULE_FUNCTION_MAP[rule_name]
+                    if not is_enabled:
+                        continue
+
+                    rule_instance = get_rule_instance(rule_name) # Get instance from registry
+                    if rule_instance:
+                        # Apply rule only if batch safe (or handle differently later)
+                        if not rule_instance.is_batch_safe:
+                             logger.warning(f"Skipping rule '{rule_name}' in batch mode as it requires global context.")
+                             continue
                         try:
                              logger.debug(f"Applying rule: {rule_name}")
-                             if rule_name == 'rule_cluster_large_commits':
-                                 # Pass dataset config for feature/target lists
-                                 cleaned_batch_df = rule_func(cleaned_batch_df, params, dataset_config)
-                             else:
-                                 cleaned_batch_df = rule_func(cleaned_batch_df, params)
+                             cleaned_batch_df = rule_instance.apply(cleaned_batch_df, params, dataset_config) # Pass full config
                              logger.debug(f"Rule {rule_name} applied. Shape after: {cleaned_batch_df.shape}")
                         except Exception as e:
                              logger.error(f"Error applying cleaning rule '{rule_name}' in batch {i+1}: {e}", exc_info=True)
-                             # Optionally skip remaining rules for this batch or fail the task
-                             # For now, continue processing the batch with potentially uncleaned data
-                    elif is_enabled:
-                         logger.warning(f"Rule '{rule_name}' is enabled but not found in RULE_FUNCTION_MAP.")
+                    else:
+                         logger.warning(f"Rule '{rule_name}' is enabled in config but no implementation was registered.")
 
 
                 # -- Filter Rows with Missing Parents --
@@ -307,3 +317,46 @@ def generate_dataset_task(self: Task, dataset_id: int):
 
         # Re-raise the exception so Celery marks the task as failed
         raise e
+
+@shared_task(
+    bind=True,
+    name='tasks.delete_storage_object',
+    autoretry_for=(s3fs.errors.S3ConnectionError, TimeoutError), # Example transient errors
+    retry_kwargs={'max_retries': 3, 'countdown': 60} # Retry 3 times, wait 60s
+)
+def delete_storage_object_task(self: Task, object_storage_uri: str):
+    """Deletes an object from S3/MinIO storage."""
+    task_id = self.request.id
+    logger.info(f"Task {task_id}: Received request to delete object: {object_storage_uri}")
+
+    if not object_storage_uri or not object_storage_uri.startswith("s3://"):
+        logger.warning(f"Task {task_id}: Invalid or missing object storage URI: '{object_storage_uri}'. Ignoring.")
+        # Use Ignore() to prevent Celery treating this as a failure needing retry
+        raise Ignore()
+
+    try:
+        storage_options = settings.s3_storage_options
+        fs = s3fs.S3FileSystem(**storage_options)
+        s3_path = object_storage_uri.replace("s3://", "")
+
+        if fs.exists(s3_path):
+            logger.info(f"Task {task_id}: Object found. Deleting {object_storage_uri}...")
+            fs.rm(s3_path)
+            logger.info(f"Task {task_id}: Successfully deleted object: {object_storage_uri}")
+            return {"status": "deleted", "uri": object_storage_uri}
+        else:
+            logger.warning(f"Task {task_id}: Object not found at {object_storage_uri}, no deletion performed.")
+            # Consider this a success from the task's perspective (object is gone)
+            return {"status": "not_found", "uri": object_storage_uri}
+
+    except FileNotFoundError: # Might be raised by s3fs if bucket/path is weird
+        logger.warning(f"Task {task_id}: Object or path not found for deletion: {object_storage_uri}.")
+        raise Ignore() # Don't retry if file definitely doesn't exist
+    except s3fs.errors.S3PermissionError as e: # Example specific error
+         logger.error(f"Task {task_id}: Permission error deleting {object_storage_uri}: {e}")
+         raise Ignore() # Don't retry permission errors
+    except Exception as e:
+        logger.error(f"Task {task_id}: Failed to delete object {object_storage_uri}: {e}", exc_info=True)
+        # Let autoretry handle configured exceptions, raise others
+        raise e # Re-raise other errors for Celery default handling/retry logic
+    

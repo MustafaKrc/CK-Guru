@@ -2,50 +2,53 @@
 import io
 import csv
 import logging
-from typing import Any, Dict, List, Optional, AsyncGenerator
+from typing import Any, Dict, List, AsyncGenerator
 
 import s3fs
 import pandas as pd
 import pyarrow.parquet as pq
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import StreamingResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import schemas, crud
+from app.schemas import RuleDefinition as BackendRuleDefinitionSchema
 from app.core.celery_app import backend_celery_app
 
 from shared.core.config import settings 
-from shared.db_session import get_async_db_session 
-from shared.db.models.dataset import DatasetStatusEnum 
+from shared.db_session import get_async_db_session
+from shared.db.models.dataset import DatasetStatusEnum
+from shared.db.models.cleaning_rule_definitions import CleaningRuleDefinitionDB
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # --- Endpoint to list available rules ---
 @router.get(
-    "/datasets/available-cleaning-rules", # Moved path prefix to router include
-    response_model=List[schemas.RuleDefinition],
+    "/datasets/available-cleaning-rules",
+    response_model=List[BackendRuleDefinitionSchema],
     summary="Get Available Dataset Cleaning Rules",
-    description="Lists the cleaning rules that can be configured during dataset creation."
+    description="Lists the cleaning rules implemented by active workers, read from the database."
 )
-# TODO: This is a placeholder. Implement actual logic to fetch available rules.
-async def get_available_cleaning_rules():
-    # (Keep the same implementation returning the list of RuleDefinition schemas as before)
-    return [
-        schemas.RuleDefinition(name="rule0_drop_duplicates", description="Remove exact duplicate rows.", parameters=[]),
-        schemas.RuleDefinition(name="rule2_remove_recent_clean_last_change", description="Exclude clean changes if they are the last change for a class and occurred recently relative to the project's end.", parameters=[schemas.RuleParamDefinition(name="gap_seconds", type="integer", description="Time threshold in seconds.", default=2419200)]), # 4 weeks default
-        schemas.RuleDefinition(name="rule3_remove_empty_class", description="Exclude changes resulting in classes with no local methods or fields.", parameters=[]),
-        schemas.RuleDefinition(name="rule4_remove_trivial_getset", description="Exclude changes involving only likely getter/setter methods (low WMC/RFC heuristic).", parameters=[]),
-        schemas.RuleDefinition(name="rule5_remove_no_added_lines", description="Exclude changes where no lines were added (la == 0).", parameters=[]),
-        schemas.RuleDefinition(name="rule6_remove_comment_only_change", description="Exclude changes where likely only comments changed (all d_* metrics are 0).", parameters=[]),
-        schemas.RuleDefinition(name="rule7_remove_trivial_method_change", description="Exclude changes with minimal line alterations but changes in method counts.", parameters=[schemas.RuleParamDefinition(name="min_line_change", type="integer", description="Minimum lines added+deleted to be considered non-trivial.", default=10)]),
-        schemas.RuleDefinition(name="rule8_remove_type_exception_files", description="Exclude changes to files named like '*Type.java' or '*Exception.java'.", parameters=[]),
-        schemas.RuleDefinition(name="rule9_remove_dead_code", description="Exclude changes where the resulting class seems unused (CBO=0 and Fan-in=0 heuristic).", parameters=[]),
-        schemas.RuleDefinition(name="rule10_remove_data_class", description="Exclude changes likely representing simple data classes (low WMC/RFC, non-zero fields).", parameters=[]),
-        schemas.RuleDefinition(name="rule11_remove_no_code_change", description="Exclude changes where no lines were added or deleted (la == 0 and ld == 0).", parameters=[]),
-        schemas.RuleDefinition(name="rule14_filter_large_commits", description="Exclude rows from commits that changed more than N files (applied before clustering).", parameters=[schemas.RuleParamDefinition(name="max_files_changed", type="integer", description="Maximum number of files changed in a commit for its rows to be included.", default=10)]),
-        schemas.RuleDefinition(name="rule_cluster_large_commits", description="Cluster rows within commits changing > N files, reducing rows via aggregation.", parameters=[schemas.RuleParamDefinition(name="threshold", type="integer", description="File count threshold to trigger clustering.", default=10)]),
-    ]
+async def get_available_cleaning_rules_endpoint(
+    db: AsyncSession = Depends(get_async_db_session),
+):
+    """Returns the list of implemented cleaning rules definitions from the DB."""
+    logger.info("Fetching available cleaning rules from database...")
+    stmt = select(CleaningRuleDefinitionDB).where(
+        CleaningRuleDefinitionDB.is_implemented == True
+    ).order_by(CleaningRuleDefinitionDB.name) # Order for consistency
+
+    result = await db.execute(stmt)
+    db_rules = result.scalars().all()
+
+    # Convert DB models to Pydantic response models
+    # Pydantic should handle the conversion if field names/types match
+    response_rules = [BackendRuleDefinitionSchema.model_validate(rule) for rule in db_rules]
+
+    logger.info(f"Returning {len(response_rules)} available cleaning rules.")
+    return response_rules
 
 @router.post(
     "/repositories/{repo_id}/datasets",
@@ -143,23 +146,53 @@ async def get_dataset_endpoint(
 @router.delete(
     "/datasets/{dataset_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete a Dataset Definition",
-    responses={404: {"description": "Dataset not found"}},
+    summary="Delete Dataset Definition and Queue Object Deletion", # Updated summary
+    responses={
+        404: {"description": "Dataset definition not found"},
+        # Removed 500 for object storage fail, as it's now async
+    },
 )
 async def delete_dataset_endpoint(
     dataset_id: int,
     db: AsyncSession = Depends(get_async_db_session),
 ):
     """
-    Delete a dataset definition from the database.
-    Note: This does NOT automatically delete the generated dataset file from storage.
+    Delete a dataset definition from the database and queues a background
+    task to delete the corresponding object from storage.
     """
-    # TODO: Implement file deletion logic if required (e.g., dispatch another task)
-    deleted_dataset = await crud.crud_dataset.delete_dataset(db=db, dataset_id=dataset_id)
-    if deleted_dataset is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found")
-    logger.info(f"Dataset definition {dataset_id} deleted. Associated file at {deleted_dataset.storage_path} may still exist.")
-    return None
+    db_dataset = await crud.crud_dataset.get_dataset(db=db, dataset_id=dataset_id)
+    if db_dataset is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset definition not found")
+
+    storage_uri_to_delete = db_dataset.storage_path
+    repo_id_log = db_dataset.repository_id
+
+    # Delete DB record first
+    deleted_db_record = await crud.crud_dataset.delete_dataset(db=db, dataset_id=dataset_id)
+    if deleted_db_record is None:
+         logger.error(f"Failed to delete dataset definition {dataset_id} from DB after confirming existence.")
+         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete dataset definition from database.")
+
+    logger.info(f"Dataset definition {dataset_id} for repository {repo_id_log} deleted from DB.")
+
+    # Queue background task for object deletion
+    if storage_uri_to_delete and storage_uri_to_delete.startswith("s3://"):
+        try:
+            task_name = 'tasks.delete_storage_object'
+            backend_celery_app.send_task(
+                task_name,
+                args=[storage_uri_to_delete],
+                queue='dataset' # Or a dedicated 'cleanup' queue
+            )
+            logger.info(f"Queued task '{task_name}' to delete object: {storage_uri_to_delete}")
+        except Exception as e:
+             # Log failure to queue, but don't fail the API request (DB record is gone)
+             logger.error(f"Failed to queue deletion task for object {storage_uri_to_delete}: {e}", exc_info=True)
+             # TODO: Implement monitoring/alerting for failed task queuing
+    else:
+         logger.warning(f"Dataset {dataset_id} had no valid storage path '{storage_uri_to_delete}', skipping object deletion task.")
+
+    return None # Return No Content (HTTP 204)
 
 async def get_valid_dataset_uri(dataset_id: int, db: AsyncSession) -> str:
     """Gets dataset, checks status, returns object storage URI, raises HTTPException on error."""

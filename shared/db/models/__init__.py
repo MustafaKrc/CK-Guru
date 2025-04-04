@@ -4,3 +4,4 @@ from .commit_guru_metric import CommitGuruMetric
 from .github_issue import GitHubIssue
 from .bot_pattern import BotPattern
 from .dataset import Dataset 
+from .cleaning_rule_definitions import CleaningRuleDefinitionDB

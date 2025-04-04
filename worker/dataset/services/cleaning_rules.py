@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
 
+from shared.cleaning_rules import CleaningRuleBase, RuleParamDefinition, register_rule
+
 logger = logging.getLogger(__name__)
 
 # Define feature sets (can be passed dynamically later, but useful defaults)
@@ -57,36 +59,35 @@ DEFAULT_INFO_COLUMNS = [ # Example - adjust as needed
 
 # --- Rule Implementations ---
 
-def rule0_drop_duplicates(df: pd.DataFrame, params: dict) -> pd.DataFrame:
-    """
-    Rule 0: Exclude duplicate rows based on identifying metric columns.
-            Default subset: commit_hash, file, class_name.
-    """
-    initial_len = df.shape[0]
-    # Define the columns that uniquely identify a metric reading instance
-    # Exclude list/dict columns like 'files_changed', 'fixing_commit_hashes'
-    subset_cols = DEFAULT_X_COLUMNS + DEFAULT_Y_COLUMN
-    # Ensure the subset columns actually exist in the DataFrame
-    valid_subset = [col for col in subset_cols if col in df.columns]
+@register_rule
+class Rule0DropDuplicates(CleaningRuleBase):
+    rule_name = "rule0_drop_duplicates"
+    description = "Remove duplicate rows based on identifying metric columns (commit_hash, file, class_name)."
+    parameters = []
+    is_batch_safe = False # <<< Mark as not safe for pure batch processing
 
-    if not valid_subset:
-        logger.warning("Rule 0 skipped: Could not find any subset columns DEFAULT_X_COLUMNS + DEFAULT_Y_COLUMN to check for duplicates.")
-        return df
+    def apply(self, df: pd.DataFrame, params: Dict[str, Any], config: Dict[str, Any]) -> pd.DataFrame:
+        # This rule should ideally be applied *after* all batches are combined.
+        # If applied per-batch, it's less effective. For now, implement per-batch.
+        logger.warning("Applying Rule 0 (drop_duplicates) per-batch. Inter-batch duplicates may remain.")
+        initial_len = df.shape[0]
+        subset_cols = ['commit_hash', 'file', 'class_name']
+        valid_subset = [col for col in subset_cols if col in df.columns]
 
-    try:
-        df_clean = df.drop_duplicates(subset=valid_subset) # Use the subset
-        dropped = initial_len - df_clean.shape[0]
-        if dropped > 0:
-            logger.debug(f"Rule 0: Dropped {dropped} duplicate rows based on subset: {valid_subset}.")
-        return df_clean
-    except KeyError as e:
-         logger.error(f"Rule 0 failed: Column specified in subset not found: {e}. Available columns: {df.columns.tolist()}")
-         return df # Return original df on error
-    except TypeError as e:
-         logger.error(f"Rule 0 failed: Potentially unhashable type still present in subset {valid_subset}? Error: {e}")
-         # If this still happens, inspect dtypes of subset columns
-         logger.error(f"Dtypes of subset columns: {df[valid_subset].dtypes}")
-         return df
+        if not valid_subset:
+            logger.warning("Rule 0 skipped: No valid subset columns found.")
+            return df
+        try:
+            # Convert list columns temporarily to tuples if they exist in subset (shouldn't with correct subset)
+            # Or better: ensure subset cols are hashable types before drop_duplicates
+            df_clean = df.drop_duplicates(subset=valid_subset)
+            dropped = initial_len - df_clean.shape[0]
+            if dropped > 0:
+                logger.debug(f"Rule 0: Dropped {dropped} duplicate rows (within batch).")
+            return df_clean
+        except Exception as e:
+             logger.error(f"Rule 0 failed: {e}. Subset: {valid_subset}. Dtypes: {df[valid_subset].dtypes if valid_subset else 'N/A'}")
+             return df # Return original on error
 
 # works poorly..
 # def clean_rule_1(df, gap):
@@ -128,325 +129,417 @@ def rule0_drop_duplicates(df: pd.DataFrame, params: dict) -> pd.DataFrame:
 
 #     return df.drop(index=indices_to_drop)
 
-def rule2_remove_recent_clean_last_change(df: pd.DataFrame, params: dict) -> pd.DataFrame:
-    """
-    Rule 2: Exclude clean changes if they are the last for a class within the batch
-            and occurred recently relative to the batch's max time.
-    NOTE: This is an adaptation for batch processing and less accurate than the original.
-    """
-    gap = params.get('gap_seconds', 2419200) # Default 4 weeks
-    initial_len = df.shape[0]
-    indices_to_drop = []
+@register_rule
+class Rule2RemoveRecentCleanLastChange(CleaningRuleBase):
+    rule_name = "rule2_remove_recent_clean_last_change"
+    description = "[Batch Adapted] Exclude clean changes if they are the last for a class within the processing batch and occurred recently relative to the batch's latest commit time. Accuracy may vary."
+    parameters = [
+        RuleParamDefinition(name="gap_seconds", type="integer", description="Time threshold in seconds.", default=2419200)
+    ]
+    is_batch_safe = True # The adapted version is batch safe
 
-    if df.empty or 'class_name' not in df.columns or 'author_date_unix_timestamp' not in df.columns or 'is_buggy' not in df.columns:
-        logger.warning("Rule 2 skipped: Missing required columns (class_name, author_date_unix_timestamp, is_buggy).")
+    def apply(self, df: pd.DataFrame, params: Dict[str, Any], config: Dict[str, Any]) -> pd.DataFrame:
+        gap = params.get('gap_seconds', 2419200)
+        initial_len = df.shape[0]
+        indices_to_drop = []
+        # ... (rest of the logic from the previous function implementation) ...
+        if df.empty or 'class_name' not in df.columns or 'author_date_unix_timestamp' not in df.columns or 'is_buggy' not in df.columns:
+            logger.warning("Rule 2 skipped: Missing required columns (class_name, author_date_unix_timestamp, is_buggy).")
+            return df
+
+        batch_last_time = df['author_date_unix_timestamp'].max()
+        for cls, group in df.groupby('class_name'):
+            if group.empty: continue
+            group_sorted = group.sort_values('author_date_unix_timestamp', ascending=False)
+            last_idx = group_sorted.index[0]
+            if not df.loc[last_idx, 'is_buggy']:
+                time_diff = batch_last_time - df.loc[last_idx, 'author_date_unix_timestamp']
+                if time_diff < gap:
+                    indices_to_drop.append(last_idx)
+
+        df_clean = df.drop(index=indices_to_drop)
+        dropped = initial_len - df_clean.shape[0]
+        if dropped > 0:
+            logger.debug(f"Rule 2 (Batch Adapted): Dropped {dropped} rows.")
+        return df_clean
+
+
+@register_rule
+class Rule3RemoveEmptyClass(CleaningRuleBase):
+    rule_name = "rule3_remove_empty_class"
+    description = "Exclude changes resulting in classes with no local methods or fields."
+    parameters = []
+    is_batch_safe = True
+
+    def apply(self, df: pd.DataFrame, params: Dict[str, Any], config: Dict[str, Any]) -> pd.DataFrame:
+        # ... (logic from rule3_remove_empty_class function) ...
+        initial_len = df.shape[0]
+        if {'totalMethodsQty', 'totalFieldsQty'}.issubset(df.columns):
+            mask = (df['totalMethodsQty'] > 0) | (df['totalFieldsQty'] > 0)
+            df_clean = df[mask]
+            dropped = initial_len - df_clean.shape[0]
+            if dropped > 0:
+                 logger.debug(f"Rule 3: Dropped {dropped} rows.")
+            return df_clean
+        logger.warning("Rule 3 skipped: Missing required columns.")
         return df
 
-    batch_last_time = df['author_date_unix_timestamp'].max()
+@register_rule
+class Rule4RemoveTrivialGetSet(CleaningRuleBase):
+    rule_name = "rule4_remove_trivial_getset"
+    description = "Exclude changes involving only likely getter/setter methods (low WMC/RFC heuristic)."
+    parameters = []
+    is_batch_safe = True
 
-    # We can only reliably find the 'last change' within the current batch.
-    for cls, group in df.groupby('class_name'):
-        if group.empty: continue
-        group_sorted = group.sort_values('author_date_unix_timestamp', ascending=False) # Sort descending
-        last_idx = group_sorted.index[0] # Index of the latest change for this class IN THIS BATCH
-
-        # Check if this latest change (in batch) is clean
-        if not df.loc[last_idx, 'is_buggy']: # is_buggy == False means clean
-            time_diff = batch_last_time - df.loc[last_idx, 'author_date_unix_timestamp']
-            if time_diff < gap:
-                indices_to_drop.append(last_idx)
-
-    df_clean = df.drop(index=indices_to_drop)
-    dropped = initial_len - df_clean.shape[0]
-    if dropped > 0:
-        logger.debug(f"Rule 2 (Batch Adapted): Dropped {dropped} rows.")
-    return df_clean
-
-
-def rule3_remove_empty_class(df: pd.DataFrame, params: dict) -> pd.DataFrame:
-    """Rule 3: Exclude rows where totalMethodsQty and totalFieldsQty are both <= 0."""
-    initial_len = df.shape[0]
-    if {'totalMethodsQty', 'totalFieldsQty'}.issubset(df.columns):
-        mask = (df['totalMethodsQty'] > 0) | (df['totalFieldsQty'] > 0)
-        df_clean = df[mask]
-        dropped = initial_len - df_clean.shape[0]
-        if dropped > 0:
-             logger.debug(f"Rule 3: Dropped {dropped} rows.")
-        return df_clean
-    logger.warning("Rule 3 skipped: Missing required columns.")
-    return df
-
-def rule4_remove_trivial_getset(df: pd.DataFrame, params: dict) -> pd.DataFrame:
-    """Rule 4: Heuristic to remove likely getter/setter only classes."""
-    initial_len = df.shape[0]
-    if {'totalMethodsQty', 'wmc', 'rfc'}.issubset(df.columns):
-        # Drop rows where methods exist but complexity is minimal
-        mask = ~((df['totalMethodsQty'] > 0) & (df['wmc'].fillna(0) <= 1) & (df['rfc'].fillna(0) <= 1))
-        df_clean = df[mask]
-        dropped = initial_len - df_clean.shape[0]
-        if dropped > 0:
-            logger.debug(f"Rule 4: Dropped {dropped} rows.")
-        return df_clean
-    logger.warning("Rule 4 skipped: Missing required columns.")
-    return df
-
-def rule5_remove_no_added_lines(df: pd.DataFrame, params: dict) -> pd.DataFrame:
-    """Rule 5: Exclude rows where la <= 0."""
-    initial_len = df.shape[0]
-    if 'la' in df.columns:
-        mask = df['la'] > 0
-        df_clean = df[mask]
-        dropped = initial_len - df_clean.shape[0]
-        if dropped > 0:
-             logger.debug(f"Rule 5: Dropped {dropped} rows.")
-        return df_clean
-    logger.warning("Rule 5 skipped: Missing 'la' column.")
-    return df
-
-def rule6_remove_comment_only_change(df: pd.DataFrame, params: dict) -> pd.DataFrame:
-    """Rule 6: Exclude rows where all d_* metrics are 0."""
-    initial_len = df.shape[0]
-    d_cols = [col for col in df.columns if col.startswith('d_')]
-    if d_cols:
-        # Check if all available d_* columns are 0 or NaN
-        mask = ~df[d_cols].fillna(0).eq(0).all(axis=1)
-        df_clean = df[mask]
-        dropped = initial_len - df_clean.shape[0]
-        if dropped > 0:
-             logger.debug(f"Rule 6: Dropped {dropped} rows.")
-        return df_clean
-    logger.warning("Rule 6 skipped: No delta (d_*) columns found.")
-    return df
-
-def rule7_remove_trivial_method_change(df: pd.DataFrame, params: dict) -> pd.DataFrame:
-    """Rule 7: Exclude minimal line changes that alter method counts."""
-    min_change = params.get('min_line_change', 10)
-    initial_len = df.shape[0]
-    if {'la', 'ld', 'd_totalMethodsQty'}.issubset(df.columns):
-        # Exclude if lines changed < min_change AND method count changed
-        mask = ~(((df['la'].fillna(0) + df['ld'].fillna(0)) < min_change) & (df['d_totalMethodsQty'].fillna(0) != 0))
-        df_clean = df[mask]
-        dropped = initial_len - df_clean.shape[0]
-        if dropped > 0:
-            logger.debug(f"Rule 7: Dropped {dropped} rows.")
-        return df_clean
-    logger.warning("Rule 7 skipped: Missing required columns.")
-    return df
-
-def rule8_remove_type_exception_files(df: pd.DataFrame, params: dict) -> pd.DataFrame:
-    """Rule 8: Exclude changes to *Type.java or *Exception.java files."""
-    initial_len = df.shape[0]
-    if 'file' in df.columns:
-        def file_filter(fname):
-            if not isinstance(fname, str) or '.' not in fname:
-                return True # Keep if not a typical file string
-            base = fname.split('.')[0].strip()
-            return not (base.endswith("Type") or base.endswith("Exception"))
-        mask = df['file'].apply(file_filter)
-        df_clean = df[mask]
-        dropped = initial_len - df_clean.shape[0]
-        if dropped > 0:
-            logger.debug(f"Rule 8: Dropped {dropped} rows.")
-        return df_clean
-    logger.warning("Rule 8 skipped: Missing 'file' column.")
-    return df
-
-def rule9_remove_dead_code(df: pd.DataFrame, params: dict) -> pd.DataFrame:
-    """Rule 9: Heuristic to remove dead code (CBO=0 and Fan-in=0)."""
-    initial_len = df.shape[0]
-    if {'cbo', 'fanin'}.issubset(df.columns):
-        mask = ~((df['cbo'].fillna(0) == 0) & (df['fanin'].fillna(0) == 0))
-        df_clean = df[mask]
-        dropped = initial_len - df_clean.shape[0]
-        if dropped > 0:
-            logger.debug(f"Rule 9: Dropped {dropped} rows.")
-        return df_clean
-    logger.warning("Rule 9 skipped: Missing required columns.")
-    return df
-
-def rule10_remove_data_class(df: pd.DataFrame, params: dict) -> pd.DataFrame:
-    """Rule 10: Heuristic to remove likely data classes."""
-    initial_len = df.shape[0]
-    if {'wmc', 'rfc', 'totalFieldsQty'}.issubset(df.columns):
-        mask = ~((df['wmc'].fillna(0) <= 1) & (df['rfc'].fillna(0) <= 1) & (df['totalFieldsQty'].fillna(0) >= 1))
-        df_clean = df[mask]
-        dropped = initial_len - df_clean.shape[0]
-        if dropped > 0:
-            logger.debug(f"Rule 10: Dropped {dropped} rows.")
-        return df_clean
-    logger.warning("Rule 10 skipped: Missing required columns.")
-    return df
-
-def rule11_remove_no_code_change(df: pd.DataFrame, params: dict) -> pd.DataFrame:
-    """Rule 11: Exclude rows where la == 0 and ld == 0."""
-    initial_len = df.shape[0]
-    if {'la', 'ld'}.issubset(df.columns):
-        mask = ~((df['la'].fillna(0) == 0) & (df['ld'].fillna(0) == 0))
-        df_clean = df[mask]
-        dropped = initial_len - df_clean.shape[0]
-        if dropped > 0:
-            logger.debug(f"Rule 11: Dropped {dropped} rows.")
-        return df_clean
-    logger.warning("Rule 11 skipped: Missing 'la' or 'ld' column.")
-    return df
-
-def rule14_filter_large_commits(df: pd.DataFrame, params: dict) -> pd.DataFrame:
-    """Rule 14: Exclude rows from commits changing more than N files."""
-    threshold = params.get('max_files_changed', 10)
-    initial_len = df.shape[0]
-    if 'changed_file_count' in df.columns and 'is_buggy' in df.columns:
-        # Keep rows if file count <= threshold OR if the row is buggy
-        mask = (df['changed_file_count'].fillna(0) <= threshold) | (df['is_buggy'] == True)
-        df_clean = df[mask]
-        dropped = initial_len - df_clean.shape[0]
-        if dropped > 0:
-            logger.debug(f"Rule 14: Dropped {dropped} rows from non-buggy, large commits (>{threshold} files).")
-        return df_clean
-    logger.warning("Rule 14 skipped: Missing 'changed_file_count' or 'is_buggy' column.")
-    return df
-
-
-# --- Clustering Rule (incorporating original logic) ---
-def rule_cluster_large_commits(df: pd.DataFrame, params: dict, config: Dict[str, Any]) -> pd.DataFrame:
-    """
-    Rule Cluster: Reduces rows for commits with changed_file_count above a threshold
-                  using KMeans clustering and aggregation.
-    """
-    threshold = params.get('threshold', 10)
-    commit_hash_col = 'commit_hash' # Assuming this column exists
-
-    if 'changed_file_count' not in df.columns or commit_hash_col not in df.columns:
-        logger.warning("Rule Cluster skipped: Missing 'changed_file_count' or 'commit_hash' columns.")
+    def apply(self, df: pd.DataFrame, params: Dict[str, Any], config: Dict[str, Any]) -> pd.DataFrame:
+        initial_len = df.shape[0]
+        if {'totalMethodsQty', 'wmc', 'rfc'}.issubset(df.columns):
+            mask = ~((df['totalMethodsQty'] > 0) & (df['wmc'].fillna(0) <= 1) & (df['rfc'].fillna(0) <= 1))
+            df_clean = df[mask]
+            dropped = initial_len - df_clean.shape[0]
+            if dropped > 0:
+                logger.debug(f"Rule 4: Dropped {dropped} rows.")
+            return df_clean
+        logger.warning("Rule 4 skipped: Missing required columns.")
         return df
 
-    initial_len = df.shape[0]
+@register_rule
+class Rule5RemoveNoAddedLines(CleaningRuleBase):
+    rule_name = "rule5_remove_no_added_lines"
+    description = "Exclude changes where no lines were added (la <= 0)."
+    parameters = []
+    is_batch_safe = True
 
-    # Get feature/info/target columns from the dataset config if available
-    x_columns = config.get('feature_columns', DEFAULT_X_COLUMNS)
-    # INFO_COLUMNS might not be explicitly stored, derive if needed or use defaults
-    info_columns = DEFAULT_INFO_COLUMNS
-    y_column_name = config.get('target_column', DEFAULT_Y_COLUMN[0]) # Assuming single target
+    def apply(self, df: pd.DataFrame, params: Dict[str, Any], config: Dict[str, Any]) -> pd.DataFrame:
+        initial_len = df.shape[0]
+        if 'la' in df.columns:
+            mask = df['la'].fillna(0) > 0 # Treat NaN as 0 for filtering
+            df_clean = df[mask]
+            dropped = initial_len - df_clean.shape[0]
+            if dropped > 0:
+                 logger.debug(f"Rule 5: Dropped {dropped} rows.")
+            return df_clean
+        logger.warning("Rule 5 skipped: Missing 'la' column.")
+        return df
 
-    # Ensure target column is in a list for consistency
-    y_column = [y_column_name] if isinstance(y_column_name, str) else y_column_name
+@register_rule
+class Rule6RemoveCommentOnlyChange(CleaningRuleBase):
+    rule_name = "rule6_remove_comment_only_change"
+    description = "Exclude changes where likely only comments changed (all d_* metrics are 0)."
+    parameters = []
+    is_batch_safe = True
 
-    # Split data
-    df_below = df[df['changed_file_count'] <= threshold].copy() # Use copy to avoid SettingWithCopyWarning
-    df_above = df[df['changed_file_count'] > threshold].copy()
+    def apply(self, df: pd.DataFrame, params: Dict[str, Any], config: Dict[str, Any]) -> pd.DataFrame:
+        initial_len = df.shape[0]
+        d_cols = [col for col in df.columns if col.startswith('d_')]
+        if d_cols:
+            mask = ~df[d_cols].fillna(0).eq(0).all(axis=1)
+            df_clean = df[mask]
+            dropped = initial_len - df_clean.shape[0]
+            if dropped > 0:
+                 logger.debug(f"Rule 6: Dropped {dropped} rows.")
+            return df_clean
+        logger.warning("Rule 6 skipped: No delta (d_*) columns found.")
+        return df
 
-    if df_above.empty:
-        return df_below # No clustering needed
+@register_rule
+class Rule7RemoveTrivialMethodChange(CleaningRuleBase):
+    rule_name = "rule7_remove_trivial_method_change"
+    description = "Exclude changes with minimal line alterations but changes in method counts."
+    parameters = [RuleParamDefinition(name="min_line_change", type="integer", description="Minimum lines added+deleted to be considered non-trivial.", default=10)]
+    is_batch_safe = True
 
-    # Calculate target number of clusters (avg count below threshold)
-    if not df_below.empty:
-        # Exclude potential NaNs before calculating mean
-        avg_count = int(round(df_below['changed_file_count'].dropna().mean()))
-    else:
-        avg_count = 1
-    avg_count = max(avg_count, 1)
-    logger.debug(f"Rule Cluster: Target clusters per large commit: {avg_count}")
+    def apply(self, df: pd.DataFrame, params: Dict[str, Any], config: Dict[str, Any]) -> pd.DataFrame:
+        min_change = params.get('min_line_change', 10)
+        initial_len = df.shape[0]
+        if {'la', 'ld', 'd_totalMethodsQty'}.issubset(df.columns):
+            mask = ~(((df['la'].fillna(0) + df['ld'].fillna(0)) < min_change) & (df['d_totalMethodsQty'].fillna(0) != 0))
+            df_clean = df[mask]
+            dropped = initial_len - df_clean.shape[0]
+            if dropped > 0:
+                logger.debug(f"Rule 7: Dropped {dropped} rows.")
+            return df_clean
+        logger.warning("Rule 7 skipped: Missing required columns.")
+        return df
 
-    # Define features for clustering (use X columns, remove non-numerics if needed)
-    # Filter x_columns to only those present in the DataFrame
-    available_x_columns = [col for col in x_columns if col in df.columns]
-    # Select only numeric columns among the available features for clustering
-    cluster_features = df[available_x_columns].select_dtypes(include=np.number).columns.tolist()
+@register_rule
+class Rule8RemoveTypeExceptionFiles(CleaningRuleBase):
+    rule_name = "rule8_remove_type_exception_files"
+    description = "Exclude changes to files named like '*Type.java' or '*Exception.java'."
+    parameters = []
+    is_batch_safe = True
 
-    if not cluster_features:
-         logger.warning("Rule Cluster skipped: No numeric features available for clustering.")
-         return df # Cannot cluster without numeric features
+    def apply(self, df: pd.DataFrame, params: Dict[str, Any], config: Dict[str, Any]) -> pd.DataFrame:
+        initial_len = df.shape[0]
+        if 'file' in df.columns:
+            def file_filter(fname):
+                if not isinstance(fname, str) or '.' not in fname: return True
+                base = fname.split('.')[0].strip()
+                return not (base.endswith("Type") or base.endswith("Exception"))
+            mask = df['file'].apply(file_filter)
+            df_clean = df[mask]
+            dropped = initial_len - df_clean.shape[0]
+            if dropped > 0:
+                logger.debug(f"Rule 8: Dropped {dropped} rows.")
+            return df_clean
+        logger.warning("Rule 8 skipped: Missing 'file' column.")
+        return df
 
-    reduced_rows_list = [df_below] # Start with the rows below threshold
+@register_rule
+class Rule9RemoveDeadCode(CleaningRuleBase):
+    rule_name = "rule9_remove_dead_code"
+    description = "Exclude changes where the resulting class seems unused (CBO=0 and Fan-in=0 heuristic)."
+    parameters = []
+    is_batch_safe = True
 
-    # Process each large commit
-    for commit, group in df_above.groupby(commit_hash_col):
-        if group.shape[0] <= avg_count:
-            reduced_rows_list.append(group) # Keep if already small enough
-            continue
+    def apply(self, df: pd.DataFrame, params: Dict[str, Any], config: Dict[str, Any]) -> pd.DataFrame:
+        initial_len = df.shape[0]
+        if {'cbo', 'fanin'}.issubset(df.columns):
+            mask = ~((df['cbo'].fillna(0) == 0) & (df['fanin'].fillna(0) == 0))
+            df_clean = df[mask]
+            dropped = initial_len - df_clean.shape[0]
+            if dropped > 0:
+                logger.debug(f"Rule 9: Dropped {dropped} rows.")
+            return df_clean
+        logger.warning("Rule 9 skipped: Missing required columns.")
+        return df
 
-        # Prepare data for clustering (handle NaNs - fill with mean/median?)
-        group_for_cluster = group.copy() # Work on a copy
-        # Fill NaNs in numeric clustering features with the mean of that feature *within the commit group*
-        for feature in cluster_features:
-             if group_for_cluster[feature].isnull().any():
-                  group_mean = group_for_cluster[feature].mean()
-                  group_for_cluster[feature].fillna(group_mean, inplace=True)
-                  # If still NaN (e.g., all values were NaN), fill with 0
-                  group_for_cluster[feature].fillna(0, inplace=True)
+@register_rule
+class Rule10RemoveDataClass(CleaningRuleBase):
+    rule_name = "rule10_remove_data_class"
+    description = "Exclude changes likely representing simple data classes (low WMC/RFC, non-zero fields)."
+    parameters = []
+    is_batch_safe = True
 
-        # Perform clustering
-        try:
-            # Use init='k-means++' and n_init='auto' for better robustness
-            kmeans = KMeans(n_clusters=avg_count, random_state=42, n_init='auto', init='k-means++')
-            clusters = kmeans.fit_predict(group_for_cluster[cluster_features])
-            group_for_cluster['cluster'] = clusters
-        except Exception as e:
-            logger.error(f"Rule Cluster: Clustering failed for commit {commit[:7]}: {e}. Keeping original rows for this commit.")
-            reduced_rows_list.append(group) # Keep original group on clustering error
-            continue
+    def apply(self, df: pd.DataFrame, params: Dict[str, Any], config: Dict[str, Any]) -> pd.DataFrame:
+        initial_len = df.shape[0]
+        if {'wmc', 'rfc', 'totalFieldsQty'}.issubset(df.columns):
+            mask = ~((df['wmc'].fillna(0) <= 1) & (df['rfc'].fillna(0) <= 1) & (df['totalFieldsQty'].fillna(0) >= 1))
+            df_clean = df[mask]
+            dropped = initial_len - df_clean.shape[0]
+            if dropped > 0:
+                logger.debug(f"Rule 10: Dropped {dropped} rows.")
+            return df_clean
+        logger.warning("Rule 10 skipped: Missing required columns.")
+        return df
 
-        # Aggregate by cluster
-        agg_funcs = {}
-        # Target aggregation: average probability >= 0.5 means True? (adjust as needed)
-        def aggregate_target(series):
-              # Ensure boolean or becomes float for mean()
-              numeric_series = series.astype(float)
-              # If mean >= 0.5, classify as buggy (True)
-              return numeric_series.mean() >= 0.5
+@register_rule
+class Rule11RemoveNoCodeChange(CleaningRuleBase):
+    rule_name = "rule11_remove_no_code_change"
+    description = "Exclude changes where no lines were added or deleted (la == 0 and ld == 0)."
+    parameters = []
+    is_batch_safe = True
 
-        for col in group_for_cluster.columns:
-            if col == 'cluster': continue # Don't aggregate the cluster label itself
+    def apply(self, df: pd.DataFrame, params: Dict[str, Any], config: Dict[str, Any]) -> pd.DataFrame:
+        initial_len = df.shape[0]
+        if {'la', 'ld'}.issubset(df.columns):
+            mask = ~((df['la'].fillna(0) == 0) & (df['ld'].fillna(0) == 0))
+            df_clean = df[mask]
+            dropped = initial_len - df_clean.shape[0]
+            if dropped > 0:
+                logger.debug(f"Rule 11: Dropped {dropped} rows.")
+            return df_clean
+        logger.warning("Rule 11 skipped: Missing 'la' or 'ld' column.")
+        return df
 
-            if col == commit_hash_col or col in info_columns:
-                agg_funcs[col] = 'first' # Keep first info value
-            elif col in x_columns or col == 'changed_file_count': # Aggregate features + count
-                 if pd.api.types.is_numeric_dtype(group_for_cluster[col]):
-                     agg_funcs[col] = 'mean' # Average numeric features
-                 else:
-                     agg_funcs[col] = 'first' # Keep first for non-numeric features
-            elif col in y_column:
-                 agg_funcs[col] = aggregate_target # Custom aggregation for boolean target
-            else: # Default aggregation for other columns
-                 if pd.api.types.is_numeric_dtype(group_for_cluster[col]):
-                     agg_funcs[col] = 'mean'
-                 else:
-                     agg_funcs[col] = 'first'
+@register_rule
+class Rule12RemoveMarginalChange(CleaningRuleBase):
+    rule_name = "rule12_remove_marginal_change"
+    description = "Exclude non-buggy changes if the sum of absolute delta metrics is too marginal (<= threshold)."
+    parameters = [RuleParamDefinition(name="threshold", type="integer", description="Maximum allowed sum of absolute d_* values for non-buggy changes.", default=15)]
+    is_batch_safe = True
 
-        try:
-             aggregated = group_for_cluster.groupby('cluster').agg(agg_funcs).reset_index(drop=True)
-             reduced_rows_list.append(aggregated)
-        except Exception as agg_e:
-             logger.error(f"Rule Cluster: Aggregation failed for commit {commit[:7]} after clustering: {agg_e}. Keeping original rows.")
-             reduced_rows_list.append(group) # Keep original group on aggregation error
+    def apply(self, df: pd.DataFrame, params: Dict[str, Any], config: Dict[str, Any]) -> pd.DataFrame:
+        threshold = params.get('threshold', 15)
+        initial_len = df.shape[0]
+        d_cols = [col for col in df.columns if col.startswith('d_')]
+
+        if d_cols and 'is_buggy' in df.columns:
+            # Calculate sum, filling NaNs in d_cols with 0 for the sum calculation
+            total_change = df[d_cols].fillna(0).abs().sum(axis=1)
+            # Keep rows where change > threshold OR the row is buggy
+            mask = (total_change > threshold) | (df['is_buggy'] == True)
+            df_clean = df[mask]
+            dropped = initial_len - df_clean.shape[0]
+            if dropped > 0:
+                logger.debug(f"Rule 12: Dropped {dropped} non-buggy rows with marginal delta sum <= {threshold}.")
+            return df_clean
+        logger.warning("Rule 12 skipped: Missing delta (d_*) columns or 'is_buggy' column.")
+        return df
+
+@register_rule
+class Rule13RemoveMinimalChange(CleaningRuleBase):
+    rule_name = "rule13_remove_minimal_change"
+    description = "Exclude non-buggy changes if the sum of absolute delta metrics is too minimal (< threshold)."
+    parameters = [RuleParamDefinition(name="threshold", type="integer", description="Minimum required sum of absolute d_* values for non-buggy changes.", default=5)]
+    is_batch_safe = True
+
+    def apply(self, df: pd.DataFrame, params: Dict[str, Any], config: Dict[str, Any]) -> pd.DataFrame:
+        threshold = params.get('threshold', 5)
+        initial_len = df.shape[0]
+        d_cols = [col for col in df.columns if col.startswith('d_')]
+
+        if d_cols and 'is_buggy' in df.columns:
+            # Calculate sum, filling NaNs in d_cols with 0 for the sum calculation
+            total_change = df[d_cols].fillna(0).abs().sum(axis=1)
+            # Keep rows where change >= threshold OR the row is buggy
+            mask = (total_change >= threshold) | (df['is_buggy'] == True)
+            df_clean = df[mask]
+            dropped = initial_len - df_clean.shape[0]
+            if dropped > 0:
+                 logger.debug(f"Rule 13: Dropped {dropped} non-buggy rows with minimal delta sum < {threshold}.") # Corrected log message
+            return df_clean
+        logger.warning("Rule 13 skipped: Missing delta (d_*) columns or 'is_buggy' column.")
+        return df
+
+@register_rule
+class Rule14FilterLargeCommits(CleaningRuleBase):
+    rule_name = "rule14_filter_large_commits"
+    description = "Exclude rows from non-buggy commits that changed more than N files (applied before clustering)."
+    parameters = [RuleParamDefinition(name="max_files_changed", type="integer", description="Maximum number of files changed in a non-buggy commit for its rows to be included.", default=10)]
+    is_batch_safe = True
+
+    def apply(self, df: pd.DataFrame, params: Dict[str, Any], config: Dict[str, Any]) -> pd.DataFrame:
+        threshold = params.get('max_files_changed', 10)
+        initial_len = df.shape[0]
+        if 'changed_file_count' in df.columns and 'is_buggy' in df.columns:
+            mask = (df['changed_file_count'].fillna(0) <= threshold) | (df['is_buggy'] == True)
+            df_clean = df[mask]
+            dropped = initial_len - df_clean.shape[0]
+            if dropped > 0:
+                logger.debug(f"Rule 14: Dropped {dropped} non-buggy rows from large commits (>{threshold} files).")
+            return df_clean
+        logger.warning("Rule 14 skipped: Missing 'changed_file_count' or 'is_buggy' column.")
+        return df
 
 
-    # Combine results
-    if not reduced_rows_list:
-         result_df = pd.DataFrame(columns=df.columns) # Handle case where everything gets filtered?
-    else:
-         result_df = pd.concat(reduced_rows_list, ignore_index=True, sort=False)
+# --- Rule Cluster ---
+@register_rule
+class RuleClusterLargeCommits(CleaningRuleBase):
+    rule_name = "rule_cluster_large_commits"
+    description = "Cluster rows within commits changing > N files, reducing rows via aggregation."
+    parameters = [
+        RuleParamDefinition(name="threshold", type="integer", description="File count threshold to trigger clustering.", default=10)
+    ]
+    is_batch_safe = True # Assuming commits aren't split across batches for this rule
 
-    dropped = initial_len - result_df.shape[0]
-    if dropped > 0:
-        logger.debug(f"Rule Cluster: Reduced rows by {dropped} via clustering.")
-    return result_df
+    def apply(self, df: pd.DataFrame, params: Dict[str, Any], config: Dict[str, Any]) -> pd.DataFrame:
+        threshold = params.get('threshold', 10)
+        commit_hash_col = 'commit_hash' # Assuming this column exists
+
+        if 'changed_file_count' not in df.columns or commit_hash_col not in df.columns:
+            logger.warning("Rule Cluster skipped: Missing 'changed_file_count' or 'commit_hash' columns.")
+            return df
+
+        initial_len = df.shape[0]
+
+        # Get feature/info/target columns from the dataset config if available
+        x_columns = config.get('feature_columns', DEFAULT_X_COLUMNS)
+        # INFO_COLUMNS might not be explicitly stored, derive if needed or use defaults
+        info_columns = DEFAULT_INFO_COLUMNS
+        y_column_name = config.get('target_column', DEFAULT_Y_COLUMN[0]) # Assuming single target
+
+        # Ensure target column is in a list for consistency
+        y_column = [y_column_name] if isinstance(y_column_name, str) else y_column_name
+
+        # Split data
+        df_below = df[df['changed_file_count'] <= threshold].copy() # Use copy to avoid SettingWithCopyWarning
+        df_above = df[df['changed_file_count'] > threshold].copy()
+
+        if df_above.empty:
+            return df_below # No clustering needed
+
+        # Calculate target number of clusters (avg count below threshold)
+        if not df_below.empty:
+            # Exclude potential NaNs before calculating mean
+            avg_count = int(round(df_below['changed_file_count'].dropna().mean()))
+        else:
+            avg_count = 1
+        avg_count = max(avg_count, 1)
+        logger.debug(f"Rule Cluster: Target clusters per large commit: {avg_count}")
+
+        # Define features for clustering (use X columns, remove non-numerics if needed)
+        # Filter x_columns to only those present in the DataFrame
+        available_x_columns = [col for col in x_columns if col in df.columns]
+        # Select only numeric columns among the available features for clustering
+        cluster_features = df[available_x_columns].select_dtypes(include=np.number).columns.tolist()
+
+        if not cluster_features:
+            logger.warning("Rule Cluster skipped: No numeric features available for clustering.")
+            return df # Cannot cluster without numeric features
+
+        reduced_rows_list = [df_below] # Start with the rows below threshold
+
+        # Process each large commit
+        for commit, group in df_above.groupby(commit_hash_col):
+            if group.shape[0] <= avg_count:
+                reduced_rows_list.append(group) # Keep if already small enough
+                continue
+
+            # Prepare data for clustering (handle NaNs - fill with mean/median?)
+            group_for_cluster = group.copy() # Work on a copy
+            # Fill NaNs in numeric clustering features with the mean of that feature *within the commit group*
+            for feature in cluster_features:
+                if group_for_cluster[feature].isnull().any():
+                    group_mean = group_for_cluster[feature].mean()
+                    group_for_cluster[feature].fillna(group_mean, inplace=True)
+                    # If still NaN (e.g., all values were NaN), fill with 0
+                    group_for_cluster[feature].fillna(0, inplace=True)
+
+            # Perform clustering
+            try:
+                # Use init='k-means++' and n_init='auto' for better robustness
+                kmeans = KMeans(n_clusters=avg_count, random_state=42, n_init='auto', init='k-means++')
+                clusters = kmeans.fit_predict(group_for_cluster[cluster_features])
+                group_for_cluster['cluster'] = clusters
+            except Exception as e:
+                logger.error(f"Rule Cluster: Clustering failed for commit {commit[:7]}: {e}. Keeping original rows for this commit.")
+                reduced_rows_list.append(group) # Keep original group on clustering error
+                continue
+
+            # Aggregate by cluster
+            agg_funcs = {}
+            # Target aggregation: average probability >= 0.5 means True? (adjust as needed)
+            def aggregate_target(series):
+                # Ensure boolean or becomes float for mean()
+                numeric_series = series.astype(float)
+                # If mean >= 0.5, classify as buggy (True)
+                return numeric_series.mean() >= 0.5
+
+            for col in group_for_cluster.columns:
+                if col == 'cluster': continue # Don't aggregate the cluster label itself
+
+                if col == commit_hash_col or col in info_columns:
+                    agg_funcs[col] = 'first' # Keep first info value
+                elif col in x_columns or col == 'changed_file_count': # Aggregate features + count
+                    if pd.api.types.is_numeric_dtype(group_for_cluster[col]):
+                        agg_funcs[col] = 'mean' # Average numeric features
+                    else:
+                        agg_funcs[col] = 'first' # Keep first for non-numeric features
+                elif col in y_column:
+                    agg_funcs[col] = aggregate_target # Custom aggregation for boolean target
+                else: # Default aggregation for other columns
+                    if pd.api.types.is_numeric_dtype(group_for_cluster[col]):
+                        agg_funcs[col] = 'mean'
+                    else:
+                        agg_funcs[col] = 'first'
+
+            try:
+                aggregated = group_for_cluster.groupby('cluster').agg(agg_funcs).reset_index(drop=True)
+                reduced_rows_list.append(aggregated)
+            except Exception as agg_e:
+                logger.error(f"Rule Cluster: Aggregation failed for commit {commit[:7]} after clustering: {agg_e}. Keeping original rows.")
+                reduced_rows_list.append(group) # Keep original group on aggregation error
 
 
-# --- Rule Mapping ---
-RULE_FUNCTION_MAP = {
-    "rule0_drop_duplicates": rule0_drop_duplicates,
-    #"rule1_...": rule1_... , # Deferred
-    "rule2_remove_recent_clean_last_change": rule2_remove_recent_clean_last_change,
-    "rule3_remove_empty_class": rule3_remove_empty_class,
-    "rule4_remove_trivial_getset": rule4_remove_trivial_getset,
-    "rule5_remove_no_added_lines": rule5_remove_no_added_lines,
-    "rule6_remove_comment_only_change": rule6_remove_comment_only_change,
-    "rule7_remove_trivial_method_change": rule7_remove_trivial_method_change,
-    "rule8_remove_type_exception_files": rule8_remove_type_exception_files,
-    "rule9_remove_dead_code": rule9_remove_dead_code,
-    "rule10_remove_data_class": rule10_remove_data_class,
-    "rule11_remove_no_code_change": rule11_remove_no_code_change,
-    # Rule 12/13 (marginal/minimal) - Deferred based on your script's commented out lines? Add if needed.
-    "rule14_filter_large_commits": rule14_filter_large_commits,
-    "rule_cluster_large_commits": rule_cluster_large_commits,
-}
+        # Combine results
+        if not reduced_rows_list:
+            result_df = pd.DataFrame(columns=df.columns) # Handle case where everything gets filtered?
+        else:
+            result_df = pd.concat(reduced_rows_list, ignore_index=True, sort=False)
+
+        dropped = initial_len - result_df.shape[0]
+        if dropped > 0:
+            logger.debug(f"Rule Cluster: Reduced rows by {dropped} via clustering.")
+        return result_df
+
