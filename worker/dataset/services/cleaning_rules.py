@@ -153,11 +153,11 @@ class Rule2RemoveRecentCleanLastChange(CleaningRuleBase):
         for cls, group in df.groupby('class_name'):
             if group.empty: continue
             group_sorted = group.sort_values('author_date_unix_timestamp', ascending=False)
-            last_idx = group_sorted.index[0]
-            if not df.loc[last_idx, 'is_buggy']:
-                time_diff = batch_last_time - df.loc[last_idx, 'author_date_unix_timestamp']
-                if time_diff < gap:
-                    indices_to_drop.append(last_idx)
+            for idx in group_sorted.index:
+                if not df.loc[idx, 'is_buggy']:
+                    time_diff = batch_last_time - df.loc[idx, 'author_date_unix_timestamp']
+                    if time_diff < gap:
+                        indices_to_drop.append(idx)
 
         df_clean = df.drop(index=indices_to_drop)
         dropped = initial_len - df_clean.shape[0]

@@ -669,19 +669,19 @@ class GitCommitLinker:
             # --- Process Blame Output (if succeeded) ---
             if blame_succeeded:
                 try:
-                    current_hash = None
+                    # Collect all valid hashes from the blame output headers
+                    blame_hashes_in_output = set()
                     for line in blame_output.strip().splitlines():
                         parts = line.split()
-                        # Check if the first part is a 40-char hash
                         if len(parts) > 0 and len(parts[0]) == 40 and all(c in '0123456789abcdef' for c in parts[0]):
-                            current_hash = parts[0]
-                        # Check if this line contains actual code content (heuristic: has a tab)
-                        # and we have a hash associated with it
-                        if current_hash and '\t' in line:
-                            # Ensure we don't link the corrective commit itself or the commit we *started* blaming from
-                            if current_hash != corrective_commit_hash and current_hash != current_blame_start:
-                                introducing_commits.add(current_hash)
-                            current_hash = None # Reset for the next potential blame block
+                            potential_hash = parts[0]
+                            # Add if it's not the corrective commit itself or the start commit
+                            if potential_hash != corrective_commit_hash and potential_hash != current_blame_start:
+                                blame_hashes_in_output.add(potential_hash)
+                    
+                    # Add all relevant hashes found to the introducing set
+                    introducing_commits.update(blame_hashes_in_output) # Use update to add all elements
+
                 except Exception as parse_err:
                     logger.error(f"Error parsing blame output for {file_path} (start: {current_blame_start[:7]}): {parse_err}", exc_info=True)
 

@@ -119,7 +119,7 @@ def determine_default_branch(repo: git.Repo) -> str:
             logger.warning(f"Could not determine default branch (main/master/HEAD). Using fallback ref: {fallback_ref}")
             return fallback_ref
         else:
-            raise ValueError("No suitable remote branch reference found for CK analysis.")
+            raise ValueError("No suitable remote branch reference found.")
 
     except (git.GitCommandError, AttributeError, ValueError, Exception) as e:
         logger.error(f"Error determining default branch: {e}", exc_info=True)

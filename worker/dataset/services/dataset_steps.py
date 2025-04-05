@@ -8,7 +8,7 @@ import sqlalchemy as sa
 from sqlalchemy import select
 from sqlalchemy.orm import Session, DeclarativeBase
 
-from shared.db.models import BotPattern, CKMetric
+from shared.db.models import BotPattern, CKMetric, PatternTypeEnum
 from shared.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -43,44 +43,45 @@ COMMIT_GURU_METRIC_COLUMNS = [
 
 def get_bot_filter_condition(bot_patterns: List[BotPattern], model_alias: Type[DeclarativeBase]):
     """Builds SQLAlchemy filter conditions for bot authors using an alias."""
-    conditions = []
-    # Apply exclusions first
+    inclusion_filters = []
+    exclusion_filters = []
+    col = getattr(model_alias, 'author_name') # Get column once
+
     for bp in bot_patterns:
-        if bp.is_exclusion:
-            # Use the alias provided
-            col = getattr(model_alias, 'author_name') # Access attribute via alias
-            if bp.pattern_type == 'exact':
-                conditions.append(col == bp.pattern)
-            elif bp.pattern_type == 'wildcard':
-                 sql_pattern = bp.pattern.replace('%', '\\%').replace('_', '\\_').replace('*', '%')
-                 conditions.append(col.like(sql_pattern))
-            elif bp.pattern_type == 'regex':
-                 conditions.append(col.regexp_match(bp.pattern))
+        filter_expr = None
+        if bp.pattern_type == PatternTypeEnum.EXACT:
+            filter_expr = (col == bp.pattern)
+        elif bp.pattern_type == PatternTypeEnum.WILDCARD:
+            sql_pattern = bp.pattern.replace('%', '\\%').replace('_', '\\_').replace('*', '%')
+            filter_expr = col.like(sql_pattern)
+        elif bp.pattern_type == PatternTypeEnum.REGEX:
+            filter_expr = col.regexp_match(bp.pattern)
 
-    exclusion_condition = sa.or_(*conditions) if conditions else sa.false()
+        if filter_expr is not None:
+            if bp.is_exclusion:
+                exclusion_filters.append(filter_expr)
+            else:
+                inclusion_filters.append(filter_expr)
 
-    conditions = []
-    # Apply inclusions second
-    for bp in bot_patterns:
-        if not bp.is_exclusion:
-            col = getattr(model_alias, 'author_name') # Use alias
-            if bp.pattern_type == 'exact':
-                conditions.append(col == bp.pattern)
-            elif bp.pattern_type == 'wildcard':
-                 sql_pattern = bp.pattern.replace('%', '\\%').replace('_', '\\_').replace('*', '%')
-                 conditions.append(col.like(sql_pattern))
-            elif bp.pattern_type == 'regex':
-                 conditions.append(col.regexp_match(bp.pattern))
+    # Combine exclusions: if any exclusion matches, it's a bot
+    is_excluded_bot = sa.or_(*exclusion_filters) if exclusion_filters else sa.false()
 
-    inclusion_condition = sa.or_(*conditions) if conditions else sa.false()
+    # Combine inclusions: if any inclusion matches, it's a bot
+    is_included_bot = sa.or_(*inclusion_filters) if inclusion_filters else sa.false()
 
-    # Final filter logic remains the same
-    if not any(not bp.is_exclusion for bp in bot_patterns):
-         final_condition = sa.not_(exclusion_condition)
-    else:
-         final_condition = sa.not_(exclusion_condition) & inclusion_condition
+    # A commit is by a bot if:
+    # 1. It matches any exclusion OR
+    # 2. It matches any inclusion (only relevant if inclusion list is not empty)
+    # We return the condition that evaluates to TRUE if it IS a bot.
+    # If there are inclusions defined, matching an inclusion makes it a bot.
+    # If there are *no* inclusions defined, only matching an exclusion makes it a bot.
 
-    return final_condition
+    if inclusion_filters: # If inclusion rules exist, they define the "bot" set along with exclusions
+         final_bot_condition = sa.or_(is_excluded_bot, is_included_bot)
+    else: # If no inclusion rules, only exclusions define bots
+         final_bot_condition = is_excluded_bot
+
+    return final_bot_condition # Return the condition for "IS a bot"
 
 
 def get_parent_ck_metrics(session: Session, current_metrics_batch: pd.DataFrame) -> pd.DataFrame:
@@ -97,6 +98,13 @@ def get_parent_ck_metrics(session: Session, current_metrics_batch: pd.DataFrame)
         DataFrame with parent CK metrics, indexed matching the input batch.
         Parent metrics are prefixed with 'parent_'. Includes '_parent_metric_found' boolean.
     """
+
+    if current_metrics_batch.empty:
+        # Define expected output columns for an empty DataFrame
+        parent_cols = ['_parent_metric_found'] + [f"parent_{col}" for col in CK_METRIC_COLUMNS]
+        # Create empty DataFrame with correct columns and index type
+        return pd.DataFrame(columns=parent_cols).astype({'_parent_metric_found': bool})
+
     parent_data_map = {} # key: (repo_id, parent_hash, file, class_name), value: ck_metric_dict
 
     # Prepare lookup keys from the batch
@@ -118,67 +126,68 @@ def get_parent_ck_metrics(session: Session, current_metrics_batch: pd.DataFrame)
             batch_map[idx].append(key) # Store key associated with original index
 
 
-    if not lookup_keys:
-        # Create an empty DataFrame with expected columns if no parents need lookup
-        parent_cols = ['_parent_metric_found'] + [f"parent_{col}" for col in CK_METRIC_COLUMNS]
-        return pd.DataFrame(columns=parent_cols, index=current_metrics_batch.index)
-
-
-    # Bulk query for parent metrics using the collected keys
-    # This requires crafting a query that can efficiently fetch based on composite keys
-    # Using IN operator on tuples might work depending on DB backend support
-    # Or construct a more complex OR condition
-    # For simplicity here, we might iterate, but a bulk approach is better for performance
-    logger.debug(f"Looking up parent metrics for {len(lookup_keys)} unique parent states.")
-
-    # --- Alternative: Bulk query using OR conditions (potentially less optimal than tuple IN) ---
-    filters = []
-    for repo_id, phash, pfile, pclass in lookup_keys:
-         filters.append(
-             sa.and_(
-                 CKMetric.repository_id == repo_id,
-                 CKMetric.commit_hash == phash,
-                 CKMetric.file == pfile,
-                 CKMetric.class_name == pclass # Use correct attribute name
+    if lookup_keys:
+        # --- Bulk query using OR conditions (potentially less optimal than tuple IN) ---
+        filters = []
+        for repo_id, phash, pfile, pclass in lookup_keys:
+             filters.append(
+                 sa.and_(
+                     CKMetric.repository_id == repo_id,
+                     CKMetric.commit_hash == phash,
+                     CKMetric.file == pfile,
+                     CKMetric.class_name == pclass # Use correct attribute name
+                 )
              )
-         )
 
-    if filters:
-        parent_stmt = select(CKMetric).where(sa.or_(*filters))
-        parent_results = session.execute(parent_stmt).scalars().all()
+        if filters:
+            parent_stmt = select(CKMetric).where(sa.or_(*filters))
+            parent_results = session.execute(parent_stmt).scalars().all()
 
-        # Populate the map
-        for pm in parent_results:
-            key = (pm.repository_id, pm.commit_hash, pm.file, pm.class_name)
-            parent_data_map[key] = {col: getattr(pm, col, None) for col in CK_METRIC_COLUMNS}
-        logger.debug(f"Found {len(parent_data_map)} parent metric records in DB.")
-    # --- End Bulk Query ---
+            for pm in parent_results:
+                key = (pm.repository_id, pm.commit_hash, pm.file, pm.class_name)
+                # Store only the relevant columns
+                parent_data_map[key] = {col: getattr(pm, col, None) for col in CK_METRIC_COLUMNS}
+            logger.debug(f"Found {len(parent_data_map)} parent metric records in DB.")
+        # --- End Bulk Query ---
 
+    # Assemble the result DataFrame row by row
+    final_data_list = []
+    parent_cols_template = {f"parent_{col}": pd.NA for col in CK_METRIC_COLUMNS} # Use pd.NA
 
-    # Assemble the result DataFrame
-    parent_metrics_list = []
     for idx in current_metrics_batch.index:
-        parent_metric = None
         found = False
-        # Get the lookup keys associated with this original row
+        parent_metric_data = None
         keys_for_row = batch_map.get(idx, [])
+
         if keys_for_row:
-             # Use the first key found in the map (assumes first parent)
              for key in keys_for_row:
                   if key in parent_data_map:
-                       parent_metric = parent_data_map[key]
+                       parent_metric_data = parent_data_map[key]
                        found = True
                        break # Found the first parent
 
-        result_row = {'_parent_metric_found': found}
-        if parent_metric:
-            result_row.update({f"parent_{col}": parent_metric.get(col) for col in CK_METRIC_COLUMNS})
+        # Build the row dictionary for this index
+        row_dict = {'_parent_metric_found': found} # <<< Start with the boolean flag
+        if parent_metric_data:
+             # Add parent metrics if found
+             row_dict.update({f"parent_{col}": parent_metric_data.get(col) for col in CK_METRIC_COLUMNS})
         else:
-            # Fill with NaNs if parent not found
-            result_row.update({f"parent_{col}": np.nan for col in CK_METRIC_COLUMNS})
-        parent_metrics_list.append(result_row)
+             # Add NA placeholders if not found
+             row_dict.update(parent_cols_template)
 
-    parent_df = pd.DataFrame(parent_metrics_list, index=current_metrics_batch.index)
+        final_data_list.append(row_dict)
+
+    # Create DataFrame with appropriate types if possible
+    parent_df = pd.DataFrame(final_data_list, index=current_metrics_batch.index)
+    # Explicitly cast the boolean column AFTER creation, this is usually safer.
+    if '_parent_metric_found' in parent_df.columns:
+         parent_df['_parent_metric_found'] = parent_df['_parent_metric_found'].astype(bool)
+    # Optionally cast numeric parent columns if needed (pd.NA handles types better than np.nan)
+    # for col in CK_METRIC_COLUMNS:
+    #      parent_col_name = f"parent_{col}"
+    #      if parent_col_name in parent_df.columns:
+    #          parent_df[parent_col_name] = pd.to_numeric(parent_df[parent_col_name], errors='ignore') # Use ignore for mixed types
+
     return parent_df
 
 

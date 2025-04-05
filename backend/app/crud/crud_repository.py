@@ -1,6 +1,7 @@
 import re
 import logging
 from typing import List, Optional, Sequence
+from urllib.parse import urlparse 
 
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload # If needed for eager loading relationships later
@@ -18,13 +19,26 @@ logger.setLevel(settings.LOG_LEVEL.upper())
 def _extract_repo_name(git_url: str) -> str:
     """Extracts a plausible repository name from a Git URL."""
     try:
-        # Remove .git suffix if present
-        name = re.sub(r'\.git$', '', git_url)
-        # Get the last part of the path
-        name = name.split('/')[-1]
-        # Handle potential empty strings if URL ends with /
-        if not name:
-             name = git_url.split('/')[-2] # Try second to last
+        # Handle protocol if present (e.g., git@host:path)
+        if ':' in git_url and '@' in git_url.split(':')[0]:
+            path_part = git_url.split(':')[-1]
+        else:
+            # Handle http/https URLs
+            parsed_url = urlparse(git_url)
+            path_part = parsed_url.path
+
+        # Remove leading/trailing slashes and .git suffix
+        cleaned_path = path_part.strip('/').replace('.git', '')
+
+        if not cleaned_path: # If nothing remains after cleaning
+             return "unknown_repo"
+
+        # Get the last component of the path
+        name = cleaned_path.split('/')[-1]
+
+        if not name: # If the last component was empty (e.g. from trailing slash)
+            return "unknown_repo"
+
         return name
     except Exception as e:
         logger.error(f"Could not extract name from URL '{git_url}': {e}")

@@ -5,7 +5,7 @@ from pydantic import BaseModel, HttpUrl, Field, ConfigDict
 
 # Shared properties
 class RepositoryBase(BaseModel):
-    git_url: HttpUrl = Field(..., example="https://github.com/user/repo.git")
+    git_url: HttpUrl = Field(..., json_schema_extra={'example': "https://github.com/user/repo.git"})
 
 # Properties to receive via API on creation
 class RepositoryCreate(RepositoryBase):
