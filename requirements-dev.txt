@@ -24,3 +24,4 @@ pytest
 pytest-mock
 pytest-asyncio
 pytest-pythonpath
+httpx

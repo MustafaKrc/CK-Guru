@@ -61,7 +61,12 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
+    # url = config.get_main_option("sqlalchemy.url") # Already gets URL from context config
+    alembic_config = context.config # Use consistent naming
+    url = alembic_config.get_main_option("sqlalchemy.url")
+    if not url:
+        raise ValueError("Database URL not found in Alembic configuration [sqlalchemy.url]")
+
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -85,9 +90,17 @@ async def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    # Create async engine using the URL from settings
+    # --- Get the database URL from the Alembic config context ---
+    # This ensures we use the URL passed from pytest (conftest.py) or alembic cmd
+    alembic_config = context.config
+    url = alembic_config.get_main_option("sqlalchemy.url")
+    if not url:
+        raise ValueError("Database URL not found in Alembic configuration [sqlalchemy.url]")
+    # -------------------------------------------------------------
+
+    # Create async engine using the URL from the context
     connectable = create_async_engine(
-        str(settings.DATABASE_URL),
+        url,
         poolclass=pool.NullPool, # Use NullPool for migration engine
     )
 
