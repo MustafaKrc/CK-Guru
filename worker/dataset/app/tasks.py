@@ -41,8 +41,7 @@ def _cleanup_and_fail_db(
     dataset_id: int,
     error_message: str,
     detailed_error: Optional[str] = None,
-    intermediate_s3_path: Optional[str] = None, # For two-phase approach (if used)
-    final_s3_uri: Optional[str] = None
+    s3_uri: Optional[str] = None
 ):
     """Updates dataset status to FAILED and attempts to clean up storage."""
     logger.warning(f"Running cleanup for dataset {dataset_id} due to error/termination: {error_message}")
@@ -69,24 +68,16 @@ def _cleanup_and_fail_db(
     storage_options = settings.s3_storage_options
     fs = s3fs.S3FileSystem(**storage_options)
 
-    # Cleanup intermediate (if applicable - keep for robustness even if using in-memory now)
-    if intermediate_s3_path:
-        try:
-            if fs.exists(intermediate_s3_path):
-                logger.warning(f"Cleaning up intermediate files: {intermediate_s3_path}")
-                fs.rm(intermediate_s3_path, recursive=True)
-        except Exception as cleanup_err:
-            logger.error(f"Failed to cleanup intermediate files at {intermediate_s3_path}: {cleanup_err}")
 
     # Cleanup final file (might be partially written)
-    if final_s3_uri:
-        final_s3_path = final_s3_uri.replace("s3://", "")
+    if s3_uri:
+        s3_path = s3_uri.replace("s3://", "")
         try:
-            if fs.exists(final_s3_path):
-                logger.warning(f"Deleting potentially incomplete final file: {final_s3_uri}")
-                fs.rm(final_s3_path)
-        except Exception as final_cleanup_err:
-            logger.error(f"Failed to cleanup final file {final_s3_uri} after error: {final_cleanup_err}")
+            if fs.exists(s3_path):
+                logger.warning(f"Deleting potentially incomplete final file: {s3_uri}")
+                fs.rm(s3_path)
+        except Exception as cleanup_err:
+            logger.error(f"Failed to cleanup final file {s3_uri} after error: {cleanup_err}")
 
 @shared_task(bind=True, name='tasks.generate_dataset')
 def generate_dataset_task(self: Task, dataset_id: int):
@@ -396,6 +387,13 @@ def generate_dataset_task(self: Task, dataset_id: int):
             update_task_state(self, 'SUCCESS', dataset.status_message, 100)
             logger.info(f"Task {task_id}: Dataset {dataset_id} marked as READY.")
             return {'dataset_id': dataset_id, 'status': 'SUCCESS', 'rows_written': total_rows_written, 'path': dataset.storage_path}
+
+    except Terminated as term_exc: # Catch Celery's specific termination exception
+        error_msg = "Task terminated by revoke request."
+        logger.warning(f"Task {task_id}: {error_msg} (Details: {term_exc})")
+        update_task_state(self, 'FAILURE', error_msg, 0) # Use FAILURE state
+        _cleanup_and_fail_db(dataset_id, error_msg, s3_uri=object_storage_uri)
+        # Do not re-raise Terminated, Celery handles it
 
     except Exception as e:
         # Log detailed error
