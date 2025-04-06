@@ -8,7 +8,7 @@ import pandas as pd
 import sqlalchemy as sa
 from celery import shared_task, Task
 from celery.utils.log import get_task_logger
-from celery.exceptions import Ignore
+from celery.exceptions import Ignore, Terminated
 from sqlalchemy import Connection, func, select
 from sqlalchemy.orm import aliased
 
@@ -37,6 +37,56 @@ from services.dataset_steps import (
 logger = get_task_logger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
 
+def _cleanup_and_fail_db(
+    dataset_id: int,
+    error_message: str,
+    detailed_error: Optional[str] = None,
+    intermediate_s3_path: Optional[str] = None, # For two-phase approach (if used)
+    final_s3_uri: Optional[str] = None
+):
+    """Updates dataset status to FAILED and attempts to clean up storage."""
+    logger.warning(f"Running cleanup for dataset {dataset_id} due to error/termination: {error_message}")
+    final_status_message = f"FAILED: {error_message}"
+    if detailed_error:
+        # Limit length for DB
+        final_status_message += f"\nDetails: {detailed_error[:800]}"
+
+    # 1. Update DB Status
+    try:
+        with get_sync_db_session() as error_session:
+            error_dataset = error_session.get(Dataset, dataset_id)
+            if error_dataset:
+                error_dataset.status = DatasetStatusEnum.FAILED
+                error_dataset.status_message = final_status_message[:1000] # Limit length
+                error_session.commit()
+                logger.info(f"Updated dataset {dataset_id} status to FAILED in DB.")
+            else:
+                logger.error(f"Could not find dataset {dataset_id} in DB during error cleanup.")
+    except Exception as db_update_err:
+        logger.error(f"CRITICAL - Failed to update dataset {dataset_id} status to FAILED in DB: {db_update_err}")
+
+    # 2. Cleanup Storage
+    storage_options = settings.s3_storage_options
+    fs = s3fs.S3FileSystem(**storage_options)
+
+    # Cleanup intermediate (if applicable - keep for robustness even if using in-memory now)
+    if intermediate_s3_path:
+        try:
+            if fs.exists(intermediate_s3_path):
+                logger.warning(f"Cleaning up intermediate files: {intermediate_s3_path}")
+                fs.rm(intermediate_s3_path, recursive=True)
+        except Exception as cleanup_err:
+            logger.error(f"Failed to cleanup intermediate files at {intermediate_s3_path}: {cleanup_err}")
+
+    # Cleanup final file (might be partially written)
+    if final_s3_uri:
+        final_s3_path = final_s3_uri.replace("s3://", "")
+        try:
+            if fs.exists(final_s3_path):
+                logger.warning(f"Deleting potentially incomplete final file: {final_s3_uri}")
+                fs.rm(final_s3_path)
+        except Exception as final_cleanup_err:
+            logger.error(f"Failed to cleanup final file {final_s3_uri} after error: {final_cleanup_err}")
 
 @shared_task(bind=True, name='tasks.generate_dataset')
 def generate_dataset_task(self: Task, dataset_id: int):

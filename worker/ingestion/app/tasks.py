@@ -5,6 +5,7 @@ from pathlib import Path
 import git
 from celery import shared_task, Task # Import Task for type hinting self
 from celery.utils.log import get_task_logger
+from celery.exceptions import Terminated
 from sqlalchemy.exc import SQLAlchemyError
 
 from shared.core.config import settings
@@ -91,6 +92,14 @@ def ingest_repository_task(self: Task, repository_id: int, git_url: str):
         logger.info(f"Task {task_id}: Data extraction finished for repo ID: {repository_id}. Status: {final_status}")
         # Celery sets state to SUCCESS on successful return
         return result_payload
+    
+    except Terminated as term_exc:
+         error_msg = "Ingestion task terminated by revoke request."
+         logger.warning(f"Task {task_id}: {error_msg} (Details: {term_exc})")
+         # Update task state - No specific DB status for ingestion itself to update
+         update_task_state(self, 'FAILURE', error_msg, 0)
+         # No specific file cleanup needed for ingestion besides temp files handled by 'with'
+
 
     except (git.GitCommandError, SQLAlchemyError, ValueError, Exception) as e:
         error_type = type(e).__name__
