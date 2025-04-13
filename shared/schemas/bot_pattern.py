@@ -1,4 +1,4 @@
-# backend/app/schemas/bot_pattern.py
+# shared/schemas/bot_pattern.py
 from typing import Optional
 
 from pydantic import BaseModel, Field

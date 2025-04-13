@@ -656,7 +656,7 @@ def run_ck_analysis(
                                 relative_path = absolute_file_path.relative_to(repo_local_path)
                                 # Store the relative path string
                                 record['file'] = str(relative_path)
-                                logger.debug(f"Converted CK path '{original_file_path_str}' to relative '{record['file']}'")
+                                #logger.debug(f"Converted CK path '{original_file_path_str}' to relative '{record['file']}'")
                             else:
                                 # Path is already relative or outside the repo? Keep original but warn.
                                  logger.warning(

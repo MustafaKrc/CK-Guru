@@ -1,7 +1,7 @@
 """Seed default global bot patterns
 
-Revision ID: <your_revision_id> # Populated by Alembic
-Revises: <previous_revision_id> # Populated by Alembic
+Revision ID: e39d1ab0a19f # Populated by Alembic
+Revises: aab1c05d7332 # Populated by Alembic
 Create Date: <timestamp> # Populated by Alembic
 
 """

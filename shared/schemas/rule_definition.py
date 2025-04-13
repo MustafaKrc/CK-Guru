@@ -1,4 +1,4 @@
-# backend/app/schemas/rule_definition.py
+# shared/schemas/rule_definition.py
 from typing import Optional, List, Dict, Any
 
 from pydantic import BaseModel, Field

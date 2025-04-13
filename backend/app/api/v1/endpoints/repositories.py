@@ -4,10 +4,10 @@ from typing import List, Sequence
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import schemas # Use schemas module directly
 from app import crud    # Use crud module directly
 from app.core.celery_app import backend_celery_app
 
+from shared import schemas
 from shared.db_session import get_async_db_session 
 from shared.core.config import settings
 

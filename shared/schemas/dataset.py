@@ -1,4 +1,4 @@
-# backend/app/schemas/dataset.py
+# shared/schemas/dataset.py
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 

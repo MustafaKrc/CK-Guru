@@ -3,6 +3,7 @@
 -r backend/requirements.txt 
 -r worker/dataset/requirements.txt
 -r worker/ingestion/requirements.txt
+-r worker/ml/requirements.txt
 #-r worker/requirements.txt
 
 # Linting & formatting

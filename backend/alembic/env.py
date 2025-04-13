@@ -48,6 +48,9 @@ target_metadata = Base.metadata
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
+# This is the table that will be used to store the current version of the database
+# We set it to a custom name to avoid conflicts with other applications (optuna)
+ALEMBIC_TABLE_NAME = "ckguru_alembic_version"
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
@@ -66,6 +69,7 @@ def run_migrations_offline() -> None:
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
+        version_table=ALEMBIC_TABLE_NAME,
         dialect_opts={"paramstyle": "named"},
     )
 
@@ -73,7 +77,11 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 def do_run_migrations(connection):
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection,
+        version_table=ALEMBIC_TABLE_NAME,
+        target_metadata=target_metadata
+    )
 
     with context.begin_transaction():
         context.run_migrations()

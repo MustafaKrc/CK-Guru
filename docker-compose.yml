@@ -72,40 +72,41 @@ services:
       - minio
       - redis
 
-  ######################### Commented out for future gpu bounded worker
-  # #################
-  # # Celery Worker
-  # #################
-  # worker:
-  #   build:
-  #     context: .
-  #     dockerfile: worker/Dockerfile
-  #   container_name: ckguru_worker
-  #   volumes:
-  #     - ./worker/app:/app/app # Optional: hot-reload 
-  #     - ./shared:/app/shared # Shared directory hot-reload 
-  #     - app_data:/app/persistent_data # For git clones
-  #   env_file:
-  #     - .env
-  #   environment:
-  #     STORAGE_BASE_PATH: /app/persistent_data
-  #     # Ensure CUDA devices are visible (often handled by deploy key, but can be explicit)
-  #     # NVIDIA_VISIBLE_DEVICES: all # Set this if needed
-  #     NVIDIA_DRIVER_CAPABILITIES: compute,utility # Often needed
-  #   depends_on:
-  #     - broker
-  #     - db
-  #     - redis
-  #     - minio
-  #   # <<< --- GPU Configuration --- >>>
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             # count: 1 # Request exactly one GPU
-  #             count: all # Request all available GPUs
-  #             capabilities: [gpu] # Request GPU capabilities
+  #################
+  # ML Worker
+  #################
+  ml-worker:
+    build:
+      context: .
+      dockerfile: worker/ml/Dockerfile
+    container_name: ckguru_ml_worker
+    volumes:
+      - ./worker/ml/app:/app/app         # ML-specific code hot-reload
+      - ./worker/ml/services:/app/services # ML services hot-reload
+      - ./shared:/app/shared             # Shared code hot-reload
+      # Mount data volume if needed for temporary storage? Usually S3 is preferred.
+      # - app_data:/app/persistent_data
+    env_file:
+      - .env
+    environment:
+      # Pass log level if needed, or rely on default in CMD
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # Ensure CUDA devices are visible
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      # NVIDIA_VISIBLE_DEVICES: all # Often set by Docker runtime automatically with deploy key
+    depends_on:
+      - broker
+      - db
+      - minio
+      - redis # If using Redis as result backend
+    # <<< --- GPU Configuration --- >>>
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all # Or specify e.g., 1
+              capabilities: [gpu]
 
   #################
   # Object Storage (MinIO)
@@ -214,6 +215,23 @@ services:
       timeout: 5s
       retries: 5
 
+  #################
+  # Monitoring
+  #################
+  flower:
+    image: mher/flower:1.2.0
+    container_name: ckguru_flower
+    #command: ["flower", "--broker=${CELERY_BROKER_URL}", "--persistent=True", "--db=/flower_data/flower.db"]
+    volumes:
+      - flower_data:/data # Persist Flower's state
+    ports:
+      - "5555:5555" # Flower web UI port
+    env_file:
+      - .env # Needs broker URL
+    depends_on:
+      - broker # Wait for the broker to be available
+      - redis # Often useful to see result backend status too
+
 #################
 # Volumes
 #################
@@ -223,3 +241,4 @@ volumes:
   redis_data:    # Stores Redis data (optional, but good for persistence)
   minio_data:    # Stores MinIO data (buckets/objects) for datasets, models, etc.
   rabbitmq_data: # Stores RabbitMQ message data, user configs, etc.
+  flower_data:   # Stores Flower monitoring DB

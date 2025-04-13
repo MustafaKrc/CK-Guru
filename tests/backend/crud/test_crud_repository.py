@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 # Import the module and specific functions/classes to test
 from backend.app.crud import crud_repository
-from backend.app.schemas.repository import RepositoryCreate, RepositoryUpdate
+from shared.schemas.repository import RepositoryCreate, RepositoryUpdate
 from shared.db.models import Repository # Import the actual model
 
 

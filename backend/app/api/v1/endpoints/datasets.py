@@ -12,10 +12,11 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import schemas, crud
-from app.schemas import RuleDefinition as BackendRuleDefinitionSchema
+from app import crud
 from app.core.celery_app import backend_celery_app
 
+from shared import schemas
+from shared.schemas import RuleDefinition as BackendRuleDefinitionSchema
 from shared.core.config import settings 
 from shared.db_session import get_async_db_session
 from shared.db.models.dataset import DatasetStatusEnum

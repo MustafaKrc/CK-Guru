@@ -6,8 +6,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.schemas.dataset import DatasetCreate, DatasetUpdate, DatasetStatusUpdate
-
+from shared.schemas.dataset import DatasetCreate, DatasetUpdate, DatasetStatusUpdate
 from shared.core.config import settings
 from shared.db.models.dataset import Dataset, DatasetStatusEnum
 

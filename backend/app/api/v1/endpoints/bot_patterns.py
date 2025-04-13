@@ -5,8 +5,9 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import schemas, crud
+from app import crud
 
+from shared import schemas
 from shared.core.config import settings
 from shared.db_session import get_async_db_session 
 

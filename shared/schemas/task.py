@@ -1,4 +1,4 @@
-# backend/app/schemas/task.py
+# shared/schemas/task.py
 import enum
 from typing import Any, Optional
 

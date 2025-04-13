@@ -6,9 +6,9 @@ from fastapi import APIRouter, HTTPException, Query, status, Depends
 from celery.result import AsyncResult
 from celery.exceptions import CeleryError
 
-from app import schemas # Use schemas module directly
 from app.core.celery_app import backend_celery_app as celery_app # Import the Celery app instance
 
+from shared import schemas
 from shared.core.config import settings
 
 logger = logging.getLogger(__name__)

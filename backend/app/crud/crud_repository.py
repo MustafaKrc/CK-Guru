@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload # If needed for eager loading relationships later
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.schemas.repository import RepositoryCreate, RepositoryUpdate
+from shared.schemas.repository import RepositoryCreate, RepositoryUpdate
 
 from shared.db.models import Repository
 from shared.core.config import settings

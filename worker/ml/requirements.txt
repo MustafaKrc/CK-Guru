@@ -1,0 +1,25 @@
+# worker/ml/requirements.txt
+
+# --- Core ---
+celery[redis]>=5.0
+psycopg2-binary>=2.9 # Sync driver for SQLAlchemy
+pydantic>=2.0
+pydantic-settings>=2.0
+python-dotenv>=1.0.0
+
+# --- Database ---
+sqlalchemy>=2.0
+asyncpg>=0.25 # Async driver for SQLAlchemy
+
+# --- Data ---
+pandas>=1.5,<3.0
+numpy>=1.20
+pyarrow>=10.0 # For Parquet
+
+# --- Data Storage ---
+fsspec>=2023.0.0
+s3fs>=2023.0.0
+
+# --- ML - Add specific libraries later ---
+optuna>=3.0 # Add Optuna early as it impacts DB setup slightly
+scikit-learn>=1.5 # Example: Add in Phase 2

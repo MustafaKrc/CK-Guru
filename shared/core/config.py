@@ -1,11 +1,12 @@
-# worker/app/core/config.py
+# shared/core/config.py
 import os
+import re
 from typing import Any, Dict, Optional # Use Optional for clarity, same as | None
 from pathlib import Path
 
 # Using pydantic-settings (recommended for Pydantic v2+)
 # If using Pydantic v1, use `from pydantic import BaseSettings`
-from pydantic import Field, AmqpDsn, PostgresDsn, RedisDsn, SecretStr  # For URL validation
+from pydantic import Field, AmqpDsn, PostgresDsn, RedisDsn, SecretStr, computed_field  # For URL validation
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -82,6 +83,35 @@ class Settings(BaseSettings):
 
         # Add other potential s3fs config like requester_pays etc. if needed
         return opts
+    
+        # --- Optuna Configuration ---
+    # Construct the sync Optuna DB URL from the main async DATABASE_URL
+    @computed_field(return_type=str)
+    @property
+    def OPTUNA_DB_URL(self) -> str:
+        """
+        Generates the synchronous Database URL for Optuna from the main async DATABASE_URL.
+        Replaces asyncpg driver with psycopg2.
+        """
+        # Ensure DATABASE_URL is loaded and is a string before manipulation
+        if not self.DATABASE_URL:
+            raise ValueError("DATABASE_URL is not configured.")
+        
+        db_url_str = str(self.DATABASE_URL)
+
+        # Replace the async driver part (+asyncpg) with a sync one (psycopg2 assumed)
+        # Adjust "+psycopg2" if your sync driver differs
+        sync_db_url = re.sub(r'\+asyncpg', '+psycopg2', db_url_str)
+        # If no driver suffix was present, assume we need to add the sync one
+        if '+psycopg2' not in sync_db_url and sync_db_url.startswith('postgresql://'):
+             sync_db_url = sync_db_url.replace('postgresql://', 'postgresql+psycopg2://')
+             
+        if not sync_db_url.startswith('postgresql+psycopg2://'):
+             logger.warning(f"Could not reliably convert DATABASE_URL ('{db_url_str}') to Optuna sync URL. Using original.")
+             # Optionally return None or raise error, or return original as fallback
+             return db_url_str # Fallback, might cause issues if original is async
+
+        return sync_db_url
 
 
     # --- Other Worker Settings ---
@@ -105,6 +135,7 @@ logger.info(f"Database URL: {'Configured' if settings.DATABASE_URL else 'Not Con
 logger.info(f"Object Storage Type: {settings.OBJECT_STORAGE_TYPE}")
 logger.info(f"S3 Bucket: {settings.S3_BUCKET_NAME}")
 logger.info(f"S3 Endpoint URL: {settings.S3_ENDPOINT_URL or 'Default (AWS)'}")
+logger.info(f"Optuna DB URL: {settings.OPTUNA_DB_URL}")
 if settings.GITHUB_TOKEN:
     logger.info("GitHub Token: Loaded (Token value not logged)")
 else:
