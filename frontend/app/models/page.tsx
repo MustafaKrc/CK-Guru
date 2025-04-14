@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { MoreHorizontal, Eye, Play, BarChart3, Plus } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import MainLayout from "@/components/layouts/main-layout"
+import { MainLayout } from "@/components/main-layout"
 
 // Mock data for models
 const mockModels = [
