@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -18,9 +18,26 @@ import {
   MonitorPlay,
   Settings,
   Menu,
+  LogOut,
+  User,
+  Moon,
+  Sun,
+  Minimize,
+  Maximize,
 } from "lucide-react"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useAuth } from "@/components/auth/auth-provider"
+import { useTheme } from "@/components/theme-provider"
 
 interface MainLayoutProps {
   children: React.ReactNode
@@ -29,11 +46,25 @@ interface MainLayoutProps {
 export function MainLayout({ children }: MainLayoutProps) {
   const pathname = usePathname()
   const [isOpen, setIsOpen] = useState(false)
+  const { user, logout, toggleDarkMode, toggleCompactView } = useAuth()
+  const { theme } = useTheme()
+  const [isCompact, setIsCompact] = useState(false)
+
+  // Set compact view based on user preferences
+  useEffect(() => {
+    if (user?.preferences?.compactView) {
+      document.body.classList.add("compact-view")
+      setIsCompact(true)
+    } else {
+      document.body.classList.remove("compact-view")
+      setIsCompact(false)
+    }
+  }, [user?.preferences?.compactView])
 
   const routes = [
     {
       name: "Dashboard",
-      path: "/",
+      path: "/dashboard",
       icon: <Home className="h-5 w-5" />,
     },
     {
@@ -113,7 +144,7 @@ export function MainLayout({ children }: MainLayoutProps) {
             </nav>
           </SheetContent>
         </Sheet>
-        <Link href="/" className="flex items-center gap-2 text-lg font-semibold">
+        <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold">
           <GitBranch className="h-6 w-6 text-primary" />
           <span>CK-Guru</span>
         </Link>
@@ -131,6 +162,58 @@ export function MainLayout({ children }: MainLayoutProps) {
             </Link>
           ))}
         </nav>
+        <div className="ml-auto flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleDarkMode}
+            className="mr-1"
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            <span className="sr-only">Toggle theme</span>
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleCompactView}
+            className="mr-2"
+            title={isCompact ? "Switch to normal view" : "Switch to compact view"}
+          >
+            {isCompact ? <Maximize className="h-5 w-5" /> : <Minimize className="h-5 w-5" />}
+            <span className="sr-only">Toggle compact view</span>
+          </Button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={user?.avatar || "/placeholder.svg"} alt={user?.name || "User"} />
+                  <AvatarFallback>{user?.name?.charAt(0) || "U"}</AvatarFallback>
+                </Avatar>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>My Account</DropdownMenuLabel>
+              <DropdownMenuItem disabled>
+                <User className="mr-2 h-4 w-4" />
+                <span>{user?.name}</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href="/profile">
+                  <Settings className="mr-2 h-4 w-4" />
+                  <span>Settings</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={logout}>
+                <LogOut className="mr-2 h-4 w-4" />
+                <span>Log out</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </header>
       <main className="flex-1">{children}</main>
     </div>

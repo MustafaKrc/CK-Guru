@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { MainLayout } from "@/components/main-layout"
 import { Button } from "@/components/ui/button"
@@ -122,6 +122,7 @@ export default function ModelComparisonPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const modelIds = searchParams.get("models")?.split(",") || []
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
   const [selectedModels, setSelectedModels] = useState<any[]>([])
 
@@ -132,6 +133,13 @@ export default function ModelComparisonPage() {
       setSelectedModels(models)
     }
   }, [modelIds])
+
+  // Draw radar chart when selected models change
+  useEffect(() => {
+    if (selectedModels.length >= 2 && canvasRef.current) {
+      drawRadarChart(canvasRef.current, selectedModels)
+    }
+  }, [selectedModels])
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString()
@@ -159,6 +167,144 @@ export default function ModelComparisonPage() {
   const isBestMetric = (model: any, metricName: string) => {
     const bestValue = getBestMetricValue(metricName)
     return model.metrics[metricName as keyof typeof model.metrics] === bestValue
+  }
+
+  // Function to draw radar chart
+  const drawRadarChart = (canvas: HTMLCanvasElement, models: any[]) => {
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+    // Set canvas dimensions
+    const width = canvas.width
+    const height = canvas.height
+    const centerX = width / 2
+    const centerY = height / 2
+    const radius = Math.min(centerX, centerY) * 0.8
+
+    // Define metrics to display
+    const metrics = ["accuracy", "f1", "precision", "recall", "auc"]
+    const metricLabels = ["Accuracy", "F1 Score", "Precision", "Recall", "AUC"]
+    const numMetrics = metrics.length
+
+    // Define colors for each model
+    const colors = [
+      { stroke: "rgba(59, 130, 246, 0.8)", fill: "rgba(59, 130, 246, 0.2)" }, // Blue
+      { stroke: "rgba(139, 92, 246, 0.8)", fill: "rgba(139, 92, 246, 0.2)" }, // Purple
+      { stroke: "rgba(16, 185, 129, 0.8)", fill: "rgba(16, 185, 129, 0.2)" }, // Green
+      { stroke: "rgba(245, 158, 11, 0.8)", fill: "rgba(245, 158, 11, 0.2)" }, // Yellow
+    ]
+
+    // Draw axis lines and labels
+    ctx.strokeStyle = "rgba(156, 163, 175, 0.5)"
+    ctx.fillStyle = "rgba(107, 114, 128, 1)"
+    ctx.font = "12px sans-serif"
+    ctx.textAlign = "center"
+    ctx.textBaseline = "middle"
+
+    // Draw concentric circles
+    const numCircles = 5
+    for (let i = 1; i <= numCircles; i++) {
+      const circleRadius = (radius * i) / numCircles
+      ctx.beginPath()
+      ctx.arc(centerX, centerY, circleRadius, 0, 2 * Math.PI)
+      ctx.stroke()
+
+      // Add value label for the first circle only
+      if (i === 1) {
+        ctx.fillText((i * 0.2).toFixed(1), centerX, centerY - circleRadius - 5)
+      }
+    }
+
+    // Draw axis lines and labels
+    for (let i = 0; i < numMetrics; i++) {
+      const angle = (i * 2 * Math.PI) / numMetrics - Math.PI / 2
+      const x = centerX + radius * Math.cos(angle)
+      const y = centerY + radius * Math.sin(angle)
+
+      // Draw axis line
+      ctx.beginPath()
+      ctx.moveTo(centerX, centerY)
+      ctx.lineTo(x, y)
+      ctx.stroke()
+
+      // Draw axis label
+      const labelX = centerX + (radius + 20) * Math.cos(angle)
+      const labelY = centerY + (radius + 20) * Math.sin(angle)
+      ctx.fillText(metricLabels[i], labelX, labelY)
+    }
+
+    // Draw data for each model
+    models.forEach((model, modelIndex) => {
+      const color = colors[modelIndex % colors.length]
+
+      // Draw model data
+      ctx.beginPath()
+      metrics.forEach((metric, i) => {
+        const value = model.metrics[metric as keyof typeof model.metrics] as number
+        const angle = (i * 2 * Math.PI) / numMetrics - Math.PI / 2
+        const x = centerX + radius * value * Math.cos(angle)
+        const y = centerY + radius * value * Math.sin(angle)
+
+        if (i === 0) {
+          ctx.moveTo(x, y)
+        } else {
+          ctx.lineTo(x, y)
+        }
+      })
+
+      // Close the path
+      const firstMetric = metrics[0]
+      const firstValue = model.metrics[firstMetric as keyof typeof model.metrics] as number
+      const firstAngle = -Math.PI / 2
+      const firstX = centerX + radius * firstValue * Math.cos(firstAngle)
+      const firstY = centerY + radius * firstValue * Math.sin(firstAngle)
+      ctx.lineTo(firstX, firstY)
+
+      // Fill and stroke
+      ctx.fillStyle = color.fill
+      ctx.fill()
+      ctx.strokeStyle = color.stroke
+      ctx.lineWidth = 2
+      ctx.stroke()
+
+      // Add dots at each metric point
+      metrics.forEach((metric, i) => {
+        const value = model.metrics[metric as keyof typeof model.metrics] as number
+        const angle = (i * 2 * Math.PI) / numMetrics - Math.PI / 2
+        const x = centerX + radius * value * Math.cos(angle)
+        const y = centerY + radius * value * Math.sin(angle)
+
+        ctx.beginPath()
+        ctx.arc(x, y, 4, 0, 2 * Math.PI)
+        ctx.fillStyle = color.stroke
+        ctx.fill()
+      })
+    })
+
+    // Draw legend
+    const legendX = 20
+    let legendY = 20
+
+    models.forEach((model, modelIndex) => {
+      const color = colors[modelIndex % colors.length]
+
+      // Draw legend item
+      ctx.fillStyle = color.stroke
+      ctx.fillRect(legendX, legendY, 15, 15)
+
+      // Draw model name
+      ctx.fillStyle = "rgba(0, 0, 0, 0.8)"
+      ctx.font = "14px sans-serif"
+      ctx.textAlign = "left"
+      ctx.textBaseline = "middle"
+      ctx.fillText(model.name, legendX + 25, legendY + 7.5)
+
+      // Move to next legend item
+      legendY += 25
+    })
   }
 
   return (
@@ -253,6 +399,18 @@ export default function ModelComparisonPage() {
                       ))}
                     </TableBody>
                   </Table>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Radar Chart Comparison</CardTitle>
+                <CardDescription>Visual comparison of model performance across key metrics</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex justify-center">
+                  <canvas ref={canvasRef} width={600} height={500} className="max-w-full"></canvas>
                 </div>
               </CardContent>
             </Card>

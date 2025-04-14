@@ -505,7 +505,9 @@ export default function JobsPage() {
                             {job.model}
                           </Link>
                         </TableCell>
-                        <TableCell className="font-mono text-sm">{job.commitHash.substring(0, 8)}</TableCell>
+                        <TableCell className="font-mono text-sm">
+                          {job.commitHash ? job.commitHash.substring(0, 8) : "N/A"}
+                        </TableCell>
                         <TableCell>{getStatusBadge(job.status)}</TableCell>
                         <TableCell>{formatDate(job.dateCreated)}</TableCell>
                         <TableCell>{formatDate(job.dateCompleted)}</TableCell>

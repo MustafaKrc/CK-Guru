@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { MainLayout } from "@/components/main-layout"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -16,8 +17,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { MoreHorizontal, Eye, Play, BarChart3, Plus } from "lucide-react"
-import Link from "next/link"
 import { useToast } from "@/hooks/use-toast"
+import MainLayout from "@/components/layouts/main-layout"
 
 // Mock data for models
 const mockModels = [
@@ -113,6 +114,7 @@ export default function ModelsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedModels, setSelectedModels] = useState<string[]>([])
   const { toast } = useToast()
+  const router = useRouter()
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString()
@@ -146,11 +148,8 @@ export default function ModelsPage() {
       return
     }
 
-    // In a real app, this would navigate to the comparison page with the selected models
-    toast({
-      title: "Navigating to comparison",
-      description: `Comparing ${selectedModels.length} selected models`,
-    })
+    // Navigate to the comparison page with the selected models
+    router.push(`/model-comparison?models=${selectedModels.join(",")}`)
   }
 
   const filteredModels = models.filter((model) => {
