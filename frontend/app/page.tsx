@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/auth/auth-provider"
 import { Button } from "@/components/ui/button"
 import { GitBranch, BarChart3, Database, GitMerge, ArrowRight, Moon, Sun, Minimize, Maximize } from "lucide-react"
@@ -11,27 +10,21 @@ import { useTheme } from "@/components/theme-provider"
 
 export default function LandingPage() {
   const { isAuthenticated } = useAuth()
-  const router = useRouter()
   const { theme, setTheme } = useTheme()
   const [isCompact, setIsCompact] = useState(false)
-  const [isMounted, setIsMounted] = useState(false) // Add isMounted state
+  const [mounted, setMounted] = useState(false) // Add mounted state
 
-  // Initialize compact view from localStorage and set mounted state
+  // Initialize compact view from localStorage and set mounted
   useEffect(() => {
-    setIsMounted(true) // Set mounted to true after initial render
     const storedCompactView = localStorage.getItem("ck-guru-compact-view")
     if (storedCompactView === "true") {
       document.body.classList.add("compact-view")
       setIsCompact(true)
     }
+    setMounted(true) // Set mounted to true after initial client render
   }, [])
 
-  // Redirect to dashboard if already authenticated
-  useEffect(() => {
-    if (isAuthenticated) {
-      router.push("/dashboard")
-    }
-  }, [isAuthenticated, router])
+  // Removed the redirect to dashboard for authenticated users
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark")
@@ -69,45 +62,54 @@ export default function LandingPage() {
           </Link>
         </nav>
         <div className="ml-auto flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleTheme}
-            className="mr-1"
-            // Title can also cause mismatch if theme isn't mounted yet
-            title={isMounted ? (theme === "dark" ? "Switch to light mode" : "Switch to dark mode") : "Toggle theme"}
-          >
-            {/* Conditionally render icon based on isMounted */}
-            {isMounted ? (
-              theme === "dark" ? (
-                <Sun className="h-5 w-5" />
-              ) : (
-                <Moon className="h-5 w-5" />
-              )
-            ) : (
-              // Render a placeholder or default icon during SSR/initial client render
-              <Moon className="h-5 w-5" /> // Or Sun, or a neutral icon
-            )}
-            <span className="sr-only">Toggle theme</span>
-          </Button>
+          {mounted && ( // Conditionally render theme toggle
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleTheme}
+              className="mr-1"
+              title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+              <span className="sr-only">Toggle theme</span>
+            </Button>
+          )}
 
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleCompactView}
-            className="mr-2"
-            title={isCompact ? "Switch to normal view" : "Switch to compact view"}
-          >
-            {isCompact ? <Maximize className="h-5 w-5" /> : <Minimize className="h-5 w-5" />}
-            <span className="sr-only">Toggle compact view</span>
-          </Button>
+          {mounted && ( // Conditionally render compact view toggle
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleCompactView}
+              className="mr-2"
+              title={isCompact ? "Switch to normal view" : "Switch to compact view"}
+            >
+              {isCompact ? <Maximize className="h-5 w-5" /> : <Minimize className="h-5 w-5" />}
+              <span className="sr-only">Toggle compact view</span>
+            </Button>
+          )}
 
-          <Button variant="ghost" asChild>
-            <Link href="/login">Sign in</Link>
-          </Button>
-          <Button asChild>
-            <Link href="/register">Sign up</Link>
-          </Button>
+          {/* Render placeholder buttons if not mounted to maintain layout */}
+          {!mounted && (
+            <>
+              <div className="mr-1 h-10 w-10"></div> {/* Placeholder for theme button */}
+              <div className="mr-2 h-10 w-10"></div> {/* Placeholder for compact button */}
+            </>
+          )}
+
+          {isAuthenticated ? (
+            <Button asChild>
+              <Link href="/dashboard">Dashboard</Link>
+            </Button>
+          ) : (
+            <>
+              <Button variant="ghost" asChild>
+                <Link href="/login">Sign in</Link>
+              </Button>
+              <Button asChild>
+                <Link href="/register">Sign up</Link>
+              </Button>
+            </>
+          )}
         </div>
       </header>
 
@@ -125,12 +127,21 @@ export default function LandingPage() {
                   reliable software.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4">
-                  <Button size="lg" asChild>
-                    <Link href="/register">
-                      Get Started
-                      <ArrowRight className="ml-2 h-4 w-4" />
-                    </Link>
-                  </Button>
+                  {isAuthenticated ? (
+                    <Button size="lg" asChild>
+                      <Link href="/dashboard">
+                        Go to Dashboard
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button size="lg" asChild>
+                      <Link href="/register">
+                        Get Started
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Link>
+                    </Button>
+                  )}
                   <Button size="lg" variant="outline" asChild>
                     <Link href="/public-repositories">Explore Public Models</Link>
                   </Button>
@@ -318,9 +329,15 @@ export default function LandingPage() {
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-8">
               Join thousands of developers who use CK-Guru to build more reliable software
             </p>
-            <Button size="lg" asChild>
-              <Link href="/register">Get Started for Free</Link>
-            </Button>
+            {isAuthenticated ? (
+              <Button size="lg" asChild>
+                <Link href="/dashboard">Go to Dashboard</Link>
+              </Button>
+            ) : (
+              <Button size="lg" asChild>
+                <Link href="/register">Get Started for Free</Link>
+              </Button>
+            )}
           </div>
         </section>
       </main>

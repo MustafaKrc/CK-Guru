@@ -1,250 +1,350 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
-import { MainLayout } from "@/components/main-layout"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Download, Info, Search, X } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, BarChart3, Download, Eye } from "lucide-react"
-import Link from "next/link"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Input } from "@/components/ui/input"
+import { MainLayout } from "@/components/main-layout"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Checkbox } from "@/components/ui/checkbox"
 
-// Mock data for models
-const mockModels = [
+interface ModelData {
+  id: string
+  name: string
+  type: string
+  accuracy: number
+  precision: number
+  recall: number
+  f1Score: number
+  auc: number
+  trainingTime: number
+  inferenceTime: number
+  lastUpdated: string
+  size: number
+}
+
+const models: ModelData[] = [
   {
-    id: "1",
-    name: "RandomForest-frontend-1",
-    version: "1.0.0",
-    type: "RandomForest",
-    dataset: "frontend-app-dataset-1",
-    datasetId: "1",
-    repository: "frontend-app",
-    repositoryId: "1",
-    dateCreated: "2023-04-16T10:20:00Z",
-    sourceJob: "train-job-1",
-    hyperparameters: {
-      n_estimators: 100,
-      max_depth: 10,
-      min_samples_split: 2,
-      min_samples_leaf: 1,
-      bootstrap: true,
-    },
-    metrics: {
-      f1: 0.85,
-      accuracy: 0.88,
-      precision: 0.82,
-      recall: 0.89,
-      auc: 0.91,
-    },
+    id: "model1",
+    name: "CodeQuality-GPT",
+    type: "Transformer",
+    accuracy: 0.92,
+    precision: 0.89,
+    recall: 0.94,
+    f1Score: 0.91,
+    auc: 0.95,
+    trainingTime: 4.5,
+    inferenceTime: 0.12,
+    lastUpdated: "2023-09-15",
+    size: 1.2,
   },
   {
-    id: "2",
-    name: "XGBoost-frontend-1",
-    version: "1.0.0",
-    type: "XGBoost",
-    dataset: "frontend-app-dataset-1",
-    datasetId: "1",
-    repository: "frontend-app",
-    repositoryId: "1",
-    dateCreated: "2023-04-17T09:15:00Z",
-    sourceJob: "train-job-2",
-    hyperparameters: {
-      n_estimators: 200,
-      max_depth: 8,
-      learning_rate: 0.1,
-      subsample: 0.8,
-      colsample_bytree: 0.8,
-    },
-    metrics: {
-      f1: 0.82,
-      accuracy: 0.86,
-      precision: 0.8,
-      recall: 0.84,
-      auc: 0.89,
-    },
+    id: "model2",
+    name: "BugDetector-XGBoost",
+    type: "Gradient Boosting",
+    accuracy: 0.88,
+    precision: 0.92,
+    recall: 0.85,
+    f1Score: 0.88,
+    auc: 0.91,
+    trainingTime: 2.1,
+    inferenceTime: 0.05,
+    lastUpdated: "2023-09-10",
+    size: 0.4,
   },
   {
-    id: "3",
-    name: "RandomForest-backend-1",
-    version: "1.0.0",
-    type: "RandomForest",
-    dataset: "backend-api-dataset-1",
-    datasetId: "3",
-    repository: "backend-api",
-    repositoryId: "2",
-    dateCreated: "2023-04-14T11:30:00Z",
-    sourceJob: "train-job-3",
-    hyperparameters: {
-      n_estimators: 150,
-      max_depth: 12,
-      min_samples_split: 3,
-      min_samples_leaf: 2,
-      bootstrap: true,
-    },
-    metrics: {
-      f1: 0.79,
-      accuracy: 0.83,
-      precision: 0.77,
-      recall: 0.81,
-      auc: 0.85,
-    },
+    id: "model3",
+    name: "CodeReviewer-BERT",
+    type: "Transformer",
+    accuracy: 0.9,
+    precision: 0.87,
+    recall: 0.92,
+    f1Score: 0.89,
+    auc: 0.93,
+    trainingTime: 5.2,
+    inferenceTime: 0.15,
+    lastUpdated: "2023-09-05",
+    size: 1.5,
   },
   {
-    id: "4",
-    name: "LogisticRegression-frontend-1",
-    version: "1.0.0",
-    type: "LogisticRegression",
-    dataset: "frontend-app-dataset-2",
-    datasetId: "2",
-    repository: "frontend-app",
-    repositoryId: "1",
-    dateCreated: "2023-04-19T14:45:00Z",
-    sourceJob: "train-job-4",
-    hyperparameters: {
-      C: 1.0,
-      penalty: "l2",
-      solver: "lbfgs",
-      max_iter: 100,
-      multi_class: "auto",
-    },
-    metrics: {
-      f1: 0.76,
-      accuracy: 0.8,
-      precision: 0.75,
-      recall: 0.78,
-      auc: 0.82,
-    },
+    id: "model4",
+    name: "StyleChecker-RandomForest",
+    type: "Ensemble",
+    accuracy: 0.85,
+    precision: 0.84,
+    recall: 0.86,
+    f1Score: 0.85,
+    auc: 0.88,
+    trainingTime: 1.8,
+    inferenceTime: 0.04,
+    lastUpdated: "2023-08-28",
+    size: 0.3,
+  },
+  {
+    id: "model5",
+    name: "SecurityAnalyzer-CNN",
+    type: "Neural Network",
+    accuracy: 0.91,
+    precision: 0.9,
+    recall: 0.89,
+    f1Score: 0.9,
+    auc: 0.94,
+    trainingTime: 6.2,
+    inferenceTime: 0.18,
+    lastUpdated: "2023-09-20",
+    size: 2.1,
+  },
+  {
+    id: "model6",
+    name: "PerformancePredictor-LightGBM",
+    type: "Gradient Boosting",
+    accuracy: 0.87,
+    precision: 0.86,
+    recall: 0.88,
+    f1Score: 0.87,
+    auc: 0.9,
+    trainingTime: 1.9,
+    inferenceTime: 0.06,
+    lastUpdated: "2023-09-12",
+    size: 0.5,
+  },
+  {
+    id: "model7",
+    name: "DependencyAnalyzer-SVM",
+    type: "SVM",
+    accuracy: 0.83,
+    precision: 0.82,
+    recall: 0.84,
+    f1Score: 0.83,
+    auc: 0.86,
+    trainingTime: 1.2,
+    inferenceTime: 0.03,
+    lastUpdated: "2023-08-25",
+    size: 0.2,
+  },
+  {
+    id: "model8",
+    name: "CodeComplexity-RNN",
+    type: "Neural Network",
+    accuracy: 0.89,
+    precision: 0.88,
+    recall: 0.9,
+    f1Score: 0.89,
+    auc: 0.92,
+    trainingTime: 5.8,
+    inferenceTime: 0.14,
+    lastUpdated: "2023-09-08",
+    size: 1.8,
   },
 ]
 
+// Model types for filtering
+const modelTypes = ["Transformer", "Gradient Boosting", "Ensemble", "Neural Network", "SVM"]
+
 export default function ModelComparisonPage() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const modelIds = searchParams.get("models")?.split(",") || []
+  const [selectedModels, setSelectedModels] = useState<string[]>([])
+  const [comparisonMetric, setComparisonMetric] = useState<string>("accuracy")
+  const [searchQuery, setSearchQuery] = useState("")
+  const [typeFilter, setTypeFilter] = useState("all")
+  const [activeTab, setActiveTab] = useState("comparison")
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const radarCanvasRef = useRef<HTMLCanvasElement>(null)
 
-  const [selectedModels, setSelectedModels] = useState<any[]>([])
-
+  // Effect to redraw charts when tab changes or models are selected
   useEffect(() => {
-    if (modelIds.length > 0) {
-      // In a real app, this would be an API call to fetch the models
-      const models = mockModels.filter((model) => modelIds.includes(model.id))
-      setSelectedModels(models)
+    if (selectedModels.length > 0) {
+      if (activeTab === "comparison") {
+        drawComparisonChart()
+        drawRadarChart()
+      }
     }
-  }, [modelIds])
+  }, [selectedModels, comparisonMetric, activeTab])
 
-  // Draw radar chart when selected models change
-  useEffect(() => {
-    if (selectedModels.length >= 2 && canvasRef.current) {
-      drawRadarChart(canvasRef.current, selectedModels)
-    }
-  }, [selectedModels])
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString()
+  const toggleModelSelection = (modelId: string) => {
+    setSelectedModels((prev) => {
+      if (prev.includes(modelId)) {
+        return prev.filter((id) => id !== modelId)
+      } else {
+        // Limit to max 4 models for better visualization
+        if (prev.length >= 4) {
+          return [...prev.slice(1), modelId]
+        }
+        return [...prev, modelId]
+      }
+    })
   }
 
-  const handleRemoveModel = (modelId: string) => {
-    const updatedModels = selectedModels.filter((model) => model.id !== modelId)
-    setSelectedModels(updatedModels)
-
-    // Update URL
-    const newModelIds = updatedModels.map((model) => model.id).join(",")
-    if (newModelIds) {
-      router.push(`/model-comparison?models=${newModelIds}`)
-    } else {
-      router.push("/models")
-    }
+  const clearModelSelection = () => {
+    setSelectedModels([])
   }
 
-  // Find the best metric value across all models
-  const getBestMetricValue = (metricName: string) => {
-    return Math.max(...selectedModels.map((model) => model.metrics[metricName as keyof typeof model.metrics] as number))
-  }
+  const filteredModels = models.filter((model) => {
+    const matchesSearch = searchQuery ? model.name.toLowerCase().includes(searchQuery.toLowerCase()) : true
+    const matchesType = typeFilter === "all" ? true : model.type === typeFilter
+    return matchesSearch && matchesType
+  })
 
-  // Check if this model has the best value for a specific metric
-  const isBestMetric = (model: any, metricName: string) => {
-    const bestValue = getBestMetricValue(metricName)
-    return model.metrics[metricName as keyof typeof model.metrics] === bestValue
-  }
+  const drawComparisonChart = () => {
+    const canvas = canvasRef.current
+    if (!canvas) return
 
-  // Function to draw radar chart
-  const drawRadarChart = (canvas: HTMLCanvasElement, models: any[]) => {
     const ctx = canvas.getContext("2d")
     if (!ctx) return
 
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-    // Set canvas dimensions
-    const width = canvas.width
-    const height = canvas.height
-    const centerX = width / 2
-    const centerY = height / 2
-    const radius = Math.min(centerX, centerY) * 0.8
+    const filteredModels = models.filter((model) => selectedModels.includes(model.id))
+    const metricValues = filteredModels.map((model) => model[comparisonMetric as keyof ModelData] as number)
+    const maxValue = Math.max(...metricValues) * 1.2
+    const barWidth = canvas.width / (filteredModels.length * 2)
+    const colors = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444"]
 
-    // Define metrics to display
-    const metrics = ["accuracy", "f1", "precision", "recall", "auc"]
-    const metricLabels = ["Accuracy", "F1 Score", "Precision", "Recall", "AUC"]
-    const numMetrics = metrics.length
+    // Draw bars
+    filteredModels.forEach((model, index) => {
+      const value = model[comparisonMetric as keyof ModelData] as number
+      const barHeight = (value / maxValue) * (canvas.height - 60)
+      const x = index * (barWidth * 2) + barWidth / 2
+      const y = canvas.height - barHeight - 30
 
-    // Define colors for each model
-    const colors = [
-      { stroke: "rgba(59, 130, 246, 0.8)", fill: "rgba(59, 130, 246, 0.2)" }, // Blue
-      { stroke: "rgba(139, 92, 246, 0.8)", fill: "rgba(139, 92, 246, 0.2)" }, // Purple
-      { stroke: "rgba(16, 185, 129, 0.8)", fill: "rgba(16, 185, 129, 0.2)" }, // Green
-      { stroke: "rgba(245, 158, 11, 0.8)", fill: "rgba(245, 158, 11, 0.2)" }, // Yellow
-    ]
+      // Draw bar
+      ctx.fillStyle = colors[index % colors.length]
+      ctx.fillRect(x, y, barWidth, barHeight)
 
-    // Draw axis lines and labels
-    ctx.strokeStyle = "rgba(156, 163, 175, 0.5)"
-    ctx.fillStyle = "rgba(107, 114, 128, 1)"
-    ctx.font = "12px sans-serif"
-    ctx.textAlign = "center"
-    ctx.textBaseline = "middle"
+      // Draw model name
+      ctx.fillStyle = "#888888"
+      ctx.font = "12px Arial"
+      ctx.textAlign = "center"
+      ctx.fillText(model.name.split("-")[0], x + barWidth / 2, canvas.height - 10)
 
-    // Draw concentric circles
-    const numCircles = 5
-    for (let i = 1; i <= numCircles; i++) {
-      const circleRadius = (radius * i) / numCircles
+      // Draw value
+      ctx.fillStyle = "#000000"
+      ctx.font = "14px Arial"
+      ctx.textAlign = "center"
+      ctx.fillText(value.toFixed(2), x + barWidth / 2, y - 5)
+    })
+
+    // Draw y-axis
+    ctx.strokeStyle = "#cccccc"
+    ctx.beginPath()
+    ctx.moveTo(20, 20)
+    ctx.lineTo(20, canvas.height - 30)
+    ctx.stroke()
+
+    // Draw x-axis
+    ctx.beginPath()
+    ctx.moveTo(20, canvas.height - 30)
+    ctx.lineTo(canvas.width - 20, canvas.height - 30)
+    ctx.stroke()
+  }
+
+  const drawRadarChart = () => {
+    const canvas = radarCanvasRef.current
+    if (!canvas) return
+
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+    const filteredModels = models.filter((model) => selectedModels.includes(model.id))
+    if (filteredModels.length === 0) return
+
+    const metrics = ["accuracy", "precision", "recall", "f1Score", "auc"]
+    const centerX = canvas.width / 2
+    const centerY = canvas.height / 2
+    const radius = Math.min(centerX, centerY) - 50
+    const angleStep = (Math.PI * 2) / metrics.length
+    const colors = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444"]
+
+    // Draw radar background
+    ctx.strokeStyle = "#cccccc"
+    ctx.fillStyle = "rgba(240, 240, 240, 0.5)"
+
+    // Draw radar rings with value indicators
+    for (let r = 0.2; r <= 1; r += 0.2) {
       ctx.beginPath()
-      ctx.arc(centerX, centerY, circleRadius, 0, 2 * Math.PI)
+      for (let i = 0; i < metrics.length; i++) {
+        const angle = i * angleStep - Math.PI / 2
+        const x = centerX + radius * r * Math.cos(angle)
+        const y = centerY + radius * r * Math.sin(angle)
+        if (i === 0) {
+          ctx.moveTo(x, y)
+        } else {
+          ctx.lineTo(x, y)
+        }
+      }
+      ctx.closePath()
       ctx.stroke()
 
-      // Add value label for the first circle only
-      if (i === 1) {
-        ctx.fillText((i * 0.2).toFixed(1), centerX, centerY - circleRadius - 5)
-      }
+      // Add value indicators for each ring
+      ctx.fillStyle = "#888888"
+      ctx.font = "10px Arial"
+      ctx.textAlign = "right"
+      ctx.fillText(r.toFixed(1), centerX - 5, centerY - radius * r + 3)
     }
 
-    // Draw axis lines and labels
-    for (let i = 0; i < numMetrics; i++) {
-      const angle = (i * 2 * Math.PI) / numMetrics - Math.PI / 2
+    // Draw radar axes
+    for (let i = 0; i < metrics.length; i++) {
+      const angle = i * angleStep - Math.PI / 2
       const x = centerX + radius * Math.cos(angle)
       const y = centerY + radius * Math.sin(angle)
 
-      // Draw axis line
       ctx.beginPath()
       ctx.moveTo(centerX, centerY)
       ctx.lineTo(x, y)
       ctx.stroke()
 
-      // Draw axis label
+      // Draw metric labels
       const labelX = centerX + (radius + 20) * Math.cos(angle)
       const labelY = centerY + (radius + 20) * Math.sin(angle)
-      ctx.fillText(metricLabels[i], labelX, labelY)
+
+      ctx.fillStyle = "#000000"
+      ctx.font = "14px Arial"
+      ctx.textAlign = "center"
+      ctx.textBaseline = "middle"
+      ctx.fillText(metrics[i], labelX, labelY)
+
+      // Add value indicators along each axis
+      for (let r = 0.2; r <= 1; r += 0.2) {
+        const indicatorX = centerX + radius * r * Math.cos(angle)
+        const indicatorY = centerY + radius * r * Math.sin(angle)
+
+        // Draw small tick marks
+        ctx.beginPath()
+        ctx.moveTo(indicatorX, indicatorY)
+        const tickLength = 5
+        const perpAngle = angle + Math.PI / 2
+        ctx.lineTo(indicatorX + tickLength * Math.cos(perpAngle), indicatorY + tickLength * Math.sin(perpAngle))
+        ctx.stroke()
+
+        // Add value text for the first axis only to avoid clutter
+        if (i === 0) {
+          ctx.fillStyle = "#666666"
+          ctx.font = "10px Arial"
+          ctx.textAlign = "center"
+          ctx.fillText(r.toFixed(1), indicatorX, indicatorY - 10)
+        }
+      }
     }
 
-    // Draw data for each model
-    models.forEach((model, modelIndex) => {
-      const color = colors[modelIndex % colors.length]
+    // Draw model data
+    filteredModels.forEach((model, modelIndex) => {
+      ctx.strokeStyle = colors[modelIndex % colors.length]
+      ctx.fillStyle = colors[modelIndex % colors.length] + "40" // Add transparency
 
-      // Draw model data
       ctx.beginPath()
-      metrics.forEach((metric, i) => {
-        const value = model.metrics[metric as keyof typeof model.metrics] as number
-        const angle = (i * 2 * Math.PI) / numMetrics - Math.PI / 2
+      for (let i = 0; i < metrics.length; i++) {
+        const metric = metrics[i] as keyof ModelData
+        const value = model[metric] as number
+        const angle = i * angleStep - Math.PI / 2
         const x = centerX + radius * value * Math.cos(angle)
         const y = centerY + radius * value * Math.sin(angle)
 
@@ -253,221 +353,384 @@ export default function ModelComparisonPage() {
         } else {
           ctx.lineTo(x, y)
         }
-      })
-
-      // Close the path
-      const firstMetric = metrics[0]
-      const firstValue = model.metrics[firstMetric as keyof typeof model.metrics] as number
-      const firstAngle = -Math.PI / 2
-      const firstX = centerX + radius * firstValue * Math.cos(firstAngle)
-      const firstY = centerY + radius * firstValue * Math.sin(firstAngle)
-      ctx.lineTo(firstX, firstY)
-
-      // Fill and stroke
-      ctx.fillStyle = color.fill
-      ctx.fill()
-      ctx.strokeStyle = color.stroke
-      ctx.lineWidth = 2
+      }
+      ctx.closePath()
       ctx.stroke()
+      ctx.fill()
 
-      // Add dots at each metric point
-      metrics.forEach((metric, i) => {
-        const value = model.metrics[metric as keyof typeof model.metrics] as number
-        const angle = (i * 2 * Math.PI) / numMetrics - Math.PI / 2
+      // Draw data points with values
+      for (let i = 0; i < metrics.length; i++) {
+        const metric = metrics[i] as keyof ModelData
+        const value = model[metric] as number
+        const angle = i * angleStep - Math.PI / 2
         const x = centerX + radius * value * Math.cos(angle)
         const y = centerY + radius * value * Math.sin(angle)
 
+        // Draw point
         ctx.beginPath()
-        ctx.arc(x, y, 4, 0, 2 * Math.PI)
-        ctx.fillStyle = color.stroke
+        ctx.arc(x, y, 4, 0, Math.PI * 2)
+        ctx.fillStyle = colors[modelIndex % colors.length]
         ctx.fill()
-      })
+
+        // Draw value text
+        ctx.fillStyle = "#000000"
+        ctx.font = "10px Arial"
+        ctx.textAlign = "center"
+        ctx.fillText(value.toFixed(2), x, y - 10)
+      }
     })
 
     // Draw legend
-    const legendX = 20
-    let legendY = 20
+    const legendY = canvas.height - 30
+    filteredModels.forEach((model, index) => {
+      const x = 50 + index * 150
 
-    models.forEach((model, modelIndex) => {
-      const color = colors[modelIndex % colors.length]
+      ctx.fillStyle = colors[index % colors.length]
+      ctx.fillRect(x, legendY, 15, 15)
 
-      // Draw legend item
-      ctx.fillStyle = color.stroke
-      ctx.fillRect(legendX, legendY, 15, 15)
-
-      // Draw model name
-      ctx.fillStyle = "rgba(0, 0, 0, 0.8)"
-      ctx.font = "14px sans-serif"
+      ctx.fillStyle = "#000000"
+      ctx.font = "14px Arial"
       ctx.textAlign = "left"
-      ctx.textBaseline = "middle"
-      ctx.fillText(model.name, legendX + 25, legendY + 7.5)
-
-      // Move to next legend item
-      legendY += 25
+      ctx.fillText(model.name, x + 25, legendY + 12)
     })
   }
 
   return (
     <MainLayout>
       <div className="container mx-auto py-6 space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" asChild>
-            <Link href="/models">
-              <ArrowLeft className="h-4 w-4" />
-              <span className="sr-only">Back</span>
-            </Link>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Model Comparison</h1>
+            <p className="text-muted-foreground">Compare performance metrics across different ML models</p>
+          </div>
+          <Button variant="outline">
+            <Download className="mr-2 h-4 w-4" />
+            Export Report
           </Button>
-          <h1 className="text-3xl font-bold tracking-tight">Model Comparison</h1>
         </div>
 
-        {selectedModels.length < 2 ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Not Enough Models Selected</CardTitle>
-              <CardDescription>Please select at least two models to compare</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button asChild>
-                <Link href="/models">Select Models</Link>
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="comparison">Comparison</TabsTrigger>
+            <TabsTrigger value="models">Models</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="comparison" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Performance Metrics Comparison</CardTitle>
-                <CardDescription>Compare key performance metrics across selected models</CardDescription>
+                <CardTitle>Model Selection</CardTitle>
+                <CardDescription>
+                  Select up to 4 models to compare (currently selected: {selectedModels.length})
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Model</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Dataset</TableHead>
-                        <TableHead>F1 Score</TableHead>
-                        <TableHead>Accuracy</TableHead>
-                        <TableHead>Precision</TableHead>
-                        <TableHead>Recall</TableHead>
-                        <TableHead>AUC</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {selectedModels.map((model) => (
-                        <TableRow key={model.id}>
-                          <TableCell className="font-medium">{model.name}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{model.type}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Link href={`/datasets/${model.datasetId}`} className="hover:underline">
-                              {model.dataset}
-                            </Link>
-                          </TableCell>
-                          <TableCell className={isBestMetric(model, "f1") ? "font-bold text-primary" : ""}>
-                            {model.metrics.f1.toFixed(2)}
-                          </TableCell>
-                          <TableCell className={isBestMetric(model, "accuracy") ? "font-bold text-primary" : ""}>
-                            {model.metrics.accuracy.toFixed(2)}
-                          </TableCell>
-                          <TableCell className={isBestMetric(model, "precision") ? "font-bold text-primary" : ""}>
-                            {model.metrics.precision.toFixed(2)}
-                          </TableCell>
-                          <TableCell className={isBestMetric(model, "recall") ? "font-bold text-primary" : ""}>
-                            {model.metrics.recall.toFixed(2)}
-                          </TableCell>
-                          <TableCell className={isBestMetric(model, "auc") ? "font-bold text-primary" : ""}>
-                            {model.metrics.auc.toFixed(2)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end space-x-2">
-                              <Button variant="outline" size="sm" asChild>
-                                <Link href={`/models/${model.id}`}>
-                                  <Eye className="mr-2 h-4 w-4" />
-                                  Details
-                                </Link>
+                <div className="flex flex-col space-y-4">
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {selectedModels.length > 0 ? (
+                      <>
+                        {models
+                          .filter((model) => selectedModels.includes(model.id))
+                          .map((model) => (
+                            <Badge key={model.id} variant="secondary" className="px-3 py-1 flex items-center gap-1">
+                              {model.name}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-4 w-4 ml-1 p-0"
+                                onClick={() => toggleModelSelection(model.id)}
+                              >
+                                <X className="h-3 w-3" />
                               </Button>
-                              <Button variant="ghost" size="sm" onClick={() => handleRemoveModel(model.id)}>
-                                Remove
-                              </Button>
+                            </Badge>
+                          ))}
+                        <Button variant="outline" size="sm" className="h-7" onClick={clearModelSelection}>
+                          Clear All
+                        </Button>
+                      </>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        No models selected. Select models from the list below.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col md:flex-row gap-4">
+                    <div className="w-full md:w-1/2">
+                      <div className="relative">
+                        <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search models..."
+                          className="pl-8"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="w-full md:w-1/2">
+                      <Select value={typeFilter} onValueChange={setTypeFilter}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Filter by model type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Types</SelectItem>
+                          {modelTypes.map((type) => (
+                            <SelectItem key={type} value={type}>
+                              {type}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="border rounded-md">
+                    <ScrollArea className="h-[200px]">
+                      <div className="p-4 space-y-2">
+                        {filteredModels.length === 0 ? (
+                          <p className="text-center py-4 text-muted-foreground">
+                            No models found matching your criteria
+                          </p>
+                        ) : (
+                          filteredModels.map((model) => (
+                            <div
+                              key={model.id}
+                              className={`flex items-center justify-between p-2 rounded-md hover:bg-accent cursor-pointer ${
+                                selectedModels.includes(model.id) ? "bg-accent/50" : ""
+                              }`}
+                              onClick={() => toggleModelSelection(model.id)}
+                            >
+                              <div className="flex items-center gap-3">
+                                <Checkbox
+                                  checked={selectedModels.includes(model.id)}
+                                  onCheckedChange={() => toggleModelSelection(model.id)}
+                                  id={`model-${model.id}`}
+                                />
+                                <div>
+                                  <p className="font-medium">{model.name}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    Type: {model.type} | Accuracy: {model.accuracy.toFixed(2)}
+                                  </p>
+                                </div>
+                              </div>
+                              <Badge variant="outline">{model.lastUpdated}</Badge>
                             </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                          ))
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Radar Chart Comparison</CardTitle>
-                <CardDescription>Visual comparison of model performance across key metrics</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex justify-center">
-                  <canvas ref={canvasRef} width={600} height={500} className="max-w-full"></canvas>
-                </div>
-              </CardContent>
-            </Card>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <Card className="col-span-2">
+                <CardHeader>
+                  <CardTitle>Performance Comparison</CardTitle>
+                  <CardDescription>Compare selected models by specific metrics</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center gap-4 mb-6">
+                    <span className="text-sm font-medium">Compare by:</span>
+                    <Select value={comparisonMetric} onValueChange={setComparisonMetric}>
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Select metric" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="accuracy">Accuracy</SelectItem>
+                        <SelectItem value="precision">Precision</SelectItem>
+                        <SelectItem value="recall">Recall</SelectItem>
+                        <SelectItem value="f1Score">F1 Score</SelectItem>
+                        <SelectItem value="auc">AUC</SelectItem>
+                        <SelectItem value="trainingTime">Training Time</SelectItem>
+                        <SelectItem value="inferenceTime">Inference Time</SelectItem>
+                        <SelectItem value="size">Model Size</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Hyperparameters Comparison</CardTitle>
-                <CardDescription>Compare hyperparameters across selected models</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Model</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Hyperparameters</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {selectedModels.map((model) => (
-                        <TableRow key={model.id}>
-                          <TableCell className="font-medium">{model.name}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{model.type}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-wrap gap-2">
-                              {Object.entries(model.hyperparameters).map(([key, value]) => (
-                                <Badge key={key} variant="secondary" className="whitespace-nowrap">
-                                  {key}: {value.toString()}
-                                </Badge>
-                              ))}
+                  {selectedModels.length > 0 ? (
+                    <div className="h-[300px] w-full">
+                      <canvas ref={canvasRef} width={800} height={300} className="w-full h-full"></canvas>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-[300px] border rounded-md border-dashed">
+                      <p className="text-muted-foreground">Select models above to compare</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Model Stats</CardTitle>
+                  <CardDescription>Key statistics for selected models</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {selectedModels.length > 0 ? (
+                    <div className="space-y-4">
+                      {models
+                        .filter((model) => selectedModels.includes(model.id))
+                        .map((model) => (
+                          <div key={model.id} className="space-y-2">
+                            <h3 className="font-medium">{model.name}</h3>
+                            <div className="grid grid-cols-2 gap-2 text-sm">
+                              <div>Type:</div>
+                              <div className="font-medium">{model.type}</div>
+                              <div>Size:</div>
+                              <div className="font-medium">{model.size} GB</div>
+                              <div>Training Time:</div>
+                              <div className="font-medium">{model.trainingTime} hours</div>
+                              <div>Inference Time:</div>
+                              <div className="font-medium">{model.inferenceTime} ms</div>
+                              <div>Last Updated:</div>
+                              <div className="font-medium">{model.lastUpdated}</div>
                             </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
+                          </div>
+                        ))}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-[200px]">
+                      <p className="text-muted-foreground">No models selected</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
-            <div className="flex justify-end space-x-2">
-              <Button variant="outline">
-                <Download className="mr-2 h-4 w-4" />
-                Export Comparison
-              </Button>
-              <Button asChild>
-                <Link href="/models">
-                  <BarChart3 className="mr-2 h-4 w-4" />
-                  Select Different Models
-                </Link>
-              </Button>
+              <Card className="col-span-3">
+                <CardHeader>
+                  <CardTitle>Radar Comparison</CardTitle>
+                  <CardDescription>Compare multiple metrics across selected models</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {selectedModels.length > 0 ? (
+                    <div className="h-[500px] w-full">
+                      <canvas ref={radarCanvasRef} width={1000} height={500} className="w-full h-full"></canvas>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-[500px] border rounded-md border-dashed">
+                      <p className="text-muted-foreground">Select models above to compare</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
-          </>
-        )}
+          </TabsContent>
+
+          <TabsContent value="models">
+            <Card>
+              <CardHeader>
+                <CardTitle>Available Models</CardTitle>
+                <CardDescription>All machine learning models available for comparison</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col md:flex-row gap-4 mb-4">
+                  <div className="w-full md:w-1/2">
+                    <div className="relative">
+                      <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search models..."
+                        className="pl-8"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="w-full md:w-1/2">
+                    <Select value={typeFilter} onValueChange={setTypeFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Filter by model type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Types</SelectItem>
+                        {modelTypes.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {type}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12">
+                        <span className="sr-only">Select</span>
+                      </TableHead>
+                      <TableHead>Model Name</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Accuracy</TableHead>
+                      <TableHead>F1 Score</TableHead>
+                      <TableHead>Size</TableHead>
+                      <TableHead>Last Updated</TableHead>
+                      <TableHead></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredModels.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-4 text-muted-foreground">
+                          No models found matching your criteria
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredModels.map((model) => (
+                        <TableRow key={model.id}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedModels.includes(model.id)}
+                              onCheckedChange={() => toggleModelSelection(model.id)}
+                              id={`table-model-${model.id}`}
+                            />
+                          </TableCell>
+                          <TableCell className="font-medium">{model.name}</TableCell>
+                          <TableCell>{model.type}</TableCell>
+                          <TableCell>{model.accuracy.toFixed(2)}</TableCell>
+                          <TableCell>{model.f1Score.toFixed(2)}</TableCell>
+                          <TableCell>{model.size} GB</TableCell>
+                          <TableCell>{model.lastUpdated}</TableCell>
+                          <TableCell>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button variant="ghost" size="icon">
+                                    <Info className="h-4 w-4" />
+                                    <span className="sr-only">Model details</span>
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>View detailed model information</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+
+                {selectedModels.length > 0 && (
+                  <div className="mt-6 flex justify-between items-center">
+                    <div className="text-sm text-muted-foreground">
+                      {selectedModels.length} model{selectedModels.length !== 1 ? "s" : ""} selected
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={clearModelSelection}>
+                        Clear Selection
+                      </Button>
+                      <Button size="sm" onClick={() => setActiveTab("comparison")}>
+                        View Comparison
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </MainLayout>
   )

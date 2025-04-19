@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { GitBranch, Search, BarChart3, Database, ArrowRight, Lock, Moon, Sun, Minimize, Maximize } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useTheme } from "@/components/theme-provider"
+import { MainLayout } from "@/components/main-layout"
 
 // Mock data for public repositories
 const publicRepositories = [
@@ -187,7 +188,180 @@ export default function PublicRepositoriesPage() {
       model.repository.toLowerCase().includes(searchQuery.toLowerCase()),
   )
 
-  return (
+  return isAuthenticated ? (
+    <MainLayout>
+      <div className="container mx-auto py-8 px-4">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Public Repositories</h1>
+            <p className="text-muted-foreground mt-1">
+              Explore public repositories and pre-trained defect prediction models
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="relative w-full md:w-64">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Search repositories..."
+                className="pl-8"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <Button asChild>
+              <Link href="/repositories">My Repositories</Link>
+            </Button>
+          </div>
+        </div>
+
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle>Want to create your own models?</CardTitle>
+            <CardDescription>
+              Sign in to create custom datasets and train models for any public or private repository
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground">
+              CK-Guru allows you to create personalized defect prediction models tailored to your specific needs. Access
+              advanced features like custom cleaning rules, feature selection, and model comparison.
+            </p>
+          </CardContent>
+          <CardFooter className="border-t flex justify-between items-center py-4">
+            <Button asChild>
+              <Link href="/repositories">Go to My Repositories</Link>
+            </Button>
+          </CardFooter>
+        </Card>
+
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="repositories">Repositories</TabsTrigger>
+            <TabsTrigger value="models">Pre-trained Models</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="repositories" className="space-y-4">
+            {filteredRepositories.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground">No repositories found matching your search</p>
+              </div>
+            ) : (
+              filteredRepositories.map((repo) => (
+                <Card key={repo.id} className="overflow-hidden">
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <CardTitle className="text-xl">
+                          <Link href={`/public-repositories/${repo.id}`} className="hover:underline">
+                            {repo.name}
+                          </Link>
+                        </CardTitle>
+                        <CardDescription className="mt-1">{repo.description}</CardDescription>
+                      </div>
+                      <Badge variant="outline" className="bg-muted/50">
+                        {repo.language}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex flex-wrap gap-4 text-sm">
+                      <div className="flex items-center gap-1">
+                        <GitBranch className="h-4 w-4 text-muted-foreground" />
+                        <span>{repo.stars.toLocaleString()} stars</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                        <span>{repo.models} models</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Database className="h-4 w-4 text-muted-foreground" />
+                        <span>{repo.datasets} datasets</span>
+                      </div>
+                      <div className="text-muted-foreground">Updated {formatDate(repo.lastUpdated)}</div>
+                    </div>
+                  </CardContent>
+                  <CardFooter className="bg-muted/20 border-t flex justify-between items-center py-4">
+                    <Button variant="outline" asChild>
+                      <Link href={`/public-repositories/${repo.id}`}>View Details</Link>
+                    </Button>
+                    <Button onClick={() => handleCreateDataset(repo.id)}>
+                      {!isAuthenticated && <Lock className="mr-2 h-4 w-4" />}
+                      Create Dataset
+                    </Button>
+                  </CardFooter>
+                </Card>
+              ))
+            )}
+          </TabsContent>
+
+          <TabsContent value="models" className="space-y-4">
+            {filteredModels.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground">No models found matching your search</p>
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {filteredModels.map((model) => (
+                  <Card key={model.id}>
+                    <CardHeader>
+                      <CardTitle className="text-lg">{model.name}</CardTitle>
+                      <CardDescription>
+                        <Link href={`/public-repositories/${model.repositoryId}`} className="hover:underline">
+                          {model.repository}
+                        </Link>
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Type:</span>
+                          <Badge variant="outline">{model.type}</Badge>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Accuracy:</span>
+                          <span className="font-medium">{model.accuracy.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">F1 Score:</span>
+                          <span className="font-medium">{model.f1Score.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Created:</span>
+                          <span>{formatDate(model.dateCreated)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Creator:</span>
+                          <span>{model.creator}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                    <CardFooter className="border-t flex justify-between items-center py-4">
+                      <Button variant="outline" asChild>
+                        <Link href={`/public-repositories/models/${model.id}`}>View Details</Link>
+                      </Button>
+                      {!isAuthenticated ? (
+                        <Button variant="secondary" asChild>
+                          <Link href="/login">
+                            <Lock className="mr-2 h-4 w-4" />
+                            Use Model
+                          </Link>
+                        </Button>
+                      ) : (
+                        <Button variant="secondary" asChild>
+                          <Link href={`/jobs/inference?model=${model.id}`}>Use Model</Link>
+                        </Button>
+                      )}
+                    </CardFooter>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+      </div>
+    </MainLayout>
+  ) : (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-50 flex h-16 items-center gap-4 border-b bg-background px-6 md:px-8">
         <Link href="/" className="flex items-center gap-2 text-lg font-semibold">
@@ -292,7 +466,7 @@ export default function PublicRepositoriesPage() {
               advanced features like custom cleaning rules, feature selection, and model comparison.
             </p>
           </CardContent>
-          <CardFooter>
+          <CardFooter className="border-t flex justify-between items-center py-4">
             {isAuthenticated ? (
               <Button asChild>
                 <Link href="/repositories">Go to My Repositories</Link>
@@ -351,7 +525,7 @@ export default function PublicRepositoriesPage() {
                       <div className="text-muted-foreground">Updated {formatDate(repo.lastUpdated)}</div>
                     </div>
                   </CardContent>
-                  <CardFooter className="bg-muted/20 border-t flex justify-between">
+                  <CardFooter className="bg-muted/20 border-t flex justify-between items-center py-4">
                     <Button variant="outline" asChild>
                       <Link href={`/public-repositories/${repo.id}`}>View Details</Link>
                     </Button>
@@ -406,7 +580,7 @@ export default function PublicRepositoriesPage() {
                         </div>
                       </div>
                     </CardContent>
-                    <CardFooter className="border-t flex justify-between">
+                    <CardFooter className="border-t flex justify-between items-center py-4">
                       <Button variant="outline" asChild>
                         <Link href={`/public-repositories/models/${model.id}`}>View Details</Link>
                       </Button>

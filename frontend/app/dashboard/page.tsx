@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { BarChart3, Database, GitBranch } from "lucide-react"
 import { useAuth } from "@/components/auth/auth-provider"
+import { PageContainer } from "@/components/ui/page-container"
 import Link from "next/link"
 
 export default function DashboardPage() {
@@ -13,17 +14,15 @@ export default function DashboardPage() {
 
   return (
     <AuthenticatedLayout>
-      <div className="container mx-auto py-6 space-y-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Welcome, {user?.name}</h1>
-            <p className="text-muted-foreground">Here's an overview of your software defect prediction projects</p>
-          </div>
+      <PageContainer
+        title={`Welcome, ${user?.name}`}
+        description="Here's an overview of your software defect prediction projects"
+        actions={
           <Button asChild>
             <Link href="/repositories">View All Repositories</Link>
           </Button>
-        </div>
-
+        }
+      >
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <Card className="metric-card border-primary/20">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -133,7 +132,7 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
-      </div>
+      </PageContainer>
     </AuthenticatedLayout>
   )
 }

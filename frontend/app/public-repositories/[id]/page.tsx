@@ -6,11 +6,12 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/auth/auth-provider"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { GitBranch, ArrowLeft, Star, GitFork, Eye, Calendar, Lock, ArrowRight } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { MainLayout } from "@/components/main-layout"
 
 // Mock data for public repositories
 const publicRepositories = [
@@ -187,54 +188,12 @@ export default function PublicRepositoryDetailPage({ params }: { params: { id: s
     )
   }
 
-  return (
-    <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-50 flex h-16 items-center gap-4 border-b bg-background px-6 md:px-8">
-        <Link href="/" className="flex items-center gap-2 text-lg font-semibold">
-          <GitBranch className="h-6 w-6 text-primary" />
-          <span>CK-Guru</span>
-        </Link>
-        <nav className="hidden md:flex flex-1 items-center gap-6 text-sm">
-          <Link href="/#features" className="text-muted-foreground hover:text-foreground transition-colors">
-            Features
-          </Link>
-          <Link href="/#how-it-works" className="text-muted-foreground hover:text-foreground transition-colors">
-            How It Works
-          </Link>
-          <Link href="/public-repositories" className="text-primary font-medium">
-            Public Repositories
-          </Link>
-        </nav>
-        <div className="ml-auto flex items-center gap-2">
-          {isAuthenticated ? (
-            <Button asChild>
-              <Link href="/dashboard">Go to Dashboard</Link>
-            </Button>
-          ) : (
-            <>
-              <Button variant="ghost" asChild>
-                <Link href="/login">Sign in</Link>
-              </Button>
-              <Button asChild>
-                <Link href="/register">Sign up</Link>
-              </Button>
-            </>
-          )}
-        </div>
-      </header>
-
-      <main className="flex-1 container mx-auto py-8 px-4">
-        <div className="flex items-center gap-4 mb-6">
-          <Button variant="outline" size="icon" asChild>
-            <Link href="/public-repositories">
-              <ArrowLeft className="h-4 w-4" />
-              <span className="sr-only">Back</span>
-            </Link>
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">{repository.name}</h1>
-            <p className="text-muted-foreground">{repository.description}</p>
-          </div>
+  return isAuthenticated ? (
+    <MainLayout>
+      <div className="flex-1 container mx-auto py-8 px-4">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold tracking-tight">{repository.name}</h1>
+          <p className="text-muted-foreground">{repository.description}</p>
         </div>
 
         {!isAuthenticated && (
@@ -243,7 +202,7 @@ export default function PublicRepositoryDetailPage({ params }: { params: { id: s
               <CardTitle>Want to create your own models for this repository?</CardTitle>
               <CardDescription>Sign in to create custom datasets and train models</CardDescription>
             </CardHeader>
-            <CardContent className="flex justify-between items-center">
+            <CardFooter className="flex justify-between items-center py-4">
               <p className="text-muted-foreground max-w-2xl">
                 Create personalized defect prediction models tailored to your specific needs with advanced features like
                 custom cleaning rules, feature selection, and model comparison.
@@ -254,7 +213,7 @@ export default function PublicRepositoryDetailPage({ params }: { params: { id: s
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
               </Button>
-            </CardContent>
+            </CardFooter>
           </Card>
         )}
 
@@ -431,25 +390,335 @@ export default function PublicRepositoryDetailPage({ params }: { params: { id: s
                       </div>
                     </div>
                   </CardContent>
-                  <CardContent className="border-t pt-4">
-                    <div className="flex justify-between">
-                      <Button variant="outline" asChild>
-                        <Link href={`/public-repositories/models/${model.id}`}>View Details</Link>
+                  <CardFooter className="border-t pt-4 flex justify-between items-center py-4">
+                    <Button variant="outline" asChild>
+                      <Link href={`/public-repositories/models/${model.id}`}>View Details</Link>
+                    </Button>
+                    {!isAuthenticated ? (
+                      <Button variant="secondary" asChild>
+                        <Link href="/login">
+                          <Lock className="mr-2 h-4 w-4" />
+                          Use Model
+                        </Link>
                       </Button>
-                      {!isAuthenticated ? (
-                        <Button variant="secondary" asChild>
-                          <Link href="/login">
-                            <Lock className="mr-2 h-4 w-4" />
-                            Use Model
-                          </Link>
-                        </Button>
-                      ) : (
-                        <Button variant="secondary" asChild>
-                          <Link href={`/jobs/inference?model=${model.id}`}>Use Model</Link>
-                        </Button>
-                      )}
+                    ) : (
+                      <Button variant="secondary" asChild>
+                        <Link href={`/jobs/inference?model=${model.id}`}>Use Model</Link>
+                      </Button>
+                    )}
+                  </CardFooter>
+                </Card>
+              ))}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="datasets" className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-semibold">Available Datasets</h2>
+              <Button onClick={handleCreateDataset}>
+                {!isAuthenticated && <Lock className="mr-2 h-4 w-4" />}
+                Create Custom Dataset
+              </Button>
+            </div>
+
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Dataset Name</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Features</TableHead>
+                    <TableHead>Samples</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead>Creator</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {repositoryDatasets.map((dataset) => (
+                    <TableRow key={dataset.id}>
+                      <TableCell className="font-medium">{dataset.name}</TableCell>
+                      <TableCell>{dataset.description}</TableCell>
+                      <TableCell>{dataset.features}</TableCell>
+                      <TableCell>{dataset.samples.toLocaleString()}</TableCell>
+                      <TableCell>{formatDate(dataset.dateCreated)}</TableCell>
+                      <TableCell>{dataset.creator}</TableCell>
+                      <TableCell className="text-right">
+                        {!isAuthenticated ? (
+                          <Button variant="outline" size="sm" asChild>
+                            <Link href="/login">
+                              <Lock className="mr-2 h-4 w-4" />
+                              View Data
+                            </Link>
+                          </Button>
+                        ) : (
+                          <Button variant="outline" size="sm" asChild>
+                            <Link href={`/datasets/${dataset.id}`}>View Data</Link>
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </MainLayout>
+  ) : (
+    <div className="flex min-h-screen flex-col">
+      <header className="sticky top-0 z-50 flex h-16 items-center gap-4 border-b bg-background px-6 md:px-8">
+        <Link href="/" className="flex items-center gap-2 text-lg font-semibold">
+          <GitBranch className="h-6 w-6 text-primary" />
+          <span>CK-Guru</span>
+        </Link>
+        <nav className="hidden md:flex flex-1 items-center gap-6 text-sm">
+          <Link href="/#features" className="text-muted-foreground hover:text-foreground transition-colors">
+            Features
+          </Link>
+          <Link href="/#how-it-works" className="text-muted-foreground hover:text-foreground transition-colors">
+            How It Works
+          </Link>
+          <Link href="/public-repositories" className="text-primary font-medium">
+            Public Repositories
+          </Link>
+        </nav>
+        <div className="ml-auto flex items-center gap-2">
+          {isAuthenticated ? (
+            <Button asChild>
+              <Link href="/dashboard">Go to Dashboard</Link>
+            </Button>
+          ) : (
+            <>
+              <Button variant="ghost" asChild>
+                <Link href="/login">Sign in</Link>
+              </Button>
+              <Button asChild>
+                <Link href="/register">Sign up</Link>
+              </Button>
+            </>
+          )}
+        </div>
+      </header>
+
+      <main className="flex-1 container mx-auto py-8 px-4">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold tracking-tight">{repository.name}</h1>
+          <p className="text-muted-foreground">{repository.description}</p>
+        </div>
+
+        {!isAuthenticated && (
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle>Want to create your own models for this repository?</CardTitle>
+              <CardDescription>Sign in to create custom datasets and train models</CardDescription>
+            </CardHeader>
+            <CardFooter className="flex justify-between items-center py-4">
+              <p className="text-muted-foreground max-w-2xl">
+                Create personalized defect prediction models tailored to your specific needs with advanced features like
+                custom cleaning rules, feature selection, and model comparison.
+              </p>
+              <Button asChild>
+                <Link href="/register">
+                  Create Free Account
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </CardFooter>
+          </Card>
+        )}
+
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="models">Models ({repositoryModels.length})</TabsTrigger>
+            <TabsTrigger value="datasets">Datasets ({repositoryDatasets.length})</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="space-y-6">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Stars</CardTitle>
+                  <Star className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{repository.stars.toLocaleString()}</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Forks</CardTitle>
+                  <GitFork className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{repository.forks.toLocaleString()}</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Watchers</CardTitle>
+                  <Eye className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{repository.watchers.toLocaleString()}</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Created</CardTitle>
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{new Date(repository.created).getFullYear()}</div>
+                  <p className="text-xs text-muted-foreground">{formatDate(repository.created)}</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid gap-6 md:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Repository Information</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <dl className="space-y-4">
+                    <div className="flex justify-between">
+                      <dt className="text-muted-foreground">Name:</dt>
+                      <dd className="font-medium">{repository.name}</dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-muted-foreground">Primary Language:</dt>
+                      <dd>
+                        <Badge variant="outline">{repository.language}</Badge>
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-muted-foreground">Last Updated:</dt>
+                      <dd>{formatDate(repository.lastUpdated)}</dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-muted-foreground">GitHub URL:</dt>
+                      <dd>
+                        <a
+                          href={repository.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline"
+                        >
+                          View on GitHub
+                        </a>
+                      </dd>
+                    </div>
+                  </dl>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Defect Prediction Stats</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <dl className="space-y-4">
+                    <div className="flex justify-between">
+                      <dt className="text-muted-foreground">Available Models:</dt>
+                      <dd className="font-medium">{repository.models}</dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-muted-foreground">Available Datasets:</dt>
+                      <dd className="font-medium">{repository.datasets}</dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-muted-foreground">Best Model Accuracy:</dt>
+                      <dd className="font-medium">
+                        {Math.max(...repositoryModels.map((model) => model.accuracy)).toFixed(2)}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-muted-foreground">Best F1 Score:</dt>
+                      <dd className="font-medium">
+                        {Math.max(...repositoryModels.map((model) => model.f1Score)).toFixed(2)}
+                      </dd>
+                    </div>
+                  </dl>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="flex justify-end">
+              <Button onClick={handleCreateDataset}>
+                {!isAuthenticated && <Lock className="mr-2 h-4 w-4" />}
+                Create Custom Dataset
+              </Button>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="models" className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-semibold">Available Models</h2>
+              <Button onClick={handleCreateDataset}>
+                {!isAuthenticated && <Lock className="mr-2 h-4 w-4" />}
+                Train New Model
+              </Button>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {repositoryModels.map((model) => (
+                <Card key={model.id}>
+                  <CardHeader>
+                    <CardTitle className="text-lg">{model.name}</CardTitle>
+                    <CardDescription>{model.description}</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Type:</span>
+                        <Badge variant="outline">{model.type}</Badge>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Accuracy:</span>
+                        <span className="font-medium">{model.accuracy.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">F1 Score:</span>
+                        <span className="font-medium">{model.f1Score.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Precision:</span>
+                        <span>{model.precision.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Recall:</span>
+                        <span>{model.recall.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Created:</span>
+                        <span>{formatDate(model.dateCreated)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Creator:</span>
+                        <span>{model.creator}</span>
+                      </div>
                     </div>
                   </CardContent>
+                  <CardFooter className="border-t pt-4 flex justify-between items-center py-4">
+                    <Button variant="outline" asChild>
+                      <Link href={`/public-repositories/models/${model.id}`}>View Details</Link>
+                    </Button>
+                    {!isAuthenticated ? (
+                      <Button variant="secondary" asChild>
+                        <Link href="/login">
+                          <Lock className="mr-2 h-4 w-4" />
+                          Use Model
+                        </Link>
+                      </Button>
+                    ) : (
+                      <Button variant="secondary" asChild>
+                        <Link href={`/jobs/inference?model=${model.id}`}>Use Model</Link>
+                      </Button>
+                    )}
+                  </CardFooter>
                 </Card>
               ))}
             </div>
