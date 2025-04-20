@@ -128,8 +128,12 @@ def ingest_repository_task(self: Task, repository_id: int, git_url: str):
         error_msg = f"Ingestion task terminated by revoke request during step: {failed_step_name}."
         logger.warning(f"Task {task_id}: {error_msg} (Details: {term_exc})")
         update_task_state(self, 'FAILURE', error_msg, 0) # Mark as failed on revoke
-        # Optionally perform cleanup based on context (e.g., delete partial files)
-        # Do not re-raise Terminated
+        # include exception info for Celery backend
+        self.update_state(
+            state='REVOKED',
+            meta={'exc_type': type(term_exc).__name__, 'exc_message': str(term_exc)}
+        )
+        raise
 
     except Exception as e:
         # Handle pipeline errors
@@ -143,5 +147,9 @@ def ingest_repository_task(self: Task, repository_id: int, git_url: str):
             update_task_state(self, 'FAILURE', f"Failed at step: {failed_step_name}", 0, warning=error_message)
         except Exception as update_err:
             logger.error(f"Task {task_id}: Failed to update task state to FAILURE after critical error: {update_err}")
-        # Do not re-raise exception here, let Celery handle the failure marking based on state update
-        # Raising here might prevent Celery from seeing the FAILURE state update.
+        # include exception info for Celery backend
+        self.update_state(
+            state='FAILURE',
+            meta={'exc_type': error_type, 'exc_message': str(e)}
+        )
+        raise

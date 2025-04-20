@@ -38,7 +38,14 @@ def generate_dataset_task(self: Task, dataset_id: int):
         # Catch any exception that escaped generate() - should be rare if generate() handles its errors
         error_msg = f"Unhandled exception in generate_dataset_task for dataset {dataset_id}: {type(e).__name__}"
         logger.critical(f"Celery Task {task_id}: {error_msg}", exc_info=True)
-        
+        # Ensure Celery backend receives exception type and message
+        self.update_state(
+            state='FAILURE',
+            meta={
+                'exc_type': type(e).__name__,
+                'exc_message': str(e)
+            }
+        )
         raise e # Re-raise to let Celery handle the task failure
 
 

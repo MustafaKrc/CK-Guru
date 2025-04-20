@@ -209,21 +209,16 @@ class ProcessingSteps:
     @staticmethod
     def select_final_columns(df: pd.DataFrame, feature_columns: List[str], target_column: str) -> pd.DataFrame:
         """Selects the final feature and target columns."""
-        final_columns_requested = list(set(feature_columns + ([target_column] if target_column else [])))
-        available_final_columns = [col for col in final_columns_requested if col in df.columns]
-
-        if not available_final_columns:
-             if df.empty:
-                 logger.warning("Dataset is empty after all processing, returning empty DataFrame with requested columns.")
-                 # Return empty DF with the requested schema if possible
-                 return pd.DataFrame(columns=final_columns_requested)
-             else:
-                 logger.error(f"No requested feature/target columns remain after processing. Requested: {final_columns_requested}, Available: {df.columns.tolist()}")
-                 raise ValueError("No requested feature/target columns remain after processing.")
-
-        missing_requested = set(final_columns_requested) - set(available_final_columns)
-        if missing_requested:
-             logger.warning(f"Requested columns not found in final DataFrame: {missing_requested}")
-
-        logger.info(f"Selecting final columns: {available_final_columns}")
-        return df[available_final_columns].copy()
+        # Ensure all feature columns exist
+        missing_features = [c for c in feature_columns if c not in df.columns]
+        if missing_features:
+            logger.error(f"Missing feature columns: {missing_features}")
+            raise ValueError(f"Feature columns not found: {missing_features}")
+        # Ensure target column exists
+        if target_column and target_column not in df.columns:
+            logger.error(f"Missing target column: {target_column}")
+            raise ValueError(f"Target column '{target_column}' not found in DataFrame.")
+        # Select and return
+        final_columns = feature_columns + ([target_column] if target_column else [])
+        logger.info(f"Selecting final columns: {final_columns}")
+        return df[final_columns].copy()

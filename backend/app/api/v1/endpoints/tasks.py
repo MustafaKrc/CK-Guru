@@ -1,12 +1,18 @@
 # backend/app/api/v1/endpoints/tasks.py
 import logging
-from typing import Any, Optional # Import Any for result type hint
+from typing import Any, Dict, Optional # Import Any for result type hint
 
 from fastapi import APIRouter, HTTPException, Query, status, Depends
 from celery.result import AsyncResult
 from celery.exceptions import CeleryError
 
-from app.core.celery_app import backend_celery_app as celery_app # Import the Celery app instance
+# Import the TaskStatusService
+from app.services.task_status_service import task_status_service # Using Option 1 (Global Instance)
+# If using Option 2 (Depends):
+# from app.services.task_status_service import TaskStatusService, get_task_status_service
+
+# Import Celery app for revoke endpoint
+from app.core.celery_app import backend_celery_app as celery_app
 
 from shared import schemas
 from shared.core.config import settings
@@ -22,78 +28,42 @@ router = APIRouter()
     summary="Get task status and result",
     description="Poll this endpoint to check the status of a background task.",
     responses={
-        404: {"description": "Task not found"},
+        404: {"description": "Task not found (or backend has no info)"},
+        500: {"description": "Internal server error retrieving status"},
     },
 )
-async def get_task_status(task_id: str):
+async def get_task_status(
+    task_id: str,
+    # If using Depends: service: TaskStatusService = Depends(get_task_status_service)
+):
     """
     Retrieve the status and result (if available) of a Celery task,
-    including intermediate progress information.
+    using the TaskStatusService for robust handling.
     """
-    task_result = AsyncResult(task_id, app=celery_app)
-
-    final_result: Any | None = None
-    error: str | None = None
-    progress: Optional[int] = None
-    status_message: Optional[str] = None
-
-    task_state = task_result.state
-
-    if task_state == 'PENDING':
-        pass # Default values are None
-    elif task_state == 'FAILURE':
-        error = str(task_result.info) # task_result.info contains exception info
-        # Attempt to get original metadata if stored before failure (depends on task logic)
-        try:
-            # Celery might store the exception instance or a dict representation
-            if isinstance(task_result.info, dict) and 'exc_message' in task_result.info:
-                 error = str(task_result.info.get('exc_message', error))
-            # Check if result field holds last meta before failure (less common)
-            if isinstance(task_result.result, dict):
-                 progress = task_result.result.get('progress')
-                 status_message = task_result.result.get('status')
-        except Exception:
-             logger.warning(f"Could not extract metadata from failed task {task_id} info.", exc_info=True)
-    elif task_state == 'SUCCESS':
-        final_result = task_result.result # This is the return value of the task
-        # You might want to extract progress/status from the final result dict too
-        if isinstance(final_result, dict):
-            status_message = final_result.get('status')
-            # Set progress to 100 on success? or leave as None? Let's leave as None unless explicitly set to 100 by task
-            # progress = 100
-    elif task_state == 'STARTED' or task_state == 'RECEIVED' or task_state == 'RETRY':
-        # For intermediate states, the metadata is usually in task_result.info
-        # Note: Celery versions/configs might place it in .result sometimes. .info is generally safer.
-        if isinstance(task_result.info, dict):
-            progress = task_result.info.get('progress')
-            status_message = task_result.info.get('status')
-        else:
-             # Log if info isn't the expected dictionary
-             logger.warning(f"Task {task_id} in state {task_state} has non-dict info: {task_result.info}")
-
-    # Map Celery state string to our Enum
     try:
-        status_enum = schemas.TaskStatusEnum(task_state)
-    except ValueError:
-        logger.warning(f"Unknown Celery task state '{task_state}' for task {task_id}. Falling back to PENDING.")
-        status_enum = schemas.TaskStatusEnum.PENDING
-
-    return schemas.TaskStatusResponse(
-        task_id=task_id,
-        status=status_enum,
-        progress=progress,          
-        status_message=status_message, 
-        result=final_result,        
-        error=error,
-    )
+        # Delegate to the service
+        response = task_status_service.get_status(task_id)
+        # Optional: Check if AsyncResult itself indicated task not found,
+        # although the service might handle this internally by returning PENDING.
+        # For now, assume service returns a valid response object.
+        return response
+    except Exception as e:
+        # Catch unexpected errors during service interaction
+        logger.error(f"Error getting status for task {task_id} via service: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve task status."
+        )
 
 @router.post(
     "/{task_id}/revoke",
+    response_model=Dict[str, str], # Return simple message dict
     status_code=status.HTTP_202_ACCEPTED, # Accepted for processing
     summary="Revoke/Terminate a Task",
-    description="Attempts to stop a pending or running task. Uses SIGTERM for termination.",
+    description="Attempts to stop a pending or running task. Uses SIGTERM for termination by default.",
     responses={
         500: {"description": "Failed to send revoke command"},
+        400: {"description": "Invalid signal specified"},
         404: {"description": "Task backend might not know this ID (but revoke sent anyway)"} # Revoke can be sent even for unknown IDs
     }
 )
