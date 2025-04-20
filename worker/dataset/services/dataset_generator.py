@@ -9,9 +9,10 @@ from sqlalchemy import select
 from celery import Task
 from celery.exceptions import Terminated
 
-from shared.db.models import Dataset, Repository, BotPattern, DatasetStatusEnum
+from shared.db.models import Dataset, Repository, BotPattern
 from shared.db_session import get_sync_db_session
 from shared.core.config import settings
+from shared.schemas.enums import DatasetStatusEnum 
 from shared.utils.task_utils import update_task_state
 
 
