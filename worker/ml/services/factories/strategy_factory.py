@@ -7,9 +7,11 @@ from ..strategies.base_strategy import BaseModelStrategy
 from ..strategies.sklearn_strategy import SklearnStrategy
 # from ..strategies.pytorch_strategy import PyTorchStrategy # Example for future
 
+from shared.schemas.enums import ModelTypeEnum
+
 logger = logging.getLogger(__name__)
 
-def create_model_strategy(model_type: str, model_config: Dict, job_config: Dict) -> BaseModelStrategy:
+def create_model_strategy(model_type: ModelTypeEnum, model_config: Dict, job_config: Dict) -> BaseModelStrategy:
     """
     Factory function to instantiate the appropriate ML model execution strategy.
 
@@ -24,15 +26,16 @@ def create_model_strategy(model_type: str, model_config: Dict, job_config: Dict)
     Raises:
         ValueError: If the model_type is unsupported.
     """
-    logger.info(f"Attempting to create model strategy for type: {model_type}")
-
-    if model_type.startswith('sklearn_'):
-        logger.debug("Instantiating SklearnStrategy.")
-        return SklearnStrategy(model_config, job_config)
+    if model_type == ModelTypeEnum.SKLEARN_RANDOMFOREST:
+        logger.debug("Instantiating SklearnStrategy for RandomForest.")
+        # Pass the enum member or its value, SklearnStrategy can handle either
+        # Let's pass the enum member for consistency
+        return SklearnStrategy(model_type, model_config, job_config)
     # Example for future PyTorch integration
-    # elif model_type.startswith('pytorch_'):
+    # elif model_type == ModelTypeEnum.PYTORCH_CNN:
     #     logger.debug("Instantiating PyTorchStrategy.")
-    #     return PyTorchStrategy(model_config, job_config)
+    #     return PyTorchStrategy(model_type, model_config, job_config)
     else:
-        logger.error(f"No strategy implementation found for model type: {model_type}")
-        raise ValueError(f"Unsupported model type for strategy factory: {model_type}")
+        # Log the string value of the unsupported type
+        logger.error(f"No strategy implementation found for model type: {model_type.value}")
+        raise ValueError(f"Unsupported model type for strategy factory: {model_type.value}")

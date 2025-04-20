@@ -9,17 +9,11 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 
 from shared.db.base_class import Base
+from shared.schemas.enums import JobStatusEnum
 
 if TYPE_CHECKING:
     from .dataset import Dataset  # noqa: F401
     from .ml_model import MLModel # noqa: F401
-
-class JobStatusEnum(str, enum.Enum):
-    PENDING = "pending"
-    RUNNING = "running"
-    SUCCESS = "success"
-    FAILED = "failed"
-    REVOKED = "revoked" # Added state
 
 class TrainingJob(Base):
     __tablename__ = "training_jobs"

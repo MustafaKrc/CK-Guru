@@ -4,11 +4,12 @@ from typing import Any, Tuple, Dict, Optional
 from celery import Task
 import pandas as pd
 from sqlalchemy.orm import Session
-from services.factories.strategy_factory import create_model_strategy
 
 from .base_handler import BaseMLJobHandler
+from ..factories.strategy_factory import create_model_strategy
 from ..strategies.base_strategy import BaseModelStrategy
-from shared.db.models import InferenceJob, MLModel # Import specific job and related models
+from shared.db.models import InferenceJob, MLModel
+from shared import schemas
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,6 @@ class InferenceJobHandler(BaseMLJobHandler):
 
     def __init__(self, job_id: int, task_instance: Task):
         super().__init__(job_id, task_instance)
-        # Specific attributes for inference
         self.input_reference: Dict[str, Any] = {}
         self.ml_model_id: Optional[int] = None
 
@@ -107,18 +107,23 @@ class InferenceJobHandler(BaseMLJobHandler):
 
         logger.info(f"Fetching model record for ID: {self.ml_model_id}")
         model_record = session.get(MLModel, self.ml_model_id)
-        if not model_record:
-            raise ValueError(f"MLModel record {self.ml_model_id} not found.")
-        if not model_record.s3_artifact_path:
-            raise ValueError(f"MLModel {self.ml_model_id} does not have a saved artifact path.")
+        if not model_record: raise ValueError(f"MLModel record {self.ml_model_id} not found.")
+        if not model_record.s3_artifact_path: raise ValueError(f"MLModel {self.ml_model_id} has no artifact path.")
 
-        model_type = model_record.model_type
+        # Get model_type string from DB record
+        model_type_str = model_record.model_type
+        # Convert string to Enum member for factory
+        try:
+            model_type_enum = schemas.ModelTypeEnum(model_type_str)
+        except ValueError:
+            raise ValueError(f"Model record {self.ml_model_id} has unsupported model_type '{model_type_str}'")
+
         artifact_path = model_record.s3_artifact_path
 
-        logger.info(f"Creating strategy for model type '{model_type}' and loading artifact {artifact_path}")
-        # Create strategy instance - config might be empty if predict doesn't need it
-        strategy = create_model_strategy(model_type, {}, {}) # Pass empty configs for inference
-        strategy.load_model(artifact_path) # Load the actual model object
+        logger.info(f"Creating strategy for model type '{model_type_enum.value}' and loading artifact {artifact_path}")
+        # Pass enum member to factory
+        strategy = create_model_strategy(model_type_enum, {}, {}) # Empty configs for inference
+        strategy.load_model(artifact_path)
         logger.info("Model loaded into strategy successfully.")
         return strategy
 

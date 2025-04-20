@@ -14,6 +14,7 @@ from shared.db_session import get_async_db_session
 from shared.core.config import settings # If needed for config values
 from shared.db.models.dataset import DatasetStatusEnum # For dataset check
 from shared.db.models.training_job import JobStatusEnum # For filtering
+from shared.schemas.enums import DatasetStatusEnum # Add other imports if needed
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
@@ -48,57 +49,36 @@ async def submit_training_job(
     # 1. Check if Dataset exists and is READY
     dataset = await crud.crud_dataset.get_dataset(db, dataset_id=job_in.dataset_id)
     if not dataset:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Dataset with ID {job_in.dataset_id} not found.",
-        )
-    if dataset.status != schemas.DatasetStatusEnum.READY:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Dataset {job_in.dataset_id} is not ready. Current status: {dataset.status.value}",
-        )
+        raise HTTPException(status_code=404, detail=f"Dataset ID {job_in.dataset_id} not found.")
+    if dataset.status != DatasetStatusEnum.READY:
+        raise HTTPException(status_code=409, detail=f"Dataset {job_in.dataset_id} not READY.")
     if not dataset.storage_path:
-         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Dataset {job_in.dataset_id} is ready but has no storage path defined.",
-        )
+        raise HTTPException(status_code=409, detail=f"Dataset {job_in.dataset_id} has no storage path.")
 
-    # 2. Add more config validation if needed (e.g., check model_type support)
-    supported_model_types = ["sklearn_randomforest"] # Example - expand this
-    if job_in.config.model_type not in supported_model_types:
-         raise HTTPException(
-             status_code=status.HTTP_400_BAD_REQUEST,
-             detail=f"Unsupported model_type '{job_in.config.model_type}'. Supported types: {supported_model_types}",
-         )
 
     # --- Create Job Record ---
     try:
+        # CRUD function expects a Pydantic model, Pydantic handles enum serialization
         db_job = await crud.crud_training_job.create_training_job(db=db, obj_in=job_in)
         logger.info(f"Created TrainingJob record with ID: {db_job.id}")
     except Exception as e:
-        # Catch potential DB errors during job creation
-        logger.error(f"Failed to create TrainingJob record in DB: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to save training job definition.",
-        )
+        logger.error(f"Failed to create TrainingJob record: {e}", exc_info=True)
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to save training job.")
 
     # --- Dispatch Celery Task ---
     task_name = "tasks.train_model" # Must match the name in @shared_task in ml worker
     ml_queue = "ml_queue"          # The queue the ML worker listens to
 
     try:
-        task = backend_celery_app.send_task(
-            task_name,
-            args=[db_job.id], # Pass the TrainingJob ID to the task
-            queue=ml_queue
-        )
+        task = backend_celery_app.send_task(task_name, args=[db_job.id], queue=ml_queue)
         logger.info(f"Dispatched task '{task_name}' to queue '{ml_queue}' for job ID {db_job.id}, task ID: {task.id}")
 
         # --- Update Job with Task ID ---
         # Associate the Celery task ID with the job record
         update_data = schemas.TrainingJobUpdate(celery_task_id=task.id)
         await crud.crud_training_job.update_training_job(db=db, db_obj=db_job, obj_in=update_data)
+        await db.commit() # Commit task ID update
         logger.info(f"Updated job {db_job.id} with Celery task ID {task.id}")
 
         return schemas.TrainingJobSubmitResponse(job_id=db_job.id, celery_task_id=task.id)
@@ -107,18 +87,18 @@ async def submit_training_job(
         logger.error(f"Failed to submit Celery task '{task_name}' for job ID {db_job.id}: {e}", exc_info=True)
         # Attempt to mark the created job as FAILED
         try:
-            fail_update = schemas.TrainingJobUpdate(
-                status=JobStatusEnum.FAILED,
-                status_message=f"Failed to queue training task: {str(e)[:200]}" # Truncate error
-            )
-            await crud.crud_training_job.update_training_job(db=db, db_obj=db_job, obj_in=fail_update)
+            fail_update = schemas.TrainingJobUpdate(status=JobStatusEnum.FAILED, status_message=f"Failed to queue task: {e}")
+            # Fetch fresh object for update if session might be dirty
+            db_job_fail = await crud.crud_training_job.get_training_job(db, db_job.id)
+            if db_job_fail:
+                 await crud.crud_training_job.update_training_job(db=db, db_obj=db_job_fail, obj_in=fail_update)
+                 await db.commit()
+            else:
+                 await db.rollback() # Rollback if fetching failed
         except Exception as update_err:
-            logger.error(f"Failed to mark training job {db_job.id} as failed after queue error: {update_err}")
-
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to submit training task.",
-        )
+            logger.error(f"Failed to mark training job {db_job.id} as failed: {update_err}")
+            await db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to submit training task.")
 
 @router.get(
     "/train/{job_id}",
@@ -211,7 +191,7 @@ async def get_ml_model_details(
 
 @router.post(
     "/search",
-    response_model=schemas.HPSearchJobSubmitResponse, # Use shared schema
+    response_model=schemas.HPSearchJobSubmitResponse,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Submit a Hyperparameter Search Job",
     description=(
@@ -230,7 +210,7 @@ async def submit_hp_search_job(
     - Validates input configuration including Optuna settings.
     - Checks dataset readiness.
     - Handles creation of new studies or continuation of existing ones based on `continue_if_exists` flag.
-    - Creates an `HyperparameterSearchJob` record.
+    - Creates an `HyperparameterSearchJob` record OR uses existing one if continuing.
     - Dispatches a Celery task to the `ml_queue`.
     """
     logger.info(f"Received HP search job submission for study '{job_in.optuna_study_name}', dataset {job_in.dataset_id}")
@@ -238,39 +218,23 @@ async def submit_hp_search_job(
     # --- Validation ---
     # 1. Check Dataset
     dataset = await crud.crud_dataset.get_dataset(db, dataset_id=job_in.dataset_id)
-    if not dataset:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Dataset with ID {job_in.dataset_id} not found.",
-        )
-    if dataset.status != DatasetStatusEnum.READY: # Use Enum from DB model or shared schema
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Dataset {job_in.dataset_id} is not ready. Current status: {dataset.status.value}",
-        )
-    if not dataset.storage_path:
-         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Dataset {job_in.dataset_id} is ready but has no storage path.",
-        )
+    if not dataset: raise HTTPException(status_code=404, detail=f"Dataset ID {job_in.dataset_id} not found.")
+    if dataset.status != DatasetStatusEnum.READY: raise HTTPException(status_code=409, detail=f"Dataset {job_in.dataset_id} not READY.")
+    if not dataset.storage_path: raise HTTPException(status_code=409, detail=f"Dataset {job_in.dataset_id} has no storage path.")
 
-    # 2. Check Model Type Support (if applicable, similar to training)
-    supported_model_types = ["sklearn_randomforest"] # Example
-    if job_in.config.model_type not in supported_model_types:
-         raise HTTPException(
-             status_code=status.HTTP_400_BAD_REQUEST,
-             detail=f"Unsupported model_type '{job_in.config.model_type}' for HP search. Supported types: {supported_model_types}",
-         )
+    # 2. Validate HP Space (moved before continue logic for clarity)
+    if not job_in.config.hp_space: raise HTTPException(status_code=400, detail="hp_space cannot be empty.")
 
     # 3. Handle 'continue_if_exists' logic
     optuna_config = job_in.config.optuna_config
     study_name = job_in.optuna_study_name
+    db_job = None # Initialize db_job to None
 
     existing_jobs = await crud.crud_hp_search_job.get_hp_search_jobs(db, study_name=study_name)
 
     if existing_jobs:
+        first_job = existing_jobs[0] # Get the most recent one if multiple somehow exist
         if optuna_config.continue_if_exists:
-            first_job = existing_jobs[0]
             # Check if dataset matches
             if first_job.dataset_id != job_in.dataset_id:
                 raise HTTPException(
@@ -278,107 +242,111 @@ async def submit_hp_search_job(
                     detail=f"Study '{study_name}' exists but uses a different dataset (Existing: {first_job.dataset_id}, Requested: {job_in.dataset_id}). Cannot continue."
                 )
 
-            # Check if model type matches (requires parsing config JSON)
-            existing_config = first_job.config # This is a dict/JSON
-            existing_model_type = None
+            # Check if model type matches (handle potential dict vs object)
+            existing_config = first_job.config
+            existing_model_type_str = None
             if isinstance(existing_config, dict):
-                 existing_model_type = existing_config.get('model_type')
+                existing_model_type_str = existing_config.get('model_type')
+            elif hasattr(existing_config, 'model_type'): # Check if it's an object-like structure
+                 existing_model_type_str = getattr(existing_config.model_type, 'value', None) # Get enum value if possible
 
-            if existing_model_type != job_in.config.model_type:
+            # Compare the string value of the enum
+            if existing_model_type_str != job_in.config.model_type.value:
                  raise HTTPException(
                      status_code=status.HTTP_409_CONFLICT,
-                     detail=f"Study '{study_name}' exists but uses a different model type (Existing: {existing_model_type}, Requested: {job_in.config.model_type}). Cannot continue."
+                     detail=f"Study '{study_name}' exists but uses different model type (Existing: {existing_model_type_str}, Requested: {job_in.config.model_type.value}). Cannot continue."
                  )
 
-            logger.info(f"Study '{study_name}' exists and matches dataset/model type. Allowing job creation to continue study.")
-            # Allow creation to proceed - the worker will use load_if_exists=True
-        else:
-            # If study exists and continue_if_exists is False, raise conflict
+            logger.info(f"Study '{study_name}' exists and matches. Using existing job ID {first_job.id} for continuation.")
+            db_job = first_job # Use the existing job object
+
+        else: # Job exists, but continue_if_exists is False
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"HP Search Job with study name '{study_name}' already exists. Set 'continue_if_exists: true' in optuna_config to resume."
+                detail=f"Study '{study_name}' already exists. Set 'continue_if_exists: true' in optuna_config to resume, or use a different study name."
             )
-    else:
-        # Study does not exist
-        if optuna_config.continue_if_exists:
-            logger.warning(f"Requested to continue study '{study_name}', but no existing study found. Starting a new one.")
-            # Proceed to create the new job
+    elif optuna_config.continue_if_exists:
+        # continue_if_exists is true, but no job found - proceed to create new
+        logger.warning(f"Continue requested for study '{study_name}', but no existing job found. Will create a new one.")
 
-    # 4. Validate HP Space config?
-    if not job_in.config.hp_space:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="hp_space configuration cannot be empty.")
 
-    # --- Create Job Record ---
-    try:
-        # Use the CRUD function which accepts the shared schema
-        db_job = await crud.crud_hp_search_job.create_hp_search_job(db=db, obj_in=job_in)
-        logger.info(f"Created HyperparameterSearchJob record with ID: {db_job.id}")
-    except IntegrityError as e: # Catch potential race condition on unique constraint
-         await db.rollback() # Rollback the session
-         logger.error(f"Database integrity error creating HP search job (likely study name exists despite check): {e}", exc_info=True)
-         # Check if the error message specifically mentions the unique constraint
-         if "uq_hp_search_jobs_optuna_study_name" in str(e) or "duplicate key value violates unique constraint" in str(e).lower():
-              raise HTTPException(
-                  status_code=status.HTTP_409_CONFLICT,
-                  detail=f"An HP Search Job with the study name '{job_in.optuna_study_name}' already exists (race condition or validation issue)."
-              )
-         else:
-              # Re-raise other integrity errors
-              raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Database integrity error: {e}") from e
-    except Exception as e:
-        await db.rollback() # Ensure rollback on any error
-        logger.error(f"Failed to create HyperparameterSearchJob record in DB: {e}", exc_info=True)
-        # Consider checking for unique constraint violation on study_name if DB enforces it
-        # if "UniqueViolation" in str(e): # Basic check, better check DB exception type
-        #      raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Study name '{job_in.optuna_study_name}' already exists.")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to save HP search job definition.",
-        )
+    # --- Create Job Record (Only if not continuing an existing job) ---
+    if db_job is None: # Only create if we didn't find a valid existing job to continue
+        try:
+            # Use the CRUD function which accepts the shared schema
+            db_job = await crud.crud_hp_search_job.create_hp_search_job(db=db, obj_in=job_in)
+            logger.info(f"Created new HPSearchJob record ID: {db_job.id}")
+        except IntegrityError as e:
+             await db.rollback()
+             logger.error(f"DB integrity error creating HP job '{study_name}': {e}", exc_info=True)
+             # Check if the error is specifically the unique constraint violation
+             # This handles race conditions where another request created the job
+             # between the initial check and this insert attempt.
+             if "uq_hp_search_jobs_optuna_study_name" in str(e).lower() or \
+                (hasattr(e, 'diag') and hasattr(e.diag, 'constraint_name') and e.diag.constraint_name == 'ix_hp_search_jobs_optuna_study_name'): # More robust check if available
+                  raise HTTPException(
+                      status_code=status.HTTP_409_CONFLICT,
+                      detail=f"Study name '{study_name}' already exists (detected during creation). Please use a different name or set 'continue_if_exists: true'."
+                  )
+             else: # Other integrity error
+                 raise HTTPException(status_code=500, detail=f"Database integrity error during job creation: {e}") from e
+        except Exception as e:
+            await db.rollback() # Ensure rollback on any other error during creation
+            logger.error(f"Failed to create HyperparameterSearchJob record '{study_name}' in DB: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to save new HP search job definition.",
+            )
 
     # --- Dispatch Celery Task ---
+    # At this point, db_job should hold either the newly created job or the existing one to continue
+    if not db_job or not db_job.id:
+         # This should ideally not happen if logic above is correct, but as a safeguard:
+         logger.error(f"Failed to obtain a valid job ID for study '{study_name}' before dispatching task.")
+         raise HTTPException(status_code=500, detail="Internal error: Could not determine job ID for task dispatch.")
+
     task_name = "tasks.hyperparameter_search" # Must match worker task name
     ml_queue = "ml_queue"
 
     try:
         task = backend_celery_app.send_task(
             task_name,
-            args=[db_job.id], # Pass the HPSearchJob ID
+            args=[db_job.id], # Pass the correct HPSearchJob ID (new or existing)
             queue=ml_queue
         )
         logger.info(f"Dispatched task '{task_name}' to queue '{ml_queue}' for job ID {db_job.id}, task ID: {task.id}")
 
-        # --- Update Job with Task ID ---
+        # --- Update Job with Task ID (even for continued jobs, update with the latest task ID) ---
         update_data = schemas.HPSearchJobUpdate(celery_task_id=task.id)
-        await crud.crud_hp_search_job.update_hp_search_job(db=db, db_obj=db_job, obj_in=update_data)
-        await db.commit() # Commit the task ID update
-        logger.info(f"Updated HP search job {db_job.id} with Celery task ID {task.id}")
+        # Fetch the job again before update to ensure the session has the latest state,
+        # especially important if we used an existing 'first_job' object earlier.
+        db_job_to_update = await crud.crud_hp_search_job.get_hp_search_job(db, db_job.id)
+        if not db_job_to_update:
+             # Should not happen if we just created or found it, but handle defensively
+             logger.error(f"Could not re-fetch job ID {db_job.id} before updating task ID.")
+             await db.rollback() # Rollback potential creation if we can't update
+             raise HTTPException(status_code=500, detail="Failed to update job with task ID.")
 
-        # Use the shared response schema
+        await crud.crud_hp_search_job.update_hp_search_job(db=db, db_obj=db_job_to_update, obj_in=update_data)
+        await db.commit() # Commit the task ID update
+        logger.info(f"Updated HP job {db_job.id} with Celery task ID {task.id}")
         return schemas.HPSearchJobSubmitResponse(job_id=db_job.id, celery_task_id=task.id)
 
     except Exception as e:
-        logger.error(f"Failed to submit Celery task '{task_name}' for job ID {db_job.id}: {e}", exc_info=True)
-        # Attempt to mark the created job as FAILED
+        logger.error(f"Failed Celery task submit '{task_name}' job={db_job.id}: {e}", exc_info=True)
+        # Attempt to mark the job as FAILED (whether new or existing)
         try:
-            fail_update = schemas.HPSearchJobUpdate(
-                status=JobStatusEnum.FAILED,
-                status_message=f"Failed to queue HP search task: {str(e)[:200]}"
-            )
-            # Need to fetch the object again in a new transaction potentially, or pass ID
-            db_job_for_fail = await crud.crud_hp_search_job.get_hp_search_job(db, db_job.id)
-            if db_job_for_fail:
-                 await crud.crud_hp_search_job.update_hp_search_job(db=db, db_obj=db_job_for_fail, obj_in=fail_update)
+            fail_update = schemas.HPSearchJobUpdate(status=JobStatusEnum.FAILED, status_message=f"Failed queue task: {e}")
+            # Fetch fresh object for update
+            db_job_fail = await crud.crud_hp_search_job.get_hp_search_job(db, db_job.id)
+            if db_job_fail:
+                 await crud.crud_hp_search_job.update_hp_search_job(db=db, db_obj=db_job_fail, obj_in=fail_update)
                  await db.commit()
+            else: await db.rollback() # Rollback creation if we can't mark as failed
         except Exception as update_err:
-            logger.error(f"Failed to mark HP search job {db_job.id} as failed after queue error: {update_err}")
-            await db.rollback() # Rollback status update attempt
-
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to submit HP search task.",
-        )
-
+            logger.error(f"Failed mark HP job {db_job.id} failed after task dispatch error: {update_err}")
+            await db.rollback() # Rollback any pending changes (like job creation)
+        raise HTTPException(status_code=500, detail="Failed submit HP search task.")
 
 @router.get(
     "/search/{job_id}",
@@ -422,7 +390,7 @@ async def list_hp_search_jobs(
 
 @router.post(
     "/infer",
-    response_model=schemas.InferenceJobSubmitResponse, # Use shared schema
+    response_model=schemas.InferenceJobSubmitResponse,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Submit an Inference Job",
     description="Creates an inference job record and dispatches a background task to generate predictions.",
@@ -490,28 +458,20 @@ async def submit_inference_job(
         # --- Update Job with Task ID ---
         update_data = schemas.InferenceJobUpdate(celery_task_id=task.id)
         await crud.crud_inference_job.update_inference_job(db=db, db_obj=db_job, obj_in=update_data)
-        logger.info(f"Updated inference job {db_job.id} with Celery task ID {task.id}")
-
-        # Use the shared response schema
+        await db.commit()
+        logger.info(f"Updated inference job {db_job.id} task ID {task.id}")
         return schemas.InferenceJobSubmitResponse(job_id=db_job.id, celery_task_id=task.id)
-
     except Exception as e:
-        logger.error(f"Failed to submit Celery task '{task_name}' for job ID {db_job.id}: {e}", exc_info=True)
-        # Attempt to mark the created job as FAILED
+        logger.error(f"Failed Celery task submit '{task_name}' job={db_job.id}: {e}", exc_info=True)
         try:
-            fail_update = schemas.InferenceJobUpdate(
-                status=JobStatusEnum.FAILED,
-                status_message=f"Failed to queue inference task: {str(e)[:200]}"
-            )
-            await crud.crud_inference_job.update_inference_job(db=db, db_obj=db_job, obj_in=fail_update)
-        except Exception as update_err:
-            logger.error(f"Failed to mark inference job {db_job.id} as failed after queue error: {update_err}")
-
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to submit inference task.",
-        )
-
+            fail_update = schemas.InferenceJobUpdate(status=JobStatusEnum.FAILED, status_message=f"Failed queue task: {e}")
+            db_job_fail = await crud.crud_inference_job.get_inference_job(db, db_job.id)
+            if db_job_fail:
+                 await crud.crud_inference_job.update_inference_job(db=db, db_obj=db_job_fail, obj_in=fail_update)
+                 await db.commit()
+            else: await db.rollback()
+        except Exception as update_err: logger.error(f"Failed mark inference job {db_job.id} failed: {update_err}"); await db.rollback()
+        raise HTTPException(status_code=500, detail="Failed submit inference task.")
 
 @router.get(
     "/infer/{job_id}",

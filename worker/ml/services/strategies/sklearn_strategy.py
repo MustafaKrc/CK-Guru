@@ -8,40 +8,46 @@ from sklearn.ensemble import RandomForestClassifier
 # Import other sklearn models or components as needed
 
 from .base_strategy import BaseModelStrategy, TrainResult
+from shared.schemas.enums import ModelTypeEnum
 
 logger = logging.getLogger(__name__)
 
 class SklearnStrategy(BaseModelStrategy):
     """Execution strategy for scikit-learn based models."""
 
+    def __init__(self, model_type: ModelTypeEnum, model_config: Dict, job_config: Dict):
+        """Store the specific model type enum member."""
+        self.model_type_enum = model_type # Store the enum member
+        super().__init__(model_config, job_config)
+
     def _initialize_model_internals(self):
         """No specific sklearn initialization needed post __init__."""
         pass
 
     def _get_model_instance(self) -> Any:
-        """Creates the specific scikit-learn model instance."""
-        model_type = self.job_config.get('model_type', 'sklearn_randomforest')
+        """Creates the specific scikit-learn model instance based on stored enum."""
         hyperparams = self.model_config # Direct hyperparameters for this instance
         random_state = self.job_config.get('random_seed', 42)
 
-        # Example: Factory logic within the strategy
-        if model_type == 'sklearn_randomforest':
+        # Compare against the stored enum member
+        if self.model_type_enum == ModelTypeEnum.SKLEARN_RANDOMFOREST:
             # Filter hyperparameters to only those accepted by the model
             valid_params = {k: v for k, v in hyperparams.items() if k in RandomForestClassifier().get_params()}
             model = RandomForestClassifier(**valid_params, random_state=random_state)
-        # elif model_type == 'sklearn_logisticregression':
+        # elif self.model_type_enum == ModelTypeEnum.SKLEARN_LOGISTICREGRESSION:
         #     from sklearn.linear_model import LogisticRegression
         #     valid_params = {k: v for k, v in hyperparams.items() if k in LogisticRegression().get_params()}
         #     model = LogisticRegression(**valid_params, random_state=random_state)
         else:
-            raise ValueError(f"Unsupported scikit-learn model type in SklearnStrategy: {model_type}")
+            # Use the enum's value for the error message
+            raise ValueError(f"Unsupported scikit-learn model type in SklearnStrategy: {self.model_type_enum.value}")
 
         logger.info(f"Initialized sklearn model: {model.__class__.__name__} with params: {model.get_params()}")
         return model
 
     def train(self, X: pd.DataFrame, y: pd.Series) -> TrainResult:
         """Trains a scikit-learn model with train/test split evaluation."""
-        logger.info(f"SklearnStrategy: Starting training for model type: {self.job_config.get('model_type')}")
+        logger.info(f"SklearnStrategy: Starting training for model type: {self.model_type_enum.value}")
         logger.info(f"Training data shape: X={X.shape}, y={y.shape}")
 
         # --- Data Splitting ---

@@ -2,11 +2,12 @@
 from typing import Optional, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel, Field
+from shared.schemas.enums import ModelTypeEnum
 
 # --- Base ---
 class MLModelBase(BaseModel):
     name: str = Field(..., description="Logical name for the model.")
-    model_type: str = Field(..., description="Type/architecture of the model (e.g., sklearn_randomforest).")
+    model_type: ModelTypeEnum = Field(..., description="Type/architecture of the model.")
     description: Optional[str] = Field(None, description="Optional description.")
     hyperparameters: Optional[Dict[str, Any]] = Field(None, description="Hyperparameters used for this specific instance.")
     performance_metrics: Optional[Dict[str, Any]] = Field(None, description="Key performance metrics (e.g., accuracy, f1).")

@@ -4,31 +4,9 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
 
-from shared.db.models.training_job import JobStatusEnum
+from shared.schemas.enums import ObjectiveMetricEnum, SamplerTypeEnum, PrunerTypeEnum, JobStatusEnum, ModelTypeEnum
 from shared.schemas.ml_model import MLModelRead
 
-
-class ObjectiveMetricEnum(str, enum.Enum):
-    F1_WEIGHTED = "f1_weighted"
-    AUC = "auc"
-    PRECISION_WEIGHTED = "precision_weighted"
-    RECALL_WEIGHTED = "recall_weighted"
-    ACCURACY = "accuracy"
-    # Add more as needed
-
-class SamplerTypeEnum(str, enum.Enum):
-    TPE = "tpe"
-    RANDOM = "random"
-    CMAES = "cmaes"
-    # Add more
-
-class PrunerTypeEnum(str, enum.Enum):
-    MEDIAN = "median"
-    HYPERBAND = "hyperband"
-    NOP = "nop" # No pruning
-    PERCENTILE = "percentile"
-    SUCCESSIVEHALVING = "successivehalving"
-    # Add more
 
 class OptunaConfig(BaseModel):
     n_trials: int = Field(..., gt=0, description="Number of trials to run.")
@@ -72,7 +50,7 @@ class HPSuggestion(BaseModel):
 # --- HP Search Job Config ---
 class HPSearchConfig(BaseModel):
     model_name: str = Field(..., description="Logical name prefix for models created during search.")
-    model_type: str = Field(..., description="Type/architecture of the model.")
+    model_type: ModelTypeEnum = Field(..., description="Type/architecture of the model.")
     hp_space: List[HPSuggestion] = Field(..., description="List defining the hyperparameter search space.")
     optuna_config: OptunaConfig = Field(..., description="Optuna configuration for the search.")
     save_best_model: bool = Field(True, description="Whether to train and save the model with best parameters.")

@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 # Import shared components
 from shared.core.config import settings
-from shared.db.models import JobStatusEnum, DatasetStatusEnum
+from shared.schemas.enums import JobStatusEnum, DatasetStatusEnum
 from shared.db_session import get_sync_db_session
 from shared.utils.task_utils import update_task_state
 

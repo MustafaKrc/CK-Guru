@@ -5,18 +5,17 @@ import pandas as pd
 
 import optuna
 
-from services.factories.strategy_factory import create_model_strategy
-
 from .base_handler import BaseMLJobHandler
+from ..factories.strategy_factory import create_model_strategy
 from ..strategies.base_strategy import BaseModelStrategy, TrainResult
-from shared.db.models import HyperparameterSearchJob, MLModel, JobStatusEnum # Import specific job model
-from shared.core.config import settings
-from .. import model_db_service, job_db_service
-from ..hp_search_objective import Objective # Import the objective class
+from ..hp_search_objective import Objective
 from ..factories.optuna_factory import create_sampler, create_pruner
 
-
+from shared.db.models import HyperparameterSearchJob, MLModel, JobStatusEnum
+from shared.core.config import settings
 from shared import schemas
+
+from .. import model_db_service, job_db_service
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL)
@@ -85,6 +84,7 @@ class HPSearchJobHandler(BaseMLJobHandler):
     
     def _create_optuna_sampler(self) -> Optional[optuna.samplers.BaseSampler]:
         """Creates Optuna sampler based on job config."""
+        if not self.job_config: raise RuntimeError("Job config not loaded.")
         config = self.job_config.get('optuna_config', {})
         sampler_type_str = config.get('sampler_type') # Enum serialization handled by Pydantic
         sampler_params = config.get('sampler_config', {})
@@ -94,6 +94,7 @@ class HPSearchJobHandler(BaseMLJobHandler):
 
     def _create_optuna_pruner(self) -> Optional[optuna.pruners.BasePruner]:
         """Creates Optuna pruner based on job config."""
+        if not self.job_config: raise RuntimeError("Job config not loaded.")
         config = self.job_config.get('optuna_config', {})
         pruner_type_str = config.get('pruner_type') # Enum serialization handled by Pydantic
         pruner_params = config.get('pruner_config', {})
@@ -104,77 +105,35 @@ class HPSearchJobHandler(BaseMLJobHandler):
 
     def _determine_optimization_direction(self) -> str:
         """Determine optimization direction based on the chosen objective metric."""
+        # (Implementation remains the same)
+        if not self.job_config: raise RuntimeError("Job config not loaded.")
         opt_config = self.job_config.get('optuna_config', {})
         # Default to F1 Weighted if not specified
         metric_name = opt_config.get('objective_metric', schemas.ObjectiveMetricEnum.F1_WEIGHTED.value)
-
-        # Define metrics that should be maximized
-        maximize_metrics = {
-            schemas.ObjectiveMetricEnum.F1_WEIGHTED.value,
-            schemas.ObjectiveMetricEnum.AUC.value,
-            schemas.ObjectiveMetricEnum.PRECISION_WEIGHTED.value,
-            schemas.ObjectiveMetricEnum.RECALL_WEIGHTED.value,
-            schemas.ObjectiveMetricEnum.ACCURACY.value
-        }
-        # Add metrics to minimize here if needed
-        # minimize_metrics = {'log_loss', 'mae', 'rmse'}
-
-        if metric_name in maximize_metrics:
-            return 'maximize'
-        # elif metric_name in minimize_metrics:
-        #     return 'minimize'
-        else:
-            logger.warning(f"Could not determine optimization direction for metric '{metric_name}'. Defaulting to 'maximize'.")
-            return 'maximize'
+        maximize_metrics = { m.value for m in schemas.ObjectiveMetricEnum } # Assume all defined metrics are maximized for now
+        # TODO: Update this to reflect actual metrics and their directions
+        # For now, assume all metrics are maximized
+        if metric_name in maximize_metrics: return 'maximize'
+        else: logger.warning(f"Metric '{metric_name}' not in maximize list. Defaulting to 'maximize'."); return 'maximize'
 
 
     def _execute_core_ml_task(self, prepared_data: Tuple[pd.DataFrame, pd.Series]) -> optuna.Study:
         """Executes the Optuna optimization study."""
         X, y = prepared_data
         optuna_storage_url = settings.OPTUNA_DB_URL
-        storage = optuna.storages.RDBStorage(url=optuna_storage_url) if optuna_storage_url else None
+        storage = optuna.storages.RDBStorage(url=str(optuna_storage_url)) if optuna_storage_url else None
         study_name = self.job_db_record.optuna_study_name
-        optuna_config = self.job_config.get('optuna_config', {})
-        direction = optuna_config.get('direction', 'maximize') # Default to maximize
-
-        if not study_name:
-             raise ValueError("optuna_study_name is not defined in the job record.")
-        
-        # --- Create Sampler and Pruner ---
+        direction = self._determine_optimization_direction()
+        if not study_name: raise ValueError("optuna_study_name is not defined.")
         sampler = self._create_optuna_sampler()
         pruner = self._create_optuna_pruner()
-
-        logger.info(
-            f"Creating/loading Optuna study: '{study_name}' "
-            f"Direction: '{direction}', "
-            f"Sampler: {sampler.__class__.__name__ if sampler else 'Default'}, "
-            f"Pruner: {pruner.__class__.__name__ if pruner else 'Default'}"
-        )
-
-        try:
-            study = optuna.create_study(
-                study_name=study_name,
-                storage=storage,
-                load_if_exists=True, # Let Optuna handle resuming based on name/storage
-                direction=direction,
-                sampler=sampler,
-                pruner=pruner
-            )
-        except Exception as study_err:
-             logger.error(f"Failed to create or load Optuna study '{study_name}': {study_err}", exc_info=True)
-             raise
-
+        logger.info(f"Creating/loading Optuna study: '{study_name}' Dir: '{direction}', Sampler: {sampler.__class__.__name__}, Pruner: {pruner.__class__.__name__}")
+        try: study = optuna.create_study(study_name=study_name, storage=storage, load_if_exists=True, direction=direction, sampler=sampler, pruner=pruner)
+        except Exception as study_err: logger.error(f"Failed to create/load study '{study_name}': {study_err}", exc_info=True); raise
         hp_space_config = self.job_config.get('hp_space', [])
-        if not hp_space_config:
-            raise ValueError("hp_space not defined in HP search job config.")
-
-        # Instantiate the objective function
-        try:
-            objective = Objective(X, y, hp_space_config, self.job_config)
-        except Exception as objective_err:
-             logger.error(f"Failed to initialize Objective function: {objective_err}", exc_info=True)
-             raise
-
+        if not hp_space_config: raise ValueError("hp_space not defined.")
+        try: objective = Objective(X, y, hp_space_config, self.job_config)
+        except Exception as objective_err: logger.error(f"Failed to init Objective: {objective_err}", exc_info=True); raise
         optuna_config = self.job_config.get('optuna_config', {})
 
         n_trials = optuna_config.get('n_trials', 10)
@@ -210,10 +169,12 @@ class HPSearchJobHandler(BaseMLJobHandler):
 
         try:
             best_trial = study.best_trial
-            logger.info(f"Best trial found: Number={best_trial.number}, Value={best_trial.value:.4f}, Params={best_trial.params}")
-            self.final_db_results['best_trial_id'] = best_trial.number
-            self.final_db_results['best_params'] = best_trial.params
-            self.final_db_results['best_value'] = best_trial.value
+            logger.info(f"Best trial: #{best_trial.number}, Value={best_trial.value:.4f}, Params={best_trial.params}")
+            self.final_db_results.update({
+                'best_trial_id': best_trial.number,
+                'best_params': best_trial.params,
+                'best_value': best_trial.value
+            })
         except ValueError:
             # This happens if no trials completed successfully
             completed_trials_count = len([t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE])
@@ -226,22 +187,24 @@ class HPSearchJobHandler(BaseMLJobHandler):
 
         # --- Train and Save Best Model (if configured and best_trial exists) ---
         if self.job_config.get('save_best_model', True):
-            logger.info("Training and saving best model from HP search...")
-            model_type = self.job_config.get('model_type')
+            logger.info("Training and saving best model...")
+            # Ensure model_type is retrieved as enum
+            model_type_enum: Optional[schemas.ModelTypeEnum] = self.job_config.get('model_type')
+            if not isinstance(model_type_enum, schemas.ModelTypeEnum):
+                 raise ValueError("Invalid model_type in job config for final training.")
             best_hyperparams = best_trial.params
 
             # --- Re-load/prepare data (inefficient but necessary if not stored) ---
             # TODO: Explore passing data via context or a more efficient mechanism
             session = self.current_session
-            if not session: raise RuntimeError("DB Session lost before final model training.")
+            if not session: raise RuntimeError("DB Session lost.")
             raw_data = self._load_data(session)
             X, y = self._prepare_data(raw_data)
             # --- End Re-load ---
 
             try:
-                # Create strategy with best params
-                final_strategy = create_model_strategy(model_type, best_hyperparams, self.job_config)
-                # Train the final model on the full dataset X, y
+                # Pass enum member to factory
+                final_strategy = create_model_strategy(model_type_enum, best_hyperparams, self.job_config)
                 logger.info("Training final model with best parameters...")
                 # We call train here, assuming it handles fitting. If evaluate needed, adjust.
                 train_result = final_strategy.train(X, y) # Re-train on full data
@@ -254,12 +217,14 @@ class HPSearchJobHandler(BaseMLJobHandler):
                 logger.info(f"Saving best model as '{model_name}' v{new_version}")
 
                 model_data = {
-                    'name': model_name, 'model_type': model_type, 'version': new_version,
-                    'description': f"Best model from HP Search Job {self.job_id} (Study: {study.study_name}, Trial: {best_trial.number})",
+                    'name': model_name,
+                    'model_type': model_type_enum.value, # Store string value in DB
+                    'version': new_version,
+                    'description': f"Best model from HP Search Job {self.job_id} (Trial: {best_trial.number}, Value: {best_trial.value:.4f})",
                     'hyperparameters': best_hyperparams,
-                    'performance_metrics': train_result.metrics, # Use metrics from final training run
+                    'performance_metrics': train_result.metrics,
                     'dataset_id': self.dataset_id,
-                    'hp_search_job_id': self.job_id, # Link back to this HP search job
+                    'hp_search_job_id': self.job_id,
                     'training_job_id': None,
                     's3_artifact_path': None
                 }
@@ -272,23 +237,21 @@ class HPSearchJobHandler(BaseMLJobHandler):
                 save_success = final_strategy.save_model(s3_uri)
 
                 if not save_success:
-                    logger.error(f"Failed to save best model artifact to {s3_uri}. Rolling back DB changes.")
+                    logger.error(f"Failed to save model artifact {s3_uri}. Rolling back.")
                     session.rollback()
-                    # Set status message for final DB update, but don't raise here to allow job status update
-                    self.final_db_results['status_message'] = f"HP search complete, but failed to save best model artifact."
+                    self.final_db_results['status_message'] = f"HP search complete (Trial {best_trial.number}), but failed to save model artifact."
+                    best_model_db_id = None
                 else:
                     model_db_service.set_model_artifact_path(session, new_model_id, s3_uri)
                     best_model_db_id = new_model_id
-                    logger.info(f"Best model artifact saved and DB record {new_model_id} updated.")
+                    logger.info(f"Best model artifact saved, DB record {new_model_id} updated.")
+                    self.final_db_results['status_message'] = f"HP search completed. Best trial: {best_trial.number}. Model saved as ID: {best_model_db_id}."
 
             except Exception as final_train_err:
-                 logger.error(f"Failed to train or save the best model: {final_train_err}", exc_info=True)
-                 # Don't raise, but update status message
-                 self.final_db_results['status_message'] = f"HP search complete, but failed during final model training/saving: {final_train_err}"
-                 # Don't rollback here, let the main handler manage the session commit/rollback based on overall success
+                 logger.error(f"Failed final model train/save: {final_train_err}", exc_info=True)
+                 self.final_db_results['status_message'] = f"HP search complete (Trial {best_trial.number}), but failed final train/save: {final_train_err}"
 
-        # Store the best model ID (if saved) in the final results
         self.final_db_results['best_ml_model_id'] = best_model_db_id
         # If no specific error message set, use default success
         if 'status_message' not in self.final_db_results:
-             self.final_db_results['status_message'] = f"HP search completed. Best trial: {best_trial.number}."
+             self.final_db_results['status_message'] = f"HP search completed successfully. Best trial: {best_trial.number}."

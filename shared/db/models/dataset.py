@@ -1,5 +1,4 @@
 # shared/db/models/dataset.py
-import enum
 from typing import TYPE_CHECKING, Dict, Any, List
 from datetime import datetime
 
@@ -9,14 +8,10 @@ from sqlalchemy.orm import relationship, Mapped, mapped_column
 
 from shared.db.base_class import Base
 
+from shared.schemas.enums import DatasetStatusEnum
+
 if TYPE_CHECKING:
     from .repository import Repository # noqa
-
-class DatasetStatusEnum(str, enum.Enum):
-    PENDING = "pending"
-    GENERATING = "generating"
-    READY = "ready"
-    FAILED = "failed"
 
 class Dataset(Base):
     __tablename__ = "datasets"

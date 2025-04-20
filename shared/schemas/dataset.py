@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, Json # Use Json for validation? maybe just Dict
 
-from shared.db.models.dataset import DatasetStatusEnum # Import Enum
+from shared.schemas.enums import DatasetStatusEnum # Import Enum from correct location
 
 # --- Cleaning Rule Configuration ---
 class CleaningRuleParams(BaseModel):
@@ -38,7 +38,7 @@ class DatasetCreate(DatasetBase):
 class DatasetRead(DatasetBase):
     id: int
     repository_id: int
-    status: DatasetStatusEnum
+    status: DatasetStatusEnum # This now correctly refers to the imported enum
     status_message: Optional[str] = None
     storage_path: Optional[str] = None
     created_at: datetime
@@ -57,7 +57,7 @@ class DatasetUpdate(DatasetBase):
     
 
 class DatasetStatusUpdate(BaseModel):
-    status: DatasetStatusEnum
+    status: DatasetStatusEnum # This now correctly refers to the imported enum
     status_message: Optional[str] = None
     storage_path: Optional[str] = None
 

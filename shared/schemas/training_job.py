@@ -3,14 +3,13 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel, Field
 
-# Re-use JobStatusEnum if defined centrally, otherwise define here
-from shared.db.models.training_job import JobStatusEnum
+from shared.schemas.enums import JobStatusEnum, ModelTypeEnum # Import ModelTypeEnum
 from .ml_model import MLModelRead # To show nested model info
 
 # --- Training Job Config (More specific than raw JSON) ---
 class TrainingConfig(BaseModel):
     model_name: str = Field(..., description="Logical name for the model to be trained.")
-    model_type: str = Field(..., description="Type/architecture of the model (e.g., sklearn_randomforest).")
+    model_type: ModelTypeEnum = Field(..., description="Type/architecture of the model (e.g., sklearn_randomforest).") # Use ModelTypeEnum
     hyperparameters: Dict[str, Any] = Field(default_factory=dict, description="Specific hyperparameters to use.")
     
     feature_columns: List[str] = Field(..., description="List of features to use from the dataset.")

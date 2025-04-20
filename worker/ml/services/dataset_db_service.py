@@ -3,8 +3,9 @@ import logging
 from typing import Optional, Tuple
 from sqlalchemy.orm import Session
 
-from shared.db.models import Dataset, DatasetStatusEnum
+from shared.db.models import Dataset
 from shared.core.config import settings
+from shared.schemas.enums import DatasetStatusEnum
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())

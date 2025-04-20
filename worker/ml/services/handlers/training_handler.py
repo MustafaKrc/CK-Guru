@@ -1,15 +1,20 @@
 # worker/ml/services/handlers/training_handler.py
 import logging
-from typing import Any, Tuple, Dict
+from typing import Any, Optional, Tuple, Dict
 import pandas as pd
 
-from services.factories.strategy_factory import create_model_strategy
-
+# Import factories and base classes
+from ..factories.strategy_factory import create_model_strategy
 from .base_handler import BaseMLJobHandler
 from ..strategies.base_strategy import BaseModelStrategy, TrainResult
+
+# Import shared components
 from shared.db.models import TrainingJob, MLModel # Import specific job model
 from shared.core.config import settings
-from .. import model_db_service # Import necessary db services
+from shared import schemas # Import schemas to access ModelTypeEnum
+
+# Import DB services if needed directly
+from .. import model_db_service
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +32,10 @@ class TrainingJobHandler(BaseMLJobHandler):
     def _prepare_data(self, data: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series]:
         """Prepares features (X) and target (y) for training."""
         logger.info("Preparing data for training...")
+        # Ensure job_config is loaded
+        if not self.job_config:
+            raise RuntimeError("Job config not loaded in training handler.")
+
         features = self.job_config.get('feature_columns', [])
         target = self.job_config.get('target_column')
         if not features or not target:
@@ -64,21 +73,30 @@ class TrainingJobHandler(BaseMLJobHandler):
 
     def _create_strategy(self) -> BaseModelStrategy:
         """Creates the specific model strategy based on job config."""
-        model_type = self.job_config.get('model_type')
+        # Ensure job_config is loaded
+        if not self.job_config:
+            raise RuntimeError("Job config not loaded before creating strategy.")
+
+        # model_type in job_config should now be a ModelTypeEnum member due to schema validation
+        model_type_enum: Optional[schemas.ModelTypeEnum] = self.job_config.get('model_type')
         hyperparams = self.job_config.get('hyperparameters', {})
-        if not model_type:
-            raise ValueError("model_type not specified in training job config.")
 
-        # Use the factory from the base handler or imported directly
-        strategy = create_model_strategy(model_type, hyperparams, self.job_config)
+        if not isinstance(model_type_enum, schemas.ModelTypeEnum):
+             # Fallback or error if it's somehow still a string (shouldn't happen with Pydantic)
+             try:
+                 model_type_enum = schemas.ModelTypeEnum(str(model_type_enum))
+             except ValueError:
+                 raise ValueError(f"Invalid or missing model_type '{model_type_enum}' in training job config.")
 
-        # --- Validate that only known hyperparameters were passed ---
-        provided = self.job_config.get("hyperparameters", {}) or {}
-        allowed = strategy.get_hyperparameter_space()  # already a set
+        # Use the factory with the enum member
+        strategy = create_model_strategy(model_type_enum, hyperparams, self.job_config)
+
+        # Validate hyperparameters
+        provided = hyperparams or {}
+        allowed = strategy.get_hyperparameter_space()
         unknown = set(provided) - allowed
-
         if unknown:
-            logger.error(f"Unknown hyperparameters for '{model_type}': {unknown}")
+            logger.error(f"Unknown hyperparameters for '{model_type_enum.value}': {unknown}")
             raise ValueError(f"Unknown hyperparameters: {sorted(unknown)}")
 
         return strategy
@@ -97,13 +115,22 @@ class TrainingJobHandler(BaseMLJobHandler):
     def _prepare_final_results(self, ml_result: TrainResult):
         """Saves the trained model artifact and creates the MLModel DB record."""
         logger.info("Saving training results (model artifact and DB record)...")
+        # Ensure job_config is loaded
+        if not self.job_config:
+            raise RuntimeError("Job config not loaded before preparing final results.")
+
         model_name = self.job_config.get('model_name')
-        model_type = self.job_config.get('model_type')
+        # Get the model_type enum member from job_config
+        model_type_enum: Optional[schemas.ModelTypeEnum] = self.job_config.get('model_type')
         hyperparams = self.job_config.get('hyperparameters', {})
+
         if not model_name:
             raise ValueError("model_name missing in training job config.")
+        if not isinstance(model_type_enum, schemas.ModelTypeEnum):
+            # This shouldn't happen if validation worked, but handle defensively
+            raise ValueError("model_type is missing or invalid in job config.")
 
-        # Use the session stored by the base handler's run_job method
+        # Use the session stored by the base handler
         session = self.current_session
         if not session:
             raise RuntimeError("DB Session not available in _prepare_final_results")
@@ -114,13 +141,15 @@ class TrainingJobHandler(BaseMLJobHandler):
         logger.info(f"Determined next version for model '{model_name}': v{new_version}")
 
         model_data = {
-            'name': model_name, 'model_type': model_type, 'version': new_version,
+            'name': model_name,
+            'model_type': model_type_enum.value, # Store the string value in DB if DB is String type
+            'version': new_version,
             'description': f"Trained via TrainingJob {self.job_id}",
             'hyperparameters': hyperparams,
             'performance_metrics': ml_result.metrics,
             'dataset_id': self.dataset_id,
             'training_job_id': self.job_id, # Link back to this job
-            'hp_search_job_id': None, # Not from HP search
+            'hp_search_job_id': None,
             's3_artifact_path': None # Set after saving
         }
         new_model_id = model_db_service.create_model_record(session, model_data)
