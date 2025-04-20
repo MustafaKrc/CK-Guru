@@ -19,11 +19,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Upgrade pip, setuptools, and wheel
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# Copy shared and worker requirements
-COPY ./shared /app/shared
+# Copy requirement file and install into custom directory
 COPY ./worker/dataset/requirements.txt /app/worker/dataset/requirements.txt
-
-# Install dependencies into /install
 RUN pip install --no-cache-dir --prefix=/install -r /app/worker/dataset/requirements.txt
 
 # ===============================
