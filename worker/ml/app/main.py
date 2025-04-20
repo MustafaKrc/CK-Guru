@@ -26,6 +26,7 @@ logger.info("Celery app created for ML worker.")
 # This ensures Optuna knows about the DB URL early.
 try:
     import optuna
+    optuna.logging.set_verbosity(optuna.logging.DEBUG)   # <— NEW: show Optuna internals
     # Check if the database URL is set
     if settings.OPTUNA_DB_URL:
         # This doesn't create tables, just configures Optuna's default storage factory
