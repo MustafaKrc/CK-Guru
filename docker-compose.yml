@@ -40,6 +40,7 @@ services:
     container_name: ckguru_ingestion_worker
     volumes:
       - ./worker/ingestion/app:/app/app # Worker-specific code hot-reload
+      - ./worker/ingestion/services:/app/services # Ingestion services hot reload
       - ./shared:/app/shared           # Shared code hot-reload
       - app_data:/app/persistent_data # Volume for git clones
     env_file:
@@ -62,6 +63,7 @@ services:
     container_name: ckguru_dataset_worker
     volumes:
       - ./worker/dataset/app:/app/app
+      - ./worker/dataset/services:/app/services
       - ./shared:/app/shared
       # No app_data needed unless it reads clones directly (it shouldn't)
     env_file:
@@ -158,11 +160,14 @@ services:
   #################
   frontend:
     build:
-      context: ./frontend # Context is the frontend directory
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
     container_name: ckguru_frontend
     ports:
-      - "3000:80" # Map host port 3000 to Nginx container port 80
+      - "3000:3000" # Map host 3000 to container 3000 (Next.js default)
+    environment:
+      # Ensure Next.js listens on all interfaces inside the container
+      HOSTNAME: "0.0.0.0"
     depends_on:
       - backend # Usually depends on backend being available
 
