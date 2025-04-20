@@ -1,4 +1,8 @@
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+from fastapi import status
+from fastapi.logger import logger
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.v1.router import api_router
 
@@ -43,6 +47,22 @@ app.include_router(api_router, prefix="/api/v1") # Add the /api/v1 prefix here
 async def read_root():
     """Basic health check endpoint."""
     return {"status": "ok", "message": "Welcome to JIT Defect Prediction API!"}
+
+@app.exception_handler(SQLAlchemyError)
+async def sqlalchemy_exception_handler(request, exc):
+    logger.error(f"SQLAlchemyError: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": "A database error occurred."},
+    )
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request, exc):
+    logger.error(f"Unhandled Exception: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": "Internal server error."},
+    )
 
 # --- Optional: Add Middleware (CORS, etc.) ---
 # from fastapi.middleware.cors import CORSMiddleware

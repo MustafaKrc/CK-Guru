@@ -14,7 +14,7 @@ logger.setLevel(settings.LOG_LEVEL.upper())
 def _get_job_model(job_type: str) -> Type[Union[TrainingJob, HyperparameterSearchJob]]:
      if job_type == 'training':
          return TrainingJob
-     elif job_type == 'hp_search':
+     elif job_type == 'hp_search' or job_type == 'hyperparameter_search' or job_type == 'hpsearch':
          return HyperparameterSearchJob
      # Add inference later
      # elif job_type == 'inference':

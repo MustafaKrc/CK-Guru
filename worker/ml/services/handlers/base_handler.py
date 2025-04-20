@@ -158,7 +158,7 @@ class BaseMLJobHandler(ABC):
         Handles overall execution flow, status updates, and error handling.
         """
         final_status = JobStatusEnum.FAILED # Default to failure
-        final_db_status = JobStatusEnum.FAILURE # Ensure final_db_status always defined
+        final_db_status = JobStatusEnum.FAILED # Ensure final_db_status always defined
         status_message = "Job processing started but did not complete."
         self.final_db_results = {'job_id': self.job_id} # Initialize results dict
 

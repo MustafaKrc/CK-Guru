@@ -14,13 +14,17 @@ logger = logging.getLogger(__name__)
 
 async def get_hp_search_job(db: AsyncSession, job_id: int) -> Optional[HyperparameterSearchJob]:
     """Get a single HP search job by ID."""
-    stmt = select(HyperparameterSearchJob).options(selectinload(HyperparameterSearchJob.best_ml_model)).filter(HyperparameterSearchJob.id == job_id)
+    stmt = select(HyperparameterSearchJob).options(
+        selectinload(HyperparameterSearchJob.best_ml_model)
+    ).filter(HyperparameterSearchJob.id == job_id)
     result = await db.execute(stmt)
     return result.scalars().first()
 
 async def get_hp_search_job_by_task_id(db: AsyncSession, celery_task_id: str) -> Optional[HyperparameterSearchJob]:
     """Get an HP search job by its Celery task ID."""
-    stmt = select(HyperparameterSearchJob).options(selectinload(HyperparameterSearchJob.best_ml_model)).filter(HyperparameterSearchJob.celery_task_id == celery_task_id)
+    stmt = select(HyperparameterSearchJob).options(
+        selectinload(HyperparameterSearchJob.best_ml_model)
+    ).filter(HyperparameterSearchJob.celery_task_id == celery_task_id)
     result = await db.execute(stmt)
     return result.scalars().first()
 
@@ -29,7 +33,10 @@ async def get_hp_search_jobs(
     dataset_id: Optional[int] = None, status: Optional[JobStatusEnum] = None, study_name: Optional[str] = None
 ) -> Sequence[HyperparameterSearchJob]:
     """Get multiple HP search jobs with optional filtering and pagination."""
-    stmt = select(HyperparameterSearchJob).order_by(HyperparameterSearchJob.created_at.desc())
+    stmt = select(HyperparameterSearchJob).options(
+        selectinload(HyperparameterSearchJob.best_ml_model)
+    ).order_by(HyperparameterSearchJob.created_at.desc())
+
     if dataset_id is not None:
         stmt = stmt.filter(HyperparameterSearchJob.dataset_id == dataset_id)
     if status:

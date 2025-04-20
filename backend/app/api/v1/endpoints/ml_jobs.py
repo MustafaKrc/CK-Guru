@@ -214,7 +214,10 @@ async def get_ml_model_details(
     response_model=schemas.HPSearchJobSubmitResponse, # Use shared schema
     status_code=status.HTTP_202_ACCEPTED,
     summary="Submit a Hyperparameter Search Job",
-    description="Creates an HP search job record and dispatches a background task to run Optuna.",
+    description=(
+        "Creates an HP search job record and dispatches a background task to run Optuna. "
+        "Allows continuation of existing studies if specified."
+    ),
 )
 async def submit_hp_search_job(
     *,
@@ -224,9 +227,9 @@ async def submit_hp_search_job(
     """
     Submit a new hyperparameter search job using Optuna.
 
-    - Validates input configuration.
+    - Validates input configuration including Optuna settings.
     - Checks dataset readiness.
-    - Checks for existing study name conflicts (optional).
+    - Handles creation of new studies or continuation of existing ones based on `continue_if_exists` flag.
     - Creates an `HyperparameterSearchJob` record.
     - Dispatches a Celery task to the `ml_queue`.
     """
@@ -258,17 +261,50 @@ async def submit_hp_search_job(
              status_code=status.HTTP_400_BAD_REQUEST,
              detail=f"Unsupported model_type '{job_in.config.model_type}' for HP search. Supported types: {supported_model_types}",
          )
-         
 
-    # 3. Check Optuna Study Name Conflict (Optional - Optuna can load existing)
-    # If you want to prevent *starting new jobs* with the same study name while one might be running/finished:
-    existing_jobs = await crud.crud_hp_search_job.get_hp_search_jobs(db, study_name=job_in.optuna_study_name, limit=1)
+    # 3. Handle 'continue_if_exists' logic
+    optuna_config = job_in.config.optuna_config
+    study_name = job_in.optuna_study_name
+
+    existing_jobs = await crud.crud_hp_search_job.get_hp_search_jobs(db, study_name=study_name)
+
     if existing_jobs:
-        # Decide how to handle: error, warning, allow?
-        logger.warning(f"An HP search job with study name '{job_in.optuna_study_name}' already exists (Job ID: {existing_jobs[0].id}). Optuna might reuse the study.")
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"HP Search Job with study name '{job_in.optuna_study_name}' already exists.")
+        if optuna_config.continue_if_exists:
+            first_job = existing_jobs[0]
+            # Check if dataset matches
+            if first_job.dataset_id != job_in.dataset_id:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Study '{study_name}' exists but uses a different dataset (Existing: {first_job.dataset_id}, Requested: {job_in.dataset_id}). Cannot continue."
+                )
 
-    # 4. Validate HP Space config? (Basic checks maybe, detailed validation is complex)
+            # Check if model type matches (requires parsing config JSON)
+            existing_config = first_job.config # This is a dict/JSON
+            existing_model_type = None
+            if isinstance(existing_config, dict):
+                 existing_model_type = existing_config.get('model_type')
+
+            if existing_model_type != job_in.config.model_type:
+                 raise HTTPException(
+                     status_code=status.HTTP_409_CONFLICT,
+                     detail=f"Study '{study_name}' exists but uses a different model type (Existing: {existing_model_type}, Requested: {job_in.config.model_type}). Cannot continue."
+                 )
+
+            logger.info(f"Study '{study_name}' exists and matches dataset/model type. Allowing job creation to continue study.")
+            # Allow creation to proceed - the worker will use load_if_exists=True
+        else:
+            # If study exists and continue_if_exists is False, raise conflict
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"HP Search Job with study name '{study_name}' already exists. Set 'continue_if_exists: true' in optuna_config to resume."
+            )
+    else:
+        # Study does not exist
+        if optuna_config.continue_if_exists:
+            logger.warning(f"Requested to continue study '{study_name}', but no existing study found. Starting a new one.")
+            # Proceed to create the new job
+
+    # 4. Validate HP Space config?
     if not job_in.config.hp_space:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="hp_space configuration cannot be empty.")
 
@@ -284,12 +320,13 @@ async def submit_hp_search_job(
          if "uq_hp_search_jobs_optuna_study_name" in str(e) or "duplicate key value violates unique constraint" in str(e).lower():
               raise HTTPException(
                   status_code=status.HTTP_409_CONFLICT,
-                  detail=f"An HP Search Job with the study name '{job_in.optuna_study_name}' already exists (race condition)."
+                  detail=f"An HP Search Job with the study name '{job_in.optuna_study_name}' already exists (race condition or validation issue)."
               )
          else:
               # Re-raise other integrity errors
               raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Database integrity error: {e}") from e
     except Exception as e:
+        await db.rollback() # Ensure rollback on any error
         logger.error(f"Failed to create HyperparameterSearchJob record in DB: {e}", exc_info=True)
         # Consider checking for unique constraint violation on study_name if DB enforces it
         # if "UniqueViolation" in str(e): # Basic check, better check DB exception type
@@ -314,6 +351,7 @@ async def submit_hp_search_job(
         # --- Update Job with Task ID ---
         update_data = schemas.HPSearchJobUpdate(celery_task_id=task.id)
         await crud.crud_hp_search_job.update_hp_search_job(db=db, db_obj=db_job, obj_in=update_data)
+        await db.commit() # Commit the task ID update
         logger.info(f"Updated HP search job {db_job.id} with Celery task ID {task.id}")
 
         # Use the shared response schema
@@ -327,9 +365,14 @@ async def submit_hp_search_job(
                 status=JobStatusEnum.FAILED,
                 status_message=f"Failed to queue HP search task: {str(e)[:200]}"
             )
-            await crud.crud_hp_search_job.update_hp_search_job(db=db, db_obj=db_job, obj_in=fail_update)
+            # Need to fetch the object again in a new transaction potentially, or pass ID
+            db_job_for_fail = await crud.crud_hp_search_job.get_hp_search_job(db, db_job.id)
+            if db_job_for_fail:
+                 await crud.crud_hp_search_job.update_hp_search_job(db=db, db_obj=db_job_for_fail, obj_in=fail_update)
+                 await db.commit()
         except Exception as update_err:
             logger.error(f"Failed to mark HP search job {db_job.id} as failed after queue error: {update_err}")
+            await db.rollback() # Rollback status update attempt
 
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

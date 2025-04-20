@@ -49,5 +49,5 @@ class HyperparameterSearchJob(Base):
     )
 
     def __repr__(self):
-        model_info = f", best_model_id={self.best_ml_model_id}" if self.best_ml_model_id else ""
+        model_info = f", best_trial_id={self.best_trial_id}" if self.best_trial_id else ""
         return f"<HyperparameterSearchJob(id={self.id}, status='{self.status.value}', study='{self.optuna_study_name}'{model_info})>"
