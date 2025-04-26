@@ -33,21 +33,28 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/public ./public
+# Install nginx
+USER root
+RUN apk add --no-cache nginx
 
-# Automatically leverage output traces to reduce image size
-# https://nextjs.org/docs/advanced-features/output-file-tracing
+# Copy built assets
+COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-USER nextjs
+# Copy nginx configuration and entrypoint script
+COPY frontend/nginx.conf /etc/nginx/nginx.conf
+COPY frontend/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
-EXPOSE 3000
+# Expose nginx port
+EXPOSE 80
 
 ENV PORT=3000
-# set hostname to localhost
 ENV HOSTNAME="0.0.0.0"
 
-# server.js is created by next build from the standalone output
-# https://nextjs.org/docs/pages/api-reference/next-config-js/output
-CMD ["node", "server.js"]
+# Set ownership for the app directory to the nextjs user
+RUN chown -R nextjs:nodejs /app
+
+# Run entrypoint script which starts node server and nginx
+CMD ["/app/entrypoint.sh"]
