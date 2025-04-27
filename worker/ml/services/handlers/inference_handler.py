@@ -2,6 +2,7 @@
 import logging
 from typing import Any, Tuple, Dict, Optional
 from celery import Task
+import numpy as np
 import pandas as pd
 from sklearn.exceptions import NotFittedError
 from sqlalchemy.orm import Session
@@ -178,7 +179,6 @@ class InferenceJobHandler(BaseMLJobHandler):
         identifiers_df = data[identifier_cols].copy()
 
         # --- Get Expected Features ---
-        # (Keep the logic from the previous step to get expected_features list)
         expected_features: Optional[list[str]] = None
         try:
             if hasattr(self.model_strategy, 'get_feature_names_out'):

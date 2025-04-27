@@ -21,6 +21,7 @@ from .main import celery_app
 
 # Import steps and context
 from services.steps.base import IngestionContext, IngestionStep
+from services.steps.link_bugs import LinkBugsStep
 from services.steps.prepare_repo import PrepareRepositoryStep
 from services.steps.calculate_guru import CalculateCommitGuruMetricsStep
 from services.steps.persist_guru_and_link_issues import PersistCommitGuruAndLinkIssuesStep
