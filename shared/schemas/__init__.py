@@ -10,7 +10,13 @@ from .rule_definition import RuleDefinition, RuleParamDefinition
 from .ml_model import MLModelBase, MLModelCreate, MLModelRead, MLModelUpdate
 from .training_job import TrainingJobBase, TrainingJobCreate, TrainingJobRead, TrainingJobUpdate, TrainingConfig, TrainingJobSubmitResponse
 from .hp_search_job import HPSearchJobBase, HPSearchJobCreate, HPSearchJobUpdate, HPSearchJobRead, HPSearchConfig, OptunaConfig, HPSuggestion, HPSearchJobSubmitResponse
-from .inference_job import InferenceJobBase, InferenceJobCreate, InferenceJobUpdate, InferenceJobRead, InferenceJobSubmitResponse
+from .inference_job import (
+    InferenceJobBase, InferenceJobRead, InferenceJobUpdate,
+    InferenceJobCreateInternal as InferenceJobCreate, # Use alias for creation
+    InferenceJobSubmitResponse as TrainingInferenceJobSubmitResponse # Avoid name clash if needed
+)
+
+from .inference import ManualInferenceRequest, InferenceTriggerResponse, GitHubPushPayload # Add GitHubPushPayload
 
 __all__ = [
     # Enums
@@ -24,5 +30,6 @@ __all__ = [
     "MLModelBase", "MLModelCreate", "MLModelRead", "MLModelUpdate",
     "TrainingJobBase", "TrainingJobCreate", "TrainingJobRead", "TrainingJobUpdate", "TrainingConfig", "TrainingJobSubmitResponse",
     "HPSearchJobBase", "HPSearchJobCreate", "HPSearchJobUpdate", "HPSearchJobRead", "HPSearchConfig", "OptunaConfig", "HPSuggestion", "HPSearchJobSubmitResponse",
-    "InferenceJobBase", "InferenceJobCreate", "InferenceJobUpdate", "InferenceJobRead", "InferenceJobSubmitResponse",
+    "InferenceJobBase", "InferenceJobCreate", "InferenceJobUpdate", "InferenceJobRead",
+    "ManualInferenceRequest", "InferenceTriggerResponse", "GitHubPushPayload", # Add new ones
 ]

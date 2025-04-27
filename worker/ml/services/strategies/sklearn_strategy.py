@@ -95,19 +95,30 @@ class SklearnStrategy(BaseModelStrategy):
         return TrainResult(model=self.model, metrics=metrics)
 
     def predict(self, data: pd.DataFrame) -> Dict[str, Any]:
-        """Generates predictions using the fitted sklearn model."""
+        """
+        Generates predictions for each row using the fitted sklearn model.
+        Returns predictions and probabilities as lists.
+        """
         if self.model is None:
             raise RuntimeError("Sklearn model is not fitted or loaded. Cannot predict.")
 
+        # data is potentially multi-row here
         logger.info(f"SklearnStrategy: Generating predictions for {len(data)} samples...")
         try:
-            predictions = self.model.predict(data).tolist()
-            result = {'predictions': predictions}
+            # .predict() returns a numpy array
+            predictions_array = self.model.predict(data)
+            # Convert numpy array to list for JSON serialization
+            predictions_list = predictions_array.tolist()
+            result = {'predictions': predictions_list}
 
             # Add probabilities if the model supports it
             if hasattr(self.model, 'predict_proba'):
-                 probabilities = self.model.predict_proba(data).tolist()
-                 result['probabilities'] = probabilities
+                 # .predict_proba() returns numpy array of shape (n_samples, n_classes)
+                 probabilities_array = self.model.predict_proba(data)
+                 # Convert numpy array to list of lists for JSON serialization
+                 probabilities_list = probabilities_array.tolist()
+                 result['probabilities'] = probabilities_list
+
             return result
         except Exception as e:
             logger.error(f"Error during sklearn prediction: {e}", exc_info=True)

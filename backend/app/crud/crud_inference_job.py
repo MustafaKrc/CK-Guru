@@ -7,14 +7,14 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.db.models.inference_job import InferenceJob
-from shared.db.models.training_job import JobStatusEnum # Reuse enum
-from shared.schemas.inference_job import InferenceJobCreate, InferenceJobUpdate
+from shared.schemas.enums import JobStatusEnum # Reuse enum
+from shared.schemas.inference_job import InferenceJobUpdate
+from shared.schemas import InferenceJobCreate
 
 logger = logging.getLogger(__name__)
 
 async def get_inference_job(db: AsyncSession, job_id: int) -> Optional[InferenceJob]:
     """Get a single inference job by ID."""
-    # Optionally load related model info if needed
     stmt = select(InferenceJob).options(selectinload(InferenceJob.ml_model)).filter(InferenceJob.id == job_id)
     result = await db.execute(stmt)
     return result.scalars().first()
@@ -23,7 +23,8 @@ async def get_inference_job_by_task_id(db: AsyncSession, celery_task_id: str) ->
     """Get an inference job by its Celery task ID."""
     stmt = select(InferenceJob).options(selectinload(InferenceJob.ml_model)).filter(InferenceJob.celery_task_id == celery_task_id)
     result = await db.execute(stmt)
-    return result.scalars().first()
+    # Task ID might not be unique if retried, maybe fetch latest?
+    return result.scalars().first() # Return first match for now
 
 async def get_inference_jobs(
     db: AsyncSession, *, skip: int = 0, limit: int = 100,
@@ -41,10 +42,12 @@ async def get_inference_jobs(
 
 async def create_inference_job(db: AsyncSession, *, obj_in: InferenceJobCreate) -> InferenceJob:
     """Create a new inference job record."""
+    # Note: obj_in should be InferenceJobCreateInternal type here based on import alias
     db_obj = InferenceJob(
         ml_model_id=obj_in.ml_model_id,
         input_reference=obj_in.input_reference, # Already a dict
-        status=JobStatusEnum.PENDING
+        status=obj_in.status, # Status passed in
+        celery_task_id=obj_in.celery_task_id # Initial task ID passed in
     )
     db.add(db_obj)
     await db.commit()

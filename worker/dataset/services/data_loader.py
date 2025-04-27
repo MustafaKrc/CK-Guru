@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, aliased
 
 from shared.db.models import BotPattern, CommitGuruMetric, CKMetric
 from shared.core.config import settings
-from .processing_steps import ProcessingSteps, COMMIT_GURU_METRIC_COLUMNS, CK_METRIC_COLUMNS # Import columns
+from shared.db import COMMIT_GURU_METRIC_COLUMNS, CK_METRIC_COLUMNS
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())

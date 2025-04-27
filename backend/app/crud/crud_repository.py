@@ -1,7 +1,8 @@
+# backend/app/crud/crud_repository.py
 import re
 import logging
 from typing import List, Optional, Sequence
-from urllib.parse import urlparse 
+from urllib.parse import urlparse
 
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload # If needed for eager loading relationships later
@@ -51,8 +52,23 @@ async def get_repository(db: AsyncSession, repo_id: int) -> Optional[Repository]
 
 async def get_repository_by_git_url(db: AsyncSession, git_url: str) -> Optional[Repository]:
     """Get a single repository by its Git URL."""
-    result = await db.execute(select(Repository).filter(Repository.git_url == git_url))
-    return result.scalars().first()
+    # Normalize URL slightly? Maybe remove trailing .git? Be careful.
+    # Let's assume exact match for now.
+    normalized_url = git_url.removesuffix('.git') if git_url.endswith('.git') else git_url
+    # Query using both original and potentially normalized versions if needed, or stick to one.
+    # Sticking to exact match based on schema for now.
+    stmt = select(Repository).filter(Repository.git_url == git_url)
+    result = await db.execute(stmt)
+    repo = result.scalars().first()
+    # Optional: If not found with exact match, try normalized?
+    # if not repo and normalized_url != git_url:
+    #     stmt_norm = select(Repository).filter(Repository.git_url == normalized_url)
+    #     result_norm = await db.execute(stmt_norm)
+    #     repo = result_norm.scalars().first()
+    #     if repo: logger.debug(f"Found repo using normalized URL {normalized_url}")
+
+    return repo
+
 
 async def get_repositories(db: AsyncSession, skip: int = 0, limit: int = 100) -> Sequence[Repository]:
     """Get multiple repositories with pagination."""
@@ -80,7 +96,11 @@ async def update_repository(db: AsyncSession, *, db_obj: Repository, obj_in: Rep
     """Update an existing repository."""
     update_data = obj_in.model_dump(exclude_unset=True) # Use Pydantic V2 method
     for field, value in update_data.items():
-        setattr(db_obj, field, value)
+        # Handle HttpUrl conversion back to string if git_url is updated
+        if field == 'git_url' and value is not None:
+            setattr(db_obj, field, str(value))
+        elif value is not None: # Avoid setting None explicitly unless intended
+            setattr(db_obj, field, value)
     db.add(db_obj)
     await db.commit()
     await db.refresh(db_obj)

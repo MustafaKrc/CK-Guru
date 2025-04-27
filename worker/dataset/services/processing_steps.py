@@ -14,29 +14,7 @@ from shared.core.config import settings
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
 
-# Define columns for CK metrics (adjust if CKMetric model attributes change)
-CK_METRIC_COLUMNS = [
-    'file', 'class_name', 'type_', 'cbo', 'cboModified', 'fanin', 'fanout',
-    'wmc', 'dit', 'noc', 'rfc', 'lcom', 'lcom_norm', 'tcc', 'lcc',
-    'totalMethodsQty', 'staticMethodsQty', 'publicMethodsQty', 'privateMethodsQty',
-    'protectedMethodsQty', 'defaultMethodsQty', 'visibleMethodsQty',
-    'abstractMethodsQty', 'finalMethodsQty', 'synchronizedMethodsQty',
-    'totalFieldsQty', 'staticFieldsQty', 'publicFieldsQty', 'privateFieldsQty',
-    'protectedFieldsQty', 'defaultFieldsQty', 'finalFieldsQty',
-    'synchronizedFieldsQty', 'nosi', 'loc', 'returnQty', 'loopQty',
-    'comparisonsQty', 'tryCatchQty', 'parenthesizedExpsQty',
-    'stringLiteralsQty', 'numbersQty', 'assignmentsQty', 'mathOperationsQty',
-    'variablesQty', 'maxNestedBlocksQty', 'anonymousClassesQty',
-    'innerClassesQty', 'lambdasQty', 'uniqueWordsQty', 'modifiers',
-    'logStatementsQty'
-]
-# Columns from CommitGuruMetric (excluding relationships and JSON fields handled separately)
-COMMIT_GURU_METRIC_COLUMNS = [
-    'commit_hash', 'parent_hashes', 'author_name', 'author_email', 'author_date',
-    'author_date_unix_timestamp', 'commit_message', 'is_buggy', 'fix',
-    'files_changed', 'ns', 'nd', 'nf', 'entropy', 'la', 'ld', 'lt', 'ndev',
-    'age', 'nuc', 'exp', 'rexp', 'sexp'
-]
+from shared.db import CK_METRIC_COLUMNS, COMMIT_GURU_METRIC_COLUMNS
 
 class ProcessingSteps:
     """Contains static methods for distinct data processing steps."""

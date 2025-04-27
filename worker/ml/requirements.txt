@@ -6,6 +6,7 @@ psycopg2-binary>=2.9 # Sync driver for SQLAlchemy
 pydantic>=2.0
 pydantic-settings>=2.0
 python-dotenv>=1.0.0
+requests>=2.28 # For HTTP requests
 
 # --- Database ---
 sqlalchemy>=2.0
@@ -20,6 +21,6 @@ pyarrow>=10.0 # For Parquet
 fsspec>=2023.0.0
 s3fs>=2023.0.0
 
-# --- ML - Add specific libraries later ---
-optuna>=3.0 # Add Optuna early as it impacts DB setup slightly
-scikit-learn>=1.5 # Example: Add in Phase 2
+# --- ML ---
+optuna>=3.0 
+scikit-learn>=1.5 

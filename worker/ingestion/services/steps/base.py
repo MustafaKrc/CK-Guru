@@ -35,9 +35,15 @@ class IngestionContext:
     raw_ck_metrics: Dict[str, pd.DataFrame]   # commit_hash -> DataFrame of CK metrics for that commit
     inserted_guru_metrics_count: int
     inserted_ck_metrics_count: int
-    # Add other intermediate data if needed (e.g., commit_to_linked_issues_map)
+    target_commit_hash: Optional[str] = None # The specific commit to process
+    parent_commit_hash: Optional[str] = None # Determined parent hash
+    # Flag to indicate if parent metrics existed or were calculated in this run
+    parent_metrics_processed: bool = False
+    # Store the ID of the overarching InferenceJob
+    inference_job_id: Optional[int] = None
 
-    def __init__(self, repository_id: int, git_url: str, repo_local_path: Path, task_instance: Task):
+    def __init__(self, repository_id: int, git_url: str, repo_local_path: Path, task_instance: Task,
+                 target_commit_hash: Optional[str] = None, inference_job_id: Optional[int] = None): 
         self.repository_id = repository_id
         self.git_url = git_url
         self.repo_local_path = repo_local_path
@@ -51,6 +57,8 @@ class IngestionContext:
         self.raw_ck_metrics = {}
         self.inserted_guru_metrics_count = 0
         self.inserted_ck_metrics_count = 0
+        self.parent_commit_hash = None
+        self.parent_metrics_processed = False
 
 
 class IngestionStep(ABC):

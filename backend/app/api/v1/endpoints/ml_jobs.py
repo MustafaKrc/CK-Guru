@@ -7,14 +7,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud
-from app.core.celery_app import backend_celery_app # Celery app for sending tasks
+from app.core.celery_app import backend_celery_app
 
 from shared import schemas
 from shared.db_session import get_async_db_session
-from shared.core.config import settings # If needed for config values
-from shared.db.models.dataset import DatasetStatusEnum # For dataset check
-from shared.db.models.training_job import JobStatusEnum # For filtering
-from shared.schemas.enums import DatasetStatusEnum # Add other imports if needed
+from shared.core.config import settings
+from shared.schemas.enums import DatasetStatusEnum, JobStatusEnum # Add other imports if needed
+
+# Import the new orchestrator service
+from app.services.inference_orchestrator import InferenceOrchestrator
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
@@ -386,96 +388,60 @@ async def list_hp_search_jobs(
     )
     return jobs
 
-# === Inference Jobs ===
+# === Manual Inference Trigger ===
 
 @router.post(
-    "/infer",
-    response_model=schemas.InferenceJobSubmitResponse,
+    "/infer/manual",
+    response_model=schemas.InferenceTriggerResponse, # Use the new response schema
     status_code=status.HTTP_202_ACCEPTED,
-    summary="Submit an Inference Job",
-    description="Creates an inference job record and dispatches a background task to generate predictions.",
+    summary="Trigger Inference for a Specific Commit",
+    description="Manually triggers the feature extraction and inference pipeline for a given commit hash.",
 )
-async def submit_inference_job(
+async def trigger_manual_inference(
     *,
     db: AsyncSession = Depends(get_async_db_session),
-    job_in: schemas.InferenceJobCreate, # Use shared schema
+    request_body: schemas.ManualInferenceRequest, # Use the new request schema
 ):
     """
-    Submit a new inference job using a specified ML Model.
-
-    - Validates input (e.g., model existence).
-    - Creates an `InferenceJob` record.
-    - Dispatches a Celery task to the `ml_queue`.
+    Initiates the inference process for a specified repository commit.
+    This involves queuing background tasks for feature extraction and model prediction.
     """
-    logger.info(f"Received inference job submission request for model ID: {job_in.ml_model_id}")
+    logger.info(f"Received manual inference request: {request_body}")
 
-    # --- Validation ---
-    # 1. Check if ML Model exists and has an artifact path
-    ml_model = await crud.crud_ml_model.get_ml_model(db, model_id=job_in.ml_model_id)
-    if not ml_model:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"ML Model with ID {job_in.ml_model_id} not found.",
-        )
-    if not ml_model.s3_artifact_path:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, # Conflict: Model exists but unusable
-            detail=f"ML Model {job_in.ml_model_id} does not have a saved artifact path (s3_artifact_path is null). Cannot use for inference.",
-        )
+    # Validate short hash? API can accept short, but orchestrator might need full?
+    # For now, assume orchestrator or worker handles hash resolution if needed.
+    # Basic check: ensure hash is not empty
+    if not request_body.target_commit_hash:
+         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="target_commit_hash cannot be empty.")
 
-    # 2. Validate input_reference structure (optional, basic check)
-    if not isinstance(job_in.input_reference, dict) or not job_in.input_reference:
+    orchestrator = InferenceOrchestrator()
+    try:
+        inference_job_id, initial_task_id = await orchestrator.trigger_inference_pipeline(
+            db=db,
+            repo_id=request_body.repo_id,
+            commit_hash=request_body.target_commit_hash,
+            ml_model_id=request_body.ml_model_id,
+            trigger_source="manual"
+        )
+        return schemas.InferenceTriggerResponse(
+            inference_job_id=inference_job_id,
+            initial_task_id=initial_task_id
+        )
+    except HTTPException as http_exc:
+         # Re-raise HTTP exceptions from the orchestrator (e.g., 404 Not Found)
+         raise http_exc
+    except Exception as e:
+         logger.error(f"Error triggering manual inference pipeline: {e}", exc_info=True)
+         # Catch potential runtime errors from orchestrator logic
          raise HTTPException(
-             status_code=status.HTTP_400_BAD_REQUEST,
-             detail="Invalid input_reference format. Must be a non-empty JSON object.",
+             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+             detail=f"Failed to trigger inference pipeline: {e}"
          )
-    # TODO: Add more specific validation based on the agreed `input_reference` structure
 
-    # --- Create Job Record ---
-    try:
-        # Use the CRUD function which accepts the shared schema
-        db_job = await crud.crud_inference_job.create_inference_job(db=db, obj_in=job_in)
-        logger.info(f"Created InferenceJob record with ID: {db_job.id}")
-    except Exception as e:
-        logger.error(f"Failed to create InferenceJob record in DB: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to save inference job definition.",
-        )
-
-    # --- Dispatch Celery Task ---
-    task_name = "tasks.inference" # Must match worker task name
-    ml_queue = "ml_queue"
-
-    try:
-        task = backend_celery_app.send_task(
-            task_name,
-            args=[db_job.id], # Pass the InferenceJob ID
-            queue=ml_queue
-        )
-        logger.info(f"Dispatched task '{task_name}' to queue '{ml_queue}' for job ID {db_job.id}, task ID: {task.id}")
-
-        # --- Update Job with Task ID ---
-        update_data = schemas.InferenceJobUpdate(celery_task_id=task.id)
-        await crud.crud_inference_job.update_inference_job(db=db, db_obj=db_job, obj_in=update_data)
-        await db.commit()
-        logger.info(f"Updated inference job {db_job.id} task ID {task.id}")
-        return schemas.InferenceJobSubmitResponse(job_id=db_job.id, celery_task_id=task.id)
-    except Exception as e:
-        logger.error(f"Failed Celery task submit '{task_name}' job={db_job.id}: {e}", exc_info=True)
-        try:
-            fail_update = schemas.InferenceJobUpdate(status=JobStatusEnum.FAILED, status_message=f"Failed queue task: {e}")
-            db_job_fail = await crud.crud_inference_job.get_inference_job(db, db_job.id)
-            if db_job_fail:
-                 await crud.crud_inference_job.update_inference_job(db=db, db_obj=db_job_fail, obj_in=fail_update)
-                 await db.commit()
-            else: await db.rollback()
-        except Exception as update_err: logger.error(f"Failed mark inference job {db_job.id} failed: {update_err}"); await db.rollback()
-        raise HTTPException(status_code=500, detail="Failed submit inference task.")
 
 @router.get(
     "/infer/{job_id}",
-    response_model=schemas.InferenceJobRead, # Use shared schema
+    response_model=schemas.InferenceJobRead,
     summary="Get Inference Job Details",
     description="Retrieves the details, status, and potentially the prediction result of a specific inference job.",
     responses={404: {"description": "Inference job not found"}},
@@ -493,7 +459,7 @@ async def get_inference_job_details(
 
 @router.get(
     "/infer",
-    response_model=List[schemas.InferenceJobRead], # Use shared schema
+    response_model=List[schemas.InferenceJobRead],
     summary="List Inference Jobs",
     description="Retrieves a list of inference jobs with optional filters and pagination.",
 )
@@ -509,17 +475,3 @@ async def list_inference_jobs(
         db, skip=skip, limit=limit, model_id=model_id, status=status
     )
     return jobs
-
-# === Generic Job Status (using Celery Task ID) ===
-# Note: This relies on the existing /tasks/{task_id} endpoint.
-# We might create a specific /ml/jobs/status/{task_id} endpoint later if we
-# want to augment the Celery status with more job-specific DB info.
-
-# Example placeholder if needed:
-# @router.get("/jobs/status/{celery_task_id}", ...)
-# async def get_ml_job_status_by_task_id(...) -> schemas.TaskStatusResponse:
-#    # 1. Call the existing task status endpoint function/logic
-#    # 2. Optionally, try to find the associated job in DB tables
-#    #    (TrainingJob, HPSearchJob, InferenceJob) using celery_task_id
-#    # 3. Augment the response with job-specific details (like DB job ID, status)
-#    pass

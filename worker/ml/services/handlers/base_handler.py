@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 
+from attr import attributes
 import pandas as pd
 from celery import Task
 from celery.exceptions import Ignore, Terminated
@@ -17,12 +18,13 @@ from shared.db_session import get_sync_db_session
 from shared.utils.task_utils import update_task_state
 
 # Import ML worker services
-from .. import job_db_service, dataset_db_service, model_db_service
+from .. import feature_db_service, job_db_service, model_db_service
 from ..strategies.base_strategy import BaseModelStrategy
 # Factory needed by subclasses
 from ..factories.strategy_factory import create_model_strategy
 
 logger = logging.getLogger(__name__)
+logger.setLevel(settings.LOG_LEVEL.upper()) 
 
 class BaseMLJobHandler(ABC):
     """
@@ -66,12 +68,12 @@ class BaseMLJobHandler(ABC):
              logger.warning("Task instance not available for progress update.")
 
     def _update_db_status(self, session: Session, status: JobStatusEnum, message: str, commit: bool = True):
-        """Helper to update the job status in the database using job_db_service."""
-        job_type_lowercase = self.job_type_name.lower().replace('job', '') # Infer type for service call
+        # Infer job_type from class name for the service call
+        job_type_str = self.job_type_name.lower().replace('job', '')
         logger.info(f"Updating DB status for Job {self.job_id} ({self.job_type_name}) to {status.value}. Message: {message[:100]}...")
         try:
             job_db_service.update_job_completion(
-                session, self.job_id, job_type_lowercase, status, message, self.final_db_results
+                session, self.job_id, job_type_str, status, message, self.final_db_results
             )
             if commit:
                 session.commit()
@@ -88,23 +90,45 @@ class BaseMLJobHandler(ABC):
         logger.info(f"Loading details for {self.job_type_name} ID {self.job_id}")
         job_record = session.get(self.job_model_class, self.job_id)
         if not job_record:
-            raise ValueError(f"{self.job_type_name} {self.job_id} not found in database.")
+            # If not found, raise Ignore immediately to stop processing
+            # This prevents errors later if the job was deleted between dispatch and execution
+            raise Ignore(f"{self.job_type_name} {self.job_id} not found in database. Ignoring task.")
+
+        current_task_id = self.task.request.id if self.task else None
 
         # Check if already running by another task instance
-        if job_record.status == JobStatusEnum.RUNNING and job_record.celery_task_id != self.task.request.id:
-             raise Ignore(f"Job {self.job_id} ({self.job_type_name}) already running (Task ID: {job_record.celery_task_id}). Ignoring this task.")
+        if job_record.status == JobStatusEnum.RUNNING and job_record.celery_task_id != current_task_id:
+             # --- MODIFIED LOGIC ---
+             logger.warning(f"Job {self.job_id} ({self.job_type_name}) status is RUNNING but with different Task ID ({job_record.celery_task_id}). "
+                            f"Updating Task ID to current ({current_task_id}) and continuing.")
+             # Update the task ID in the DB to reflect this worker is now handling it
+             job_record.celery_task_id = current_task_id
+             # Optionally update status message
+             job_record.status_message = f"Processing taken over by Task ID: {current_task_id}"
+             # DO NOT RAISE Ignore - Allow this worker to proceed
+             # --- END MODIFIED LOGIC ---
+        elif job_record.status not in [JobStatusEnum.PENDING, JobStatusEnum.RUNNING]: # Allow re-running PENDING or taking over RUNNING
+             # If job is already SUCCESS, FAILED, REVOKED, ignore this task
+             raise Ignore(f"Job {self.job_id} ({self.job_type_name}) has terminal status '{job_record.status.value}'. Ignoring task.")
 
         self.job_db_record = job_record
-        self.job_config = self.job_db_record.config if isinstance(self.job_db_record.config, dict) else {}
 
-        # Extract common fields if they exist
+        # Check if the job record instance has a 'config' attribute before accessing it
+        if hasattr(self.job_db_record, 'config') and self.job_db_record.config is not None:
+            # Ensure it's treated as a dictionary
+            self.job_config = dict(self.job_db_record.config) if isinstance(self.job_db_record.config, (dict, attributes.InstrumentedAttribute)) else {}
+            logger.debug(f"Loaded job_config for Job {self.job_id}")
+        else:
+            self.job_config = {} # Default to empty dict if no config attribute
+            logger.debug(f"No 'config' attribute found on Job {self.job_id} ({self.job_type_name}). Setting job_config to empty dict.")
+            
         self.dataset_id = getattr(self.job_db_record, 'dataset_id', None)
 
-        # Mark job as running in DB
-        job_db_service.update_job_start(session, self.job_db_record, self.task.request.id)
-        session.commit() # Commit the status change
-        session.refresh(self.job_db_record) # Refresh to get updated state if needed
-        logger.info(f"{self.job_type_name} {self.job_id} status set to RUNNING.")
+        # Mark job as running (or update task ID if already running)
+        job_db_service.update_job_start(session, self.job_db_record, current_task_id)
+        session.commit() # Commit the status/task_id change
+        session.refresh(self.job_db_record)
+        logger.info(f"{self.job_type_name} {self.job_id} status set/confirmed as RUNNING with Task ID {current_task_id}.")
 
     def _load_data(self, session: Session) -> pd.DataFrame:
         """Loads dataset based on dataset_id. Can be overridden."""
@@ -112,7 +136,7 @@ class BaseMLJobHandler(ABC):
             raise ValueError("Dataset ID not available for loading data.")
         logger.info(f"Loading data for Dataset ID: {self.dataset_id}")
 
-        status, path = dataset_db_service.get_dataset_status_and_path(session, self.dataset_id)
+        status, path = feature_db_service.get_dataset_status_and_path(session, self.dataset_id)
         if status != DatasetStatusEnum.READY or not path:
             raise ValueError(f"Dataset {self.dataset_id} is not ready or its path is missing.")
 
@@ -160,64 +184,65 @@ class BaseMLJobHandler(ABC):
         final_status = JobStatusEnum.FAILED # Default to failure
         final_db_status = JobStatusEnum.FAILED # Ensure final_db_status always defined
         status_message = "Job processing started but did not complete."
-        self.final_db_results = {'job_id': self.job_id} # Initialize results dict
+        task_was_ignored = False # Flag to track if Ignore was raised
+        self.final_db_results = {'job_id': self.job_id}
 
         try:
-            # Use a single session for the main workflow steps
             with get_sync_db_session() as session:
-                self.current_session = session # Store session for helper methods
-
-                # --- Step 1: Load Job Details & Set Initial Status ---
+                self.current_session = session
+                # Step 1: Load Job Details
                 self._update_progress("Loading job details...", 5)
-                self._load_job_details(session) # Commits RUNNING status
+                self._load_job_details(session)
 
-                # --- Step 2: Load Data ---
-                self._update_progress("Loading dataset...", 15)
-                raw_data = self._load_data(session)
+                # Step 2: Load Data
+                self._update_progress("Loading data...", 15)
+                raw_data = self._load_data(session) # Returns DataFrame for inference
 
-                # --- Step 3: Prepare Data ---
-                self._update_progress("Preparing data...", 25)
-                prepared_data = self._prepare_data(raw_data)
-
-                # --- Step 4: Create Strategy (if applicable) ---
-                self._update_progress("Initializing strategy...", 30)
+                # Step 3: Create Strategy
+                self._update_progress("Initializing strategy / Loading model...", 25)
                 self.model_strategy = self._create_strategy()
+                if self.model_strategy is None and self.job_type_name != 'HPSearchJob':
+                     raise RuntimeError(f"Failed to create or load model strategy for {self.job_type_name}.")
 
-                # --- Step 5: Execute Core Task ---
-                self._update_progress("Executing core ML task...", 35)
-                ml_result = self._execute_core_ml_task(prepared_data)
+                # Step 4: Prepare Data
+                # Now returns features and optionally identifiers
+                self._update_progress("Preparing data...", 35)
+                prepared_data_package = self._prepare_data(raw_data)
 
-                # --- Step 6: Process & Save Results ---
-                # This step handles artifact saving and populates self.final_db_results
+                # Step 5: Execute Core Task
+                # Pass the potentially modified prepared_data_package
+                self._update_progress("Executing core ML task...", 45)
+                ml_result_package = self._execute_core_ml_task(prepared_data_package) # Returns result, maybe ids
+
+                # Step 6: Process & Save Results
+                # Pass the potentially modified ml_result_package
                 self._update_progress("Processing & saving results...", 90)
-                self._prepare_final_results(ml_result)
+                self._prepare_final_results(ml_result_package)
 
                 # --- Step 7: Set Final Success Status & Commit Results ---
                 final_status = JobStatusEnum.SUCCESS
-                final_db_status = JobStatusEnum.SUCCESS # Update final_db_status on success
-                status_message = self.final_db_results.pop('status_message', "Job completed successfully.") # Use message from results if provided
-                self.final_db_results['status'] = 'SUCCESS' # Add status to returned dict
+                final_db_status = JobStatusEnum.SUCCESS
+                status_message = self.final_db_results.pop('status_message', "Job completed successfully.")
+                self.final_db_results['status'] = 'SUCCESS'
 
-                # Commit results saved in _prepare_final_results
                 logger.info("Committing final ML task results to DB...")
-                session.commit() # Commit changes made within _prepare_final_results
+                session.commit()
 
-            # Update Celery status AFTER successful DB commit
             self._update_progress(status_message, 100, state='SUCCESS')
             logger.info(f"Job {self.job_id} ({self.job_type_name}) completed successfully.")
-            return self.final_db_results # Return results dict
+            return self.final_db_results
 
         except Terminated as e:
-            final_status = JobStatusEnum.REVOKED
+            final_status = JobStatusEnum.REVOKED # Celery handles state, this is for DB
+            final_db_status = JobStatusEnum.FAILED # Mark DB FAILED on revoke
             status_message = "Job terminated by request."
             logger.warning(f"Task {self.task.request.id}: {status_message}", exc_info=False)
-            # Terminated exception is handled by Celery itself for state, but update DB
-            raise # Re-raise for Celery to mark state correctly
+            raise # Re-raise for Celery
 
         except Ignore as e:
              status_message = f"Job ignored: {e}"
+             task_was_ignored = True # Set flag
              logger.info(f"Task {self.task.request.id}: {status_message}", exc_info=False)
-             # Don't update DB status for Ignore, just let Celery handle task state
              raise # Re-raise for Celery
 
         except Exception as e:
@@ -240,10 +265,14 @@ class BaseMLJobHandler(ABC):
                     logger.info(f"Attempting final DB status update for Job {self.job_id} to {final_db_status.value}")
                     # Use a NEW session for safety, in case the original one is compromised
                     with get_sync_db_session() as final_session:
-                        # update_db_status now uses self.final_db_results if needed
+                        # Pass the correct lowercase job type string
+                        job_type_str = self.job_type_name.lower().replace('job', '')
+                        # Use the updated _update_db_status which calls the service correctly
                         self._update_db_status(final_session, final_db_status, status_message, commit=True)
                 except Exception as db_err:
                     logger.critical(f"Task {self.task.request.id}: CRITICAL - Failed final DB status update for Job {self.job_id}: {db_err}", exc_info=True)
+            elif task_was_ignored:
+                logger.info(f"Task {self.task.request.id}: Skipped final DB status update because task was ignored.")
             else:
                  # This case should be rare if the initial loading succeeded
                  logger.error(f"Task {self.task.request.id}: Cannot perform final DB update for Job {self.job_id} because session was not initialized.")
