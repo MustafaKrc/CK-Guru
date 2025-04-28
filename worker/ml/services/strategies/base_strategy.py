@@ -107,8 +107,8 @@ class BaseModelStrategy(ABC):
             from sklearn.metrics import accuracy_score, f1_score
 
             # Ensure y_test is compatible (e.g., convert to int if needed)
-            y_test_eval = pd.to_numeric(y_test, errors='coerce').fillna(-1).astype(int) # Example handling
-            y_pred_eval = pd.to_numeric(y_pred, errors='coerce').fillna(-1).astype(int)
+            y_test_eval = pd.to_numeric(y_test, errors='coerce').fillna(-1).astype(int)
+            y_pred_eval = pd.to_numeric(pd.Series(y_pred), errors='coerce').fillna(-1).astype(int)
 
             # Handle cases where conversion might fail or result in incompatible types/values
             # This might require more robust checking based on expected target types

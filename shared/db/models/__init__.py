@@ -9,3 +9,4 @@ from .training_job import TrainingJob, JobStatusEnum
 from .hp_search_job import HyperparameterSearchJob
 from .ml_model import MLModel
 from .inference_job import InferenceJob
+from .xai_result import XAIResult

@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 
-from attr import attributes
+from sqlalchemy.orm import attributes
 import pandas as pd
 from celery import Task
 from celery.exceptions import Ignore, Terminated

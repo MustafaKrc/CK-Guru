@@ -1,12 +1,14 @@
 # worker/ml/services/handlers/inference_handler.py
 import logging
-from typing import Any, Tuple, Dict, Optional
+from typing import Any, List, Tuple, Dict, Optional
 from celery import Task
 import numpy as np
 import pandas as pd
 from sklearn.exceptions import NotFittedError
 from sqlalchemy.orm import Session
 
+from shared.schemas.inference_job import InferenceResultPackage
+from shared.schemas.xai import FilePredictionDetail
 from .base_handler import BaseMLJobHandler
 from ..factories.strategy_factory import create_model_strategy
 from ..strategies.base_strategy import BaseModelStrategy
@@ -14,8 +16,6 @@ from shared.db.models import InferenceJob, MLModel
 from shared import schemas
 from shared.core.config import settings
 from .. import feature_db_service
-from .. import model_db_service
-from .. import job_db_service
 
 
 logger = logging.getLogger(__name__)
@@ -220,72 +220,82 @@ class InferenceJobHandler(BaseMLJobHandler):
 
     def _execute_core_ml_task(self, prepared_data_package: Tuple[pd.DataFrame, pd.DataFrame]) -> Tuple[Dict[str, Any], pd.DataFrame]:
         """Executes prediction and returns results along with identifiers."""
-        X_inference, identifiers_df = prepared_data_package # Unpack tuple
-        if self.model_strategy is None:
-            raise RuntimeError("Model strategy was not created or loaded.")
+        X_inference, identifiers_df = prepared_data_package
+        if self.model_strategy is None or self.model_strategy.model is None:
+            raise RuntimeError("Model strategy or internal model not loaded.")
 
         logger.info(f"Executing inference via strategy: {self.model_strategy.__class__.__name__} on {X_inference.shape[0]} instances.")
         prediction_result = self.model_strategy.predict(X_inference) # Returns dict e.g. {'predictions': [...]}
         logger.info(f"Inference execution complete.")
 
-        # Return prediction results AND the corresponding identifiers
+        # Return ONLY prediction results and identifiers
         return prediction_result, identifiers_df
 
-    # Modify _prepare_final_results signature and implementation
     def _prepare_final_results(self, ml_result_package: Tuple[Dict[str, Any], pd.DataFrame]):
         """
-        Processes the prediction results and identifiers, aggregates them,
-        and stores detailed info in self.final_db_results.
+        Processes prediction results and identifiers, stores aggregated info
+        in self.final_db_results (NO XAI calculation here).
         """
         ml_result, identifiers_df = ml_result_package # Unpack tuple
-        logger.info("Aggregating row-level predictions with identifiers into commit-level result...")
+        logger.info("Aggregating row-level predictions into commit-level result...")
 
         row_predictions = ml_result.get('predictions')
-        row_probabilities = ml_result.get('probabilities') # List of lists [[P(0), P(1)], ...]
+        row_probabilities = ml_result.get('probabilities')
 
         if row_predictions is None or len(row_predictions) != len(identifiers_df):
-            logger.error("Prediction results are missing or length mismatch with identifiers.")
-            self.final_db_results['prediction_result'] = {"error": "Prediction length mismatch or missing."}
+            error_msg = "Prediction results are missing or length mismatch with identifiers."
+            logger.error(error_msg)
+            # Create the result package with the error
+            prediction_package = InferenceResultPackage(
+                commit_prediction=-1, # Indicate error state
+                max_bug_probability=-1.0,
+                num_files_analyzed=0,
+                details=None,
+                error=error_msg
+            )
+            self.final_db_results['prediction_result'] = prediction_package.model_dump(exclude_none=True)
             self.final_db_results['status_message'] = "Inference failed: Prediction results invalid."
-            return
+            return # Stop processing
 
         commit_prediction = 0
         max_bug_probability = 0.0
-        detailed_results = []
+        detailed_results: List[FilePredictionDetail] = []
 
         try:
             for i in range(len(identifiers_df)):
-                prediction = row_predictions[i]
-                # Safely get probability for class 1 (buggy)
-                probability_class_1 = 0.0
+                prediction = int(row_predictions[i])
+                prob_class_1 = 0.0
                 if row_probabilities and i < len(row_probabilities) and isinstance(row_probabilities[i], list) and len(row_probabilities[i]) > 1:
-                     probability_class_1 = row_probabilities[i][1]
+                    prob_class_1 = float(row_probabilities[i][1])
 
-                # Update commit-level aggregates
-                if prediction == 1:
-                    commit_prediction = 1
-                max_bug_probability = max(max_bug_probability, probability_class_1)
+                if prediction == 1: commit_prediction = 1
+                max_bug_probability = max(max_bug_probability, prob_class_1)
 
-                # Append details for this row
-                detailed_results.append({
-                    "file": identifiers_df.iloc[i].get('file', 'N/A'),
-                    "class": identifiers_df.iloc[i].get('class_name', 'N/A'), # Use class_name from identifier
-                    "prediction": prediction,
-                    "probability": round(probability_class_1, 4) # Store probability of being buggy
-                })
+                detailed_results.append(FilePredictionDetail(
+                    file=identifiers_df.iloc[i].get('file'),
+                    class_name=identifiers_df.iloc[i].get('class_name'), # Use correct column name
+                    prediction=prediction,
+                    probability=round(prob_class_1, 4)
+                ))
 
-            # Store the final aggregated and detailed result
-            final_result_package = {
-                "commit_prediction": commit_prediction,
-                "max_bug_probability": round(max_bug_probability, 4),
-                "num_files_analyzed": len(detailed_results),
-                "details": detailed_results # Store the list of detailed results
-            }
-            self.final_db_results['prediction_result'] = final_result_package
-            self.final_db_results['status_message'] = f"Inference successful. Commit prediction: {commit_prediction} (Max Prob: {max_bug_probability:.4f})."
-            logger.info(f"Aggregated inference result with details prepared.")
+            # Create the final result package (without XAI)
+            prediction_package = InferenceResultPackage(
+                commit_prediction=commit_prediction,
+                max_bug_probability=round(max_bug_probability, 4),
+                num_files_analyzed=len(detailed_results),
+                details=detailed_results,
+                error=None
+            )
+            # Use model_dump to get dict for JSON storage
+            self.final_db_results['prediction_result'] = prediction_package.model_dump(exclude_none=True)
+            self.final_db_results['status_message'] = f"Inference successful. Commit prediction: {commit_prediction} (Max Prob: {max_bug_probability:.4f}). Explanation tasks queued."
+            logger.info(f"Aggregated inference result prepared (prediction only).")
 
         except Exception as e:
-             logger.error(f"Error during prediction result aggregation/mapping: {e}", exc_info=True)
-             self.final_db_results['prediction_result'] = {"error": f"Failed to process detailed results: {e}"}
+             logger.error(f"Error during prediction result processing: {e}", exc_info=True)
+             error_msg = f"Failed to process prediction results: {e}"
+             prediction_package = InferenceResultPackage(
+                 commit_prediction=-1, max_bug_probability=-1.0, num_files_analyzed=0, error=error_msg
+             )
+             self.final_db_results['prediction_result'] = prediction_package.model_dump(exclude_none=True)
              self.final_db_results['status_message'] = f"Inference failed during result processing: {e}"

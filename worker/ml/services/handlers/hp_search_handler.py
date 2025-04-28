@@ -179,19 +179,25 @@ class HPSearchJobHandler(BaseMLJobHandler):
             # This happens if no trials completed successfully
             completed_trials_count = len([t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE])
             total_trials_run = len(study.trials)
-            logger.warning(f"Could not retrieve best trial (Completed: {completed_trials_count}/{total_trials_run}). Check individual trial logs.")
-            self.final_db_results['status_message'] = f"HP search finished, but could not determine a best trial ({completed_trials_count}/{total_trials_run} completed)."
-            # Mark job as failed if no trials completed? Or success with warning? Let's use a warning message.
-            # The overall job status might be set later based on this message.
-            return # Exit early if no best trial
+            logger.warning(f"Could not retrieve best trial (Completed: {completed_trials_count}/{total_trials_run}). Check trial logs.")
+            self.final_db_results['status_message'] = f"HP search finished, but no best trial found ({completed_trials_count}/{total_trials_run} completed)."
+            return
 
-        # --- Train and Save Best Model (if configured and best_trial exists) ---
+        # --- Train and Save Best Model (if configured) ---
         if self.job_config.get('save_best_model', True):
             logger.info("Training and saving best model...")
-            # Ensure model_type is retrieved as enum
-            model_type_enum: Optional[schemas.ModelTypeEnum] = self.job_config.get('model_type')
-            if not isinstance(model_type_enum, schemas.ModelTypeEnum):
-                 raise ValueError("Invalid model_type in job config for final training.")
+
+            # --- Re-parse job_config using the Pydantic model to ensure enums ---
+            try:
+                # job_config was loaded as dict initially, parse it now
+                hp_search_config = schemas.HPSearchConfig.model_validate(self.job_config)
+                model_type_enum = hp_search_config.model_type # Get the enum member
+                model_name = hp_search_config.model_name # Get model name
+            except Exception as config_parse_err:
+                 logger.error(f"Failed to re-parse HPSearchConfig from job_config dict: {config_parse_err}", exc_info=True)
+                 raise ValueError("Could not parse job configuration for final model training.") from config_parse_err
+            # --- End Re-parse ---
+
             best_hyperparams = best_trial.params
 
             # --- Re-load/prepare data (inefficient but necessary if not stored) ---
@@ -203,15 +209,13 @@ class HPSearchJobHandler(BaseMLJobHandler):
             # --- End Re-load ---
 
             try:
-                # Pass enum member to factory
+                # Pass the validated enum member
                 final_strategy = create_model_strategy(model_type_enum, best_hyperparams, self.job_config)
                 logger.info("Training final model with best parameters...")
-                # We call train here, assuming it handles fitting. If evaluate needed, adjust.
-                train_result = final_strategy.train(X, y) # Re-train on full data
-                logger.info("Final model trained. Evaluation metrics (on split): %s", train_result.metrics)
+                train_result = final_strategy.train(X, y)
+                logger.info("Final model trained. Evaluation metrics: %s", train_result.metrics)
 
                 # --- Save model record and artifact ---
-                model_name = self.job_config.get('model_name', f'hp_search_{self.job_id}_best') # Default name
                 latest_version = model_db_service.find_latest_model_version(session, model_name)
                 new_version = (latest_version or 0) + 1
                 logger.info(f"Saving best model as '{model_name}' v{new_version}")
@@ -228,11 +232,7 @@ class HPSearchJobHandler(BaseMLJobHandler):
                     'training_job_id': None,
                     's3_artifact_path': None
                 }
-
-                # Use service to create record
                 new_model_id = model_db_service.create_model_record(session, model_data)
-
-                # Define artifact path
                 s3_uri = f"s3://{settings.S3_BUCKET_NAME}/models/{model_name}/v{new_version}/model.pkl"
                 save_success = final_strategy.save_model(s3_uri)
 

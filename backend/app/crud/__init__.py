@@ -17,3 +17,8 @@ from .crud_inference_job import (
     create_inference_job, get_inference_job, get_inference_job_by_task_id, get_inference_jobs,
     update_inference_job, delete_inference_job
 )
+
+from .crud_xai_result import (
+    create_xai_result, get_xai_result, get_xai_results_by_job_id,
+    update_xai_result, delete_xai_result
+)

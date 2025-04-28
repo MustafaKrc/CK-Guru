@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import repositories, tasks, datasets, bot_patterns, ml_jobs, webhooks
+from app.api.v1.endpoints import repositories, tasks, datasets, bot_patterns, ml_jobs, webhooks, xai
 
 api_router = APIRouter()
 
@@ -21,3 +21,5 @@ api_router.include_router(bot_patterns.router, prefix="", tags=["Bot Patterns"])
 api_router.include_router(ml_jobs.router, prefix="/ml", tags=["ML Jobs & Models"])
 
 api_router.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
+
+api_router.include_router(xai.router, prefix="/xai", tags=["XAI Explanations"])

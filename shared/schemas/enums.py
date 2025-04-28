@@ -1,5 +1,4 @@
 # shared/schemas/enums.py
-# NEW FILE to hold shared enums
 import enum
 
 class JobStatusEnum(str, enum.Enum):
@@ -21,21 +20,18 @@ class ObjectiveMetricEnum(str, enum.Enum):
     PRECISION_WEIGHTED = "precision_weighted"
     RECALL_WEIGHTED = "recall_weighted"
     ACCURACY = "accuracy"
-    # Add more as needed
 
 class SamplerTypeEnum(str, enum.Enum):
     TPE = "tpe"
     RANDOM = "random"
     CMAES = "cmaes"
-    # Add more
 
 class PrunerTypeEnum(str, enum.Enum):
     MEDIAN = "median"
     HYPERBAND = "hyperband"
-    NOP = "nop" # No pruning
+    NOP = "nop"
     PERCENTILE = "percentile"
     SUCCESSIVEHALVING = "successivehalving"
-    # Add more
 
 class ModelTypeEnum(str, enum.Enum):
     """Enum defining the supported model types."""
@@ -43,3 +39,16 @@ class ModelTypeEnum(str, enum.Enum):
     # Add other models here as they are supported
     # EXAMPLE: SKLEARN_LOGISTICREGRESSION = "sklearn_logisticregression"
     # EXAMPLE: PYTORCH_CNN = "pytorch_cnn"
+
+class XAITypeEnum(str, enum.Enum):
+    SHAP = "shap"
+    LIME = "lime"
+    FEATURE_IMPORTANCE = "feature_importance"
+    DECISION_PATH = "decision_path"
+    COUNTERFACTUALS = "counterfactuals"
+
+class XAIStatusEnum(str, enum.Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCESS = "success"
+    FAILED = "failed"

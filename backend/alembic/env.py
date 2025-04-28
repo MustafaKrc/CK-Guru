@@ -27,6 +27,25 @@ from shared.db.models import (
 
 from shared.core.config import settings # Import your settings
 
+# Add the names of tables managed by external libraries like Optuna
+# Make sure these names exactly match the table names in your database
+EXTERNALLY_MANAGED_TABLES = {
+    "studies",
+    "study_directions",
+    "study_system_attributes",
+    "study_user_attributes",
+    "trial_heartbeats",
+    "trial_intermediate_values",
+    "trial_params",
+    "trial_system_attributes",
+    "trial_user_attributes",
+    "trial_values",
+    "trials",
+    "version_info",
+    "alembic_version", # Optuna's own alembic table
+
+}
+
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -52,6 +71,19 @@ target_metadata = Base.metadata
 # We set it to a custom name to avoid conflicts with other applications (optuna)
 ALEMBIC_TABLE_NAME = "ckguru_alembic_version"
 
+def include_object(object, name, type_, reflected, compare_to):
+    """
+    Exclude tables managed by external libraries (like Optuna)
+    from Alembic's autogenerate comparison.
+    """
+    if type_ == "table" and name in EXTERNALLY_MANAGED_TABLES:
+        # If the object is a table and its name is in our exclusion list,
+        # tell Alembic to ignore it for comparison purposes.
+        return False
+    else:
+        # Otherwise, include the object in the comparison as usual.
+        return True
+
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
 
@@ -71,6 +103,8 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         version_table=ALEMBIC_TABLE_NAME,
         dialect_opts={"paramstyle": "named"},
+        include_object=include_object,
+        compare_type=True,
     )
 
     with context.begin_transaction():
@@ -80,7 +114,9 @@ def do_run_migrations(connection):
     context.configure(
         connection=connection,
         version_table=ALEMBIC_TABLE_NAME,
-        target_metadata=target_metadata
+        target_metadata=target_metadata,
+        include_object=include_object,
+        compare_type=True,
     )
 
     with context.begin_transaction():

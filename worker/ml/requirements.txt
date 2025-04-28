@@ -24,3 +24,7 @@ s3fs>=2023.0.0
 # --- ML ---
 optuna>=3.0 
 scikit-learn>=1.5 
+
+# --- XAI ---
+shap>=0.41.0
+lime>=0.2.0

@@ -16,11 +16,22 @@ from .inference_job import (
     InferenceJobSubmitResponse as TrainingInferenceJobSubmitResponse # Avoid name clash if needed
 )
 
-from .inference import ManualInferenceRequest, InferenceTriggerResponse, GitHubPushPayload # Add GitHubPushPayload
+from .inference import ManualInferenceRequest, InferenceTriggerResponse, GitHubPushPayload 
+
+from .xai import (
+    FilePredictionDetail, FeatureImportanceValue, FeatureImportanceResultData, FeatureSHAPValue,
+    InstanceSHAPResult, SHAPResultData, InstanceLIMEResult, LIMEResultData, CounterfactualExample,
+    InstanceCounterfactualResult, CounterfactualResultData, DecisionPathNode, DecisionPathEdge,
+    InstanceDecisionPath, DecisionPathResultData)
+
+from .xai_job import (
+    XAIResultBase, XAIResultCreate, XAIResultUpdate, XAIResultRead
+)
 
 __all__ = [
     # Enums
     "JobStatusEnum", "DatasetStatusEnum", "ObjectiveMetricEnum", "SamplerTypeEnum", "PrunerTypeEnum", "ModelTypeEnum",
+    "XAITypeEnum", "XAIStatusEnum"
     # Schemas
     "RepositoryBase", "RepositoryCreate", "RepositoryRead", "RepositoryUpdate", "RepositoryInDB",
     "TaskResponse", "TaskStatusResponse",

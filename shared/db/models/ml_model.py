@@ -30,8 +30,12 @@ class MLModel(Base):
                                                          comment="URI to the saved model artifact in S3/MinIO")
 
     # Link to the source data/jobs
-    dataset_id: Mapped[int | None] = mapped_column(ForeignKey('datasets.id', ondelete="SET NULL"), nullable=True, index=True,
-                                                    comment="Dataset used for training/evaluation (optional)")
+    dataset_id: Mapped[int | None] = mapped_column(
+        ForeignKey('datasets.id', ondelete="SET NULL"), # Link to the dataset used for training
+        nullable=True, # Allow null if model wasn't trained from a managed dataset
+        index=True,
+        comment="Dataset used for training/evaluation (optional)"
+    )
     training_job_id: Mapped[int | None] = mapped_column(ForeignKey('training_jobs.id', ondelete="SET NULL"), nullable=True, index=True,
                                                          comment="Training job that created this model (optional)")
     hp_search_job_id: Mapped[int | None] = mapped_column(ForeignKey('hp_search_jobs.id', ondelete="SET NULL"), nullable=True, index=True,
