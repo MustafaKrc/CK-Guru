@@ -57,7 +57,6 @@ class InferenceJobHandler(BaseMLJobHandler):
 
         logger.info(f"InferenceJob {self.job_id} details loaded: Model={self.ml_model_id}, Repo={self.repo_id}, Commit={self.target_commit_hash[:7]}")
 
-
     def _load_data(self, session: Session) -> pd.DataFrame:
         """Loads features for the target commit hash from the database."""
         if self.target_commit_hash is None or self.repo_id is None:
@@ -78,62 +77,6 @@ class InferenceJobHandler(BaseMLJobHandler):
 
         logger.info(f"Features loaded successfully, shape: {features_df.shape}")
         return features_df # Return the single-row DataFrame
-
-
-    def _prepare_data(self, data: pd.DataFrame) -> pd.DataFrame:
-        """
-        Validates and prepares the potentially multi-row feature DataFrame for inference.
-        Ensures columns match the order expected by the loaded model.
-        Does NOT aggregate rows.
-        """
-        if self.model_strategy is None or self.model_strategy.model is None:
-            raise RuntimeError("Model strategy or internal model not loaded before _prepare_data.")
-
-        logger.info("Preparing potentially multi-row data for prediction using loaded model strategy...")
-
-        # --- Get Expected Features from Strategy/Model ---
-        expected_features: Optional[list[str]] = None
-        try:
-            # Prefer a dedicated method on the strategy if you implement one
-            if hasattr(self.model_strategy, 'get_feature_names_out'): # Check Strategy first
-                expected_features = self.model_strategy.get_feature_names_out()
-            # Fallback for sklearn models if strategy doesn't provide it
-            elif hasattr(self.model_strategy.model, 'feature_names_in_'):
-                expected_features = self.model_strategy.model.feature_names_in_.tolist()
-
-            if expected_features:
-                logger.debug(f"Model expects features: {expected_features}")
-            else:
-                logger.warning("Could not determine expected features from model/strategy. Using input columns.")
-                expected_features = data.columns.tolist() # Use input columns as fallback
-
-        except NotFittedError:
-             logger.warning("Model is loaded but reports as not fitted. Cannot get feature names. Using input columns.")
-             expected_features = data.columns.tolist()
-        except Exception as e:
-            logger.warning(f"Error getting expected features from model: {e}. Using input columns.", exc_info=True)
-            expected_features = data.columns.tolist()
-
-        # --- Validate and Reorder Input Data ---
-        missing_features = set(expected_features) - set(data.columns)
-        if missing_features:
-             raise ValueError(f"Loaded features are missing columns expected by the model: {sorted(list(missing_features))}")
-
-        extra_features = set(data.columns) - set(expected_features)
-        if extra_features:
-            logger.warning(f"Input data has extra columns not expected by model (will be dropped): {sorted(list(extra_features))}")
-
-        # Select and reorder columns to match model expectation
-        X = data[expected_features].copy()
-
-        # --- Apply Preprocessing (Example: Fill NaNs) ---
-        # Ensure row-wise preprocessing is applied correctly if needed.
-        if X.isnull().values.any():
-            logger.warning("Input data contains NaN values. Applying simple fillna(0). Ensure this matches training preprocessing.")
-            X = X.fillna(0) # Basic NaN handling - replace with appropriate strategy used during training
-
-        logger.info(f"Data prepared for inference, final feature shape: {X.shape}")
-        return X # Return the potentially multi-row DataFrame
 
     def _create_strategy(self) -> BaseModelStrategy:
         """Loads the specified ML model artifact into the appropriate strategy."""

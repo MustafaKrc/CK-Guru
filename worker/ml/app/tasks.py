@@ -6,6 +6,8 @@ import lime
 import numpy as np
 import pandas as pd
 import shap
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier
 
 # Import Handlers (adjust path if needed)
 from services.handlers.training_handler import TrainingJobHandler
@@ -23,8 +25,11 @@ from shared.schemas.enums import DatasetStatusEnum, XAITypeEnum, XAIStatusEnum, 
 from shared.db_session import get_sync_db_session
 from services import feature_db_service
 from services.artifact_service import artifact_service
-from shared.schemas.xai import FeatureImportanceResultData, FeatureImportanceValue, FeatureSHAPValue, InstanceLIMEResult, InstanceSHAPResult, LIMEResultData, SHAPResultData
+from shared.schemas.xai import CounterfactualExample, CounterfactualResultData, DecisionPathEdge, DecisionPathNode, DecisionPathResultData, FeatureImportanceResultData, FeatureImportanceValue, FeatureSHAPValue, InstanceCounterfactualResult, InstanceDecisionPath, InstanceLIMEResult, InstanceSHAPResult, LIMEResultData, SHAPResultData
 from .main import celery_app # Import app instance for sending tasks
+
+import dice_ml
+from dice_ml.utils import helpers
 
 from celery.exceptions import Ignore, Terminated, Reject
 from services.xai_db_service import create_pending_xai_result_sync, update_xai_result_sync
@@ -105,25 +110,27 @@ def inference_task(self: Task, inference_job_id: int):
         return # Exit task
 
     # --- Dispatch XAI Tasks If Prediction Succeeded ---
-    if job_successful and handler and handler.job_db_record and handler.model_strategy:
+    if job_successful and handler and handler.job_db_record and handler.model_strategy and handler.model_strategy.model:
         logger.info(f"Task {self.request.id}: Inference successful for job {inference_job_id}. Dispatching background XAI tasks...")
 
-        # Define which XAI types to generate
         xai_types_to_generate = [
             XAITypeEnum.SHAP,
             XAITypeEnum.FEATURE_IMPORTANCE,
-            XAITypeEnum.LIME, # Add LIME
-            # XAITypeEnum.COUNTERFACTUALS, # Add later
+            XAITypeEnum.LIME,
+            XAITypeEnum.COUNTERFACTUALS
         ]
-        # Add Decision Path conditionally
         model_obj = handler.model_strategy.model
-        if model_obj and 'RandomForestClassifier' in model_obj.__class__.__name__:
-             xai_types_to_generate.append(XAITypeEnum.DECISION_PATH)
+        # Use isinstance for safer type checking
+        if isinstance(model_obj, (getattr(__import__('sklearn.ensemble', fromlist=['RandomForestClassifier']), 'RandomForestClassifier', None),
+                                  getattr(__import__('sklearn.tree', fromlist=['DecisionTreeClassifier']), 'DecisionTreeClassifier', None))):
+             # Check for specific compatible types if possible
+             if XAITypeEnum.DECISION_PATH not in xai_types_to_generate:
+                 xai_types_to_generate.append(XAITypeEnum.DECISION_PATH)
+        # Add other conditional checks (e.g., for COUNTERFACTUALS) later
 
         xai_task_name = 'tasks.generate_explanation'
         xai_queue = 'xai_queue' # Use dedicated queue
 
-        # Use a new session context for creating XAI records and dispatching
         with get_sync_db_session() as xai_session:
             dispatched_count = 0
             for xai_type in xai_types_to_generate:
@@ -145,25 +152,20 @@ def inference_task(self: Task, inference_job_id: int):
                     dispatched_count += 1
                 except Exception as dispatch_err:
                     logger.error(f"Failed to dispatch XAI task for XAIResult ID {xai_result_id}: {dispatch_err}", exc_info=True)
-                    # Update the created record to FAILED
-                    try:
-                        xai_record = xai_session.get(XAIResult, xai_result_id) # Get object
-                        if xai_record:
-                             xai_record.status = XAIStatusEnum.FAILED
-                             xai_record.status_message = "Failed to dispatch generation task."
-                             xai_session.add(xai_record)
-                    except Exception as update_err:
-                        logger.error(f"Failed to mark XAIResult {xai_result_id} as FAILED after dispatch error: {update_err}")
+                    # Update the created record to FAILED immediately
+                    update_xai_result_sync(xai_session, xai_result_id, XAIStatusEnum.FAILED,
+                                           message=f"Failed to dispatch generation task: {dispatch_err}",
+                                           commit=False) # Commit handled below
 
             # Commit all created/updated XAIResult records
             try:
                 xai_session.commit()
-                logger.info(f"Committed {dispatched_count} pending XAIResult records to DB.")
+                logger.info(f"Committed {dispatched_count} pending/failed XAIResult records to DB for Job {inference_job_id}.")
             except Exception as commit_err:
                  logger.error(f"Failed to commit pending XAIResult records: {commit_err}", exc_info=True)
                  xai_session.rollback()
 
-    # Return the original prediction results dictionary from the handler
+    # Return the original prediction results dictionary (doesn't include XAI status)
     return prediction_results_dict
 
 
@@ -183,17 +185,21 @@ def generate_explanation_task(self: Task, xai_result_id: int):
         with get_sync_db_session() as session:
             # 1. Load Records and Update Status
             xai_record = session.get(XAIResult, xai_result_id)
-            if not xai_record: raise Ignore(f"XAIResult record {xai_result_id} not found. Ignoring task.")
+            if not xai_record: 
+                raise Ignore(f"XAIResult record {xai_result_id} not found. Ignoring task.")
             if xai_record.status == XAIStatusEnum.RUNNING and xai_record.celery_task_id != task_id:
                 raise Ignore(f"XAIResult {xai_result_id} already running under task {xai_record.celery_task_id}.")
             if xai_record.status in [XAIStatusEnum.SUCCESS, XAIStatusEnum.FAILED]:
                 raise Ignore(f"XAIResult {xai_result_id} already in terminal state {xai_record.status.value}.")
 
             inference_job = session.get(InferenceJob, xai_record.inference_job_id)
-            if not inference_job: raise ValueError(f"InferenceJob {xai_record.inference_job_id} not found.")
+            if not inference_job: 
+                raise ValueError(f"InferenceJob {xai_record.inference_job_id} not found.")
             ml_model_record = session.get(MLModel, inference_job.ml_model_id)
-            if not ml_model_record: raise ValueError(f"MLModel {inference_job.ml_model_id} not found.")
-            if not ml_model_record.s3_artifact_path: raise ValueError(f"MLModel {ml_model_record.id} has no artifact path.")
+            if not ml_model_record: 
+                raise ValueError(f"MLModel {inference_job.ml_model_id} not found.")
+            if not ml_model_record.s3_artifact_path: 
+                raise ValueError(f"MLModel {ml_model_record.id} has no artifact path.")
 
             # Update status to RUNNING - use sync service function
             update_xai_result_sync(session, xai_result_id, XAIStatusEnum.RUNNING,
@@ -208,17 +214,20 @@ def generate_explanation_task(self: Task, xai_result_id: int):
             artifact_path = ml_model_record.s3_artifact_path
             training_dataset_id = ml_model_record.dataset_id
 
-            if not repo_id or not commit_hash: raise ValueError("repo_id or commit_hash missing.")
+            if not repo_id or not commit_hash: 
+                raise ValueError("repo_id or commit_hash missing.")
 
             # 3. Load Model
             logger.info(f"Loading model artifact: {artifact_path}")
             model = artifact_service.load_artifact(artifact_path)
-            if not model: raise RuntimeError(f"Failed to load model artifact from {artifact_path}")
+            if not model: 
+                raise RuntimeError(f"Failed to load model artifact from {artifact_path}")
 
             # 4. Fetch Features
             logger.info(f"Fetching features for repo={repo_id}, commit={commit_hash[:7]}")
             features_df = feature_db_service.get_features_for_commit(session, repo_id, commit_hash)
-            if features_df is None or features_df.empty: raise ValueError(f"Could not retrieve features for commit {commit_hash[:7]}")
+            if features_df is None or features_df.empty: 
+                raise ValueError(f"Could not retrieve features for commit {commit_hash[:7]}")
 
             # 5. Prepare Data (separate features/ids, get feature names)
             identifier_cols = ['file', 'class_name']
@@ -288,21 +297,187 @@ def generate_explanation_task(self: Task, xai_result_id: int):
                 final_status = XAIStatusEnum.SUCCESS
                 status_message = "LIME explanation generated successfully."
 
-            # TODO: Implement DECISION_PATH, COUNTERFACTUALS
             elif xai_type == XAITypeEnum.DECISION_PATH:
-                logger.warning("Decision Path generation not implemented yet.")
-                final_status = XAIStatusEnum.FAILED
-                status_message = "Decision Path explanation is not implemented yet."
+                try:
+                    if isinstance(model, (RandomForestClassifier, DecisionTreeClassifier)):
+                        instance_paths = []
+                        num_trees_to_explain = 3 # Limit explanation to N trees for RandomForest
+                        estimators = model.estimators_ if isinstance(model, RandomForestClassifier) else [model]
+
+                        for i in range(len(X_inference)):
+                            instance_feature_vector = X_inference.iloc[[i]]
+                            tree_count = 0
+                            for estimator in estimators:
+                                if tree_count >= num_trees_to_explain and isinstance(model, RandomForestClassifier): break
+                                tree_ = estimator.tree_
+                                if not tree_: continue # Skip if tree structure isn't available
+
+                                feature = tree_.feature
+                                threshold = tree_.threshold
+                                node_indicator = estimator.decision_path(instance_feature_vector)
+                                node_index = node_indicator.indices
+
+                                path_nodes_struct = []
+                                path_edges_struct = []
+                                for node_id_idx in range(len(node_index)):
+                                    node_id = node_index[node_id_idx]
+                                    is_leaf = tree_.children_left[node_id] == tree_.children_right[node_id]
+                                    condition = None
+                                    if not is_leaf:
+                                        feat_idx = feature[node_id]
+                                        thresh_val = round(threshold[node_id], 3)
+                                        feature_name = feature_names[feat_idx] if feat_idx >= 0 and feat_idx < len(feature_names) else f"feature_{feat_idx}"
+                                        condition = f"{feature_name} <= {thresh_val}"
+
+                                    node_info = DecisionPathNode(
+                                         id=str(node_id),
+                                         condition=condition if not is_leaf else "Leaf",
+                                         samples=int(tree_.n_node_samples[node_id]),
+                                         value=[int(v) for v in tree_.value[node_id][0]]
+                                    )
+                                    path_nodes_struct.append(node_info)
+
+                                    # Add edge from previous node if not the first node
+                                    if node_id_idx > 0:
+                                        prev_node_id = node_index[node_id_idx - 1]
+                                        # Determine label (True if went left, False if right)
+                                        label = "True" if node_id == tree_.children_left[prev_node_id] else "False"
+                                        path_edges_struct.append(DecisionPathEdge(source=str(prev_node_id), target=str(node_id), label=label))
+
+                                instance_paths.append(InstanceDecisionPath(
+                                    file=identifiers_df.iloc[i].get('file'),
+                                    class_name=identifiers_df.iloc[i].get('class_name'),
+                                    tree_index=getattr(estimator, 'random_state', 0) if isinstance(model, RandomForestClassifier) else None, # Use random_state as tree index proxy
+                                    nodes=path_nodes_struct,
+                                    edges=path_edges_struct,
+                                    path_node_ids=[str(n) for n in node_index]
+                                ))
+                                tree_count += 1
+
+                        if instance_paths:
+                            result_data_obj = DecisionPathResultData(instance_decision_paths=instance_paths)
+                            final_status = XAIStatusEnum.SUCCESS
+                            status_message = f"Decision Path examples generated."
+                        else:
+                             status_message = "No decision paths could be extracted."
+                             final_status = XAIStatusEnum.FAILED
+                    else:
+                        status_message = f"Decision Path not supported for model type: {type(model)}"
+                        final_status = XAIStatusEnum.FAILED
+                except Exception as path_err:
+                    status_message = f"Decision Path calculation failed: {path_err}"
+                    logger.error(status_message, exc_info=True)
+                    final_status = XAIStatusEnum.FAILED
+                    
             elif xai_type == XAITypeEnum.COUNTERFACTUALS:
-                 logger.warning("Counterfactual generation not implemented yet.")
-                 final_status = XAIStatusEnum.FAILED
-                 status_message = "Counterfactual explanation is not implemented yet."
+                try:
+                    if not hasattr(model, 'predict_proba'): # Keep predict_proba check
+                        raise TypeError("Model needs predict_proba for DiCE integration.")
+                    # Even without background data, we need features AND the model's prediction for the inference instances
+                    # We need the prediction made by the model for the instances we are explaining
+                    logger.info("Getting model predictions for DiCE Data object...")
+                    y_pred_inference = model.predict(X_inference) # Get predictions (0 or 1)
+
+                    # --- Create DataFrame with Features AND Predicted Outcome ---
+                    data_for_dice = X_inference.copy()
+                    # Add the prediction as the outcome column DiCE expects
+                    # Make sure the outcome name matches what DiCE will use
+                    outcome_col_name = 'predicted_outcome' # Use a distinct name
+                    data_for_dice[outcome_col_name] = y_pred_inference
+
+                    # If using background data, ensure it ALSO has the outcome column defined
+                    if background_data_df is not None and not background_data_df.empty:
+                        # We need the TRUE outcome from the training set for background data
+                        # This assumes the loaded background_data_df includes the target variable
+                        # (This adds complexity - need to load target col too if not already loaded)
+                        # For now, let's assume background data loading handled this correctly OR
+                        # DiCE can work with just the features for background. Revisit if needed.
+                        logger.warning("Using background data for DiCE. Ensure it contains the correct outcome column if required by DiCE method.")
+                        # If DiCE strictly needs outcome in background:
+                        # if outcome_col not in background_data_df.columns: raise ValueError("Background data missing outcome column for DiCE.")
+
+                        dice_data = dice_ml.Data(dataframe=background_data_df, # Use background if available
+                                                continuous_features=feature_names,
+                                                outcome_name=outcome_col_name) # Tell DiCE the name
+                    else:
+                        # Create Data object from inference data + predictions if no background data
+                        logger.warning("Creating DiCE Data object from inference data + predictions. CF quality may vary.")
+                        dice_data = dice_ml.Data(dataframe=data_for_dice, # Use combined df
+                                                continuous_features=feature_names,
+                                                outcome_name=outcome_col_name) # Tell DiCE the name
+
+
+                    # Wrap the model
+                    # DiCE needs a predict_proba like function, ensure model provides it
+                    dice_model = dice_ml.Model(model=model, backend="sklearn") # Assumes sklearn
+
+                    # Initialize DiCE explainer
+                    dice_exp = dice_ml.Dice(dice_data, dice_model, method="random") # Random is often robust
+
+                    cf_instance_results = []
+                    # Only generate for instances predicted as defect-prone (1)
+                    indices_to_explain = X_inference.index[y_pred_inference == 1] # Use the predictions we got
+
+                    if len(indices_to_explain) == 0:
+                        status_message = "No defect-prone instances found, skipping counterfactual generation."
+                        final_status = XAIStatusEnum.SUCCESS
+                    else:
+                        logger.info(f"Generating counterfactuals for {len(indices_to_explain)} defect-prone instances...")
+                        num_cfs_per_instance = 3
+
+                        for i in indices_to_explain:
+                            # Query instance MUST NOT contain the outcome column when passed to generate_counterfactuals
+                            query_instance_features = X_inference.loc[[i]]
+                            try:
+                                counterfactuals = dice_exp.generate_counterfactuals(
+                                    query_instance_features, # Pass only features
+                                    total_CFs=num_cfs_per_instance,
+                                    desired_class=0 # Target class 0 (clean)
+                                )
+                                cf_examples_structured = []
+                                if counterfactuals and counterfactuals.cf_examples_list:
+                                    for cf_example in counterfactuals.cf_examples_list:
+                                        cf_df = cf_example.final_cfs_df # This DataFrame includes the predicted outcome by DiCE
+                                        # Extract features and predicted outcome/probability from DiCE's output DF
+                                        cf_features = cf_df.iloc[0][feature_names].to_dict()
+                                        cf_pred_label = int(cf_df.iloc[0][outcome_col_name]) # Get DiCE's predicted outcome for the CF
+                                        # Get probability from the original model if needed (DiCE might not provide it easily)
+                                        cf_pred_proba = model.predict_proba(pd.DataFrame([cf_features]))[0]
+                                        cf_prob_desired_class = float(cf_pred_proba[0]) # Probability of class 0
+
+                                        cf_examples_structured.append(CounterfactualExample(
+                                            features=cf_features,
+                                            outcome_probability=round(cf_prob_desired_class, 4),
+                                            outcome_label=cf_pred_label
+                                        ))
+                                cf_instance_results.append(InstanceCounterfactualResult(
+                                    file=identifiers_df.loc[i].get('file'),
+                                    class_name=identifiers_df.loc[i].get('class_name'),
+                                    counterfactuals=cf_examples_structured
+                                ))
+                            except Exception as cf_inst_err:
+                                logger.warning(f"Counterfactual generation failed for instance index {i}: {cf_inst_err}", exc_info=True)
+
+                        if cf_instance_results:
+                            result_data_obj = CounterfactualResultData(instance_counterfactuals=cf_instance_results)
+                            final_status = XAIStatusEnum.SUCCESS
+                            status_message = "Counterfactual explanation generation finished."
+                        else:
+                            status_message = "Counterfactual generation ran but found no examples."
+                            final_status = XAIStatusEnum.SUCCESS
+
+                except Exception as cf_err:
+                    status_message = f"Counterfactual calculation failed: {cf_err}"
+                    logger.error(status_message, exc_info=True)
+                    final_status = XAIStatusEnum.FAILED
+
             else:
-                 raise ValueError(f"Unsupported XAI type: {xai_type.value}")
+                status_message = f"Unsupported XAI type '{xai_type.value}' requested."
+                final_status = XAIStatusEnum.FAILED
 
             # Convert result object to JSON dict if successful
             if result_data_obj and final_status == XAIStatusEnum.SUCCESS:
-                 result_data_json = result_data_obj.model_dump(exclude_none=True, mode='json') # Use mode='json'
+                result_data_json = result_data_obj.model_dump(exclude_none=True, mode='json')
 
             # 8. Update Final Status in DB (committed by context manager)
             # Use the sync update function, setting commit=False as context manager handles it

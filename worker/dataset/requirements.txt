@@ -12,8 +12,8 @@ asyncpg>=0.25.0 # For async PostgreSQL access
 psycopg2-binary # Sometimes needed by Alembic even if using asyncpg
 
 # --- Data ---
-pandas>=1.5,<3.0
-numpy>=1.20
+numpy>1.20.0,<1.27.0
+pandas>=1.5.0
 scikit-learn>=1.0
 pyarrow>=10.0
 

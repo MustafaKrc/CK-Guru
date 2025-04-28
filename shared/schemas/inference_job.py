@@ -15,7 +15,7 @@ class InferenceResultPackage(BaseModel):
     num_files_analyzed: int = Field(..., description="Number of file/class instances analyzed within the commit.")
     # Keep details of file-level predictions here
     details: Optional[List[FilePredictionDetail]] = Field(None, description="List of prediction details for each analyzed file/class instance.")
-    # REMOVED XAI from here
+
     error: Optional[str] = Field(None, description="Error message if prediction failed.")
 
 class InferenceJobBase(BaseModel):

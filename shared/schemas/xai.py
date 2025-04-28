@@ -77,7 +77,6 @@ class InstanceDecisionPath(BaseModel):
     class_name: Optional[str] = Field(None, alias="class", description="Class name.")
     nodes: List[DecisionPathNode]
     edges: List[DecisionPathEdge]
-    path: List[str] # List of node IDs in the path taken
 
     model_config = {"populate_by_name": True}
 
