@@ -35,19 +35,38 @@ class IngestionContext:
     raw_ck_metrics: Dict[str, pd.DataFrame]   # commit_hash -> DataFrame of CK metrics for that commit
     inserted_guru_metrics_count: int
     inserted_ck_metrics_count: int
-    target_commit_hash: Optional[str] = None # The specific commit to process
-    parent_commit_hash: Optional[str] = None # Determined parent hash
-    # Flag to indicate if parent metrics existed or were calculated in this run
-    parent_metrics_processed: bool = False
-    # Store the ID of the overarching InferenceJob
-    inference_job_id: Optional[int] = None
 
-    def __init__(self, repository_id: int, git_url: str, repo_local_path: Path, task_instance: Task,
-                 target_commit_hash: Optional[str] = None, inference_job_id: Optional[int] = None): 
+    is_single_commit_mode: bool             # Flag for operation mode
+    target_commit_hash: Optional[str] = None # Specific commit for single mode or general tracking
+    parent_commit_hash: Optional[str] = None # Determined parent hash for single mode
+    inference_job_id: Optional[int] = None   # Link back to inference job
+    # Flag to indicate if parent metrics existed/were calculated (used in single mode)
+    parent_metrics_processed: bool = False
+    # Holder for combined features in single mode before passing to ML worker
+    final_combined_features: Optional[List[Dict[str, Any]]] = None # Changed from Dict to List[Dict]
+
+
+    def __init__(
+        self,
+        repository_id: int,
+        git_url: str,
+        repo_local_path: Path,
+        task_instance: Task,
+        is_single_commit_mode: bool = False, # Add the new parameter with default
+        target_commit_hash: Optional[str] = None,
+        parent_commit_hash: Optional[str] = None, # Allow passing initial parent hash if known
+        inference_job_id: Optional[int] = None,
+        final_combined_features: Optional[List[Dict[str, Any]]] = None # Add new param
+    ):
         self.repository_id = repository_id
         self.git_url = git_url
         self.repo_local_path = repo_local_path
         self.task_instance = task_instance
+        self.is_single_commit_mode = is_single_commit_mode
+        self.target_commit_hash = target_commit_hash
+        self.parent_commit_hash = parent_commit_hash
+        self.inference_job_id = inference_job_id
+        self.final_combined_features = final_combined_features
         self.warnings = []
         self.repo_object = None
         self.raw_commit_guru_data = []
@@ -57,7 +76,6 @@ class IngestionContext:
         self.raw_ck_metrics = {}
         self.inserted_guru_metrics_count = 0
         self.inserted_ck_metrics_count = 0
-        self.parent_commit_hash = None
         self.parent_metrics_processed = False
 
 

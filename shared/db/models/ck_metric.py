@@ -1,5 +1,5 @@
 # shared/db/models/ck_metric.py
-from sqlalchemy import Column, Integer, String, Float, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from shared.db.base_class import Base
@@ -87,6 +87,12 @@ class CKMetric(Base):
 
     # --- Relationship (optional but useful) ---
     repository = relationship("Repository") # Specify back_populates if needed
+
+    __table_args__ = (
+        UniqueConstraint('repository_id', 'commit_hash', 'file', 'class', name='uq_ck_metric_key'),
+        # You can add other indexes here if needed, e.g.:
+        # Index('ix_ck_metric_repo_commit_file', 'repository_id', 'commit_hash', 'file'),
+    )
 
     def __repr__(self):
         # Use the mapped attribute name 'class_name' here

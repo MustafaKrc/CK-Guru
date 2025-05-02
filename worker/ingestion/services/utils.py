@@ -14,119 +14,15 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, update, func
 
 from shared.core.config import settings
-from shared.utils.github_utils import GitHubIssueFetcher, GitHubAPIResponse, extract_issue_ids
+from shared.utils.github_utils import GitHubClient, GitHubAPIResponse, extract_issue_ids
 from shared.db.models import GitHubIssue
 from shared.db.models.commit_github_issue_association import commit_github_issue_association_table
 
 logger = logging.getLogger(__name__)
-# Set level from settings if available, otherwise default
-log_level = getattr(settings, 'LOG_LEVEL', 'INFO')
-logger.setLevel(log_level.upper())
-
-CK_JAR_PATH = Path('/app/third_party/ck.jar')
-
-def _run_ck_tool(repo_dir: Path, commit_hash: str) -> pd.DataFrame:
-    """
-    Runs the CK tool, handling its quirky output file naming by passing
-    a file prefix within a temporary directory.
-
-    Args:
-        repo_dir: Path to the checked-out repository.
-        commit_hash: The commit being analyzed.
-
-    Returns:
-        DataFrame containing the CK class metrics, or empty DataFrame on error.
-    """
-    use_jars = "false"
-    max_files_per_partition = 0
-    variables_and_fields = "false"
-    metrics_df = pd.DataFrame()
-
-    if not CK_JAR_PATH.exists():
-        logger.error(f"CK JAR not found at {CK_JAR_PATH}")
-        raise FileNotFoundError(f"CK JAR not found at {CK_JAR_PATH}")
-
-    try:
-        # Create a temporary directory to contain the uniquely prefixed output files
-        with tempfile.TemporaryDirectory(prefix=f"ck_run_{commit_hash}_") as temp_dir_name:
-            temp_dir_path = Path(temp_dir_name)
-            # logger.info(f"Using temporary directory for CK run: {temp_dir_path}") # Too verbose
-
-            # --- Construct the FILE PREFIX for CK ---
-            output_file_prefix = temp_dir_path / f"ck_output_{commit_hash}_"
-            # logger.info(f"Passing output prefix to CK: {output_file_prefix}") # Too verbose
-
-            # --- Expected output file paths based on the prefix ---
-            expected_class_csv_path = Path(f"{output_file_prefix}class.csv")
-            expected_method_csv_path = Path(f"{output_file_prefix}method.csv") # And others if needed
-
-            # --- Run CK with the output file prefix ---
-            try:
-                # logger.info(f"Running CK for commit {commit_hash} on {repo_dir}...") # Too verbose
-                command = [
-                    'java', '-jar', str(CK_JAR_PATH), str(repo_dir),
-                    use_jars, str(max_files_per_partition), variables_and_fields,
-                    str(output_file_prefix) # <<< PASS THE PREFIX HERE
-                ]
-                # logger.debug(f"Executing command: {' '.join(command)}")
-
-                completed_process = subprocess.run(
-                    command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=1200
-                )
-                # logger.debug(f"CK stdout for {commit_hash}:\n{completed_process.stdout.decode()}")
-                if completed_process.stderr:
-                     # Log stderr but don't necessarily treat log4j warnings as errors
-                     stderr_output = completed_process.stderr.decode()
-                     if "Exception" in stderr_output or "Error" in stderr_output: # Look for actual errors
-                         logger.error(f"CK stderr reported errors for {commit_hash}:\n{stderr_output}")
-                     else:
-                          # Reduce noise from log4j warnings
-                          if "log4j" not in stderr_output.lower():
-                              logger.warning(f"CK stderr for {commit_hash}:\n{stderr_output}")
-
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, Exception) as e:
-                 # Log specific errors
-                if isinstance(e, subprocess.CalledProcessError):
-                    error_msg = f"Error running CK (exit code {e.returncode}) for {commit_hash}: {e.stderr.decode()}"
-                elif isinstance(e, subprocess.TimeoutExpired):
-                    error_msg = f"CK timed out for commit {commit_hash}."
-                else:
-                    error_msg = f"Unexpected error during CK subprocess for {commit_hash}: {e}"
-                logger.error(error_msg, exc_info=isinstance(e, Exception) and not isinstance(e, (subprocess.CalledProcessError, subprocess.TimeoutExpired)))
-                return pd.DataFrame() # Temp dir cleaned by context manager
-
-            # --- Process CK Output: Check for the prefixed file ---
-            if expected_class_csv_path.is_file():
-                # logger.info(f"Found expected CK output file: {expected_class_csv_path}") # Too verbose
-                try:
-                    metrics_df = pd.read_csv(expected_class_csv_path)
-                    # logger.info(f"Successfully read {len(metrics_df)} CK metrics for {commit_hash}.") # Too verbose
-                except pd.errors.EmptyDataError:
-                     logger.warning(f"CK output file {expected_class_csv_path} is empty for {commit_hash}.")
-                     metrics_df = pd.DataFrame()
-                except Exception as e:
-                     logger.error(f"Error reading CK output CSV {expected_class_csv_path} for {commit_hash}: {e}")
-                     metrics_df = pd.DataFrame()
-                finally:
-                    # Clean up the specific output files manually
-                    try:
-                        if expected_class_csv_path.exists(): os.remove(expected_class_csv_path)
-                        if expected_method_csv_path.exists(): os.remove(expected_method_csv_path)
-                    except OSError as rm_err:
-                         logger.error(f"Error removing CK output files like {expected_class_csv_path}: {rm_err}")
-            else:
-                logger.error(f"CK class output file NOT found at expected path: {expected_class_csv_path}")
-
-        # --- Temporary directory is automatically cleaned up here ---
-        # logger.debug(f"Temporary directory {temp_dir_name} and its contents automatically cleaned up.")
-
-    except Exception as outer_e:
-        logger.error(f"Error during temporary directory handling for {commit_hash}: {outer_e}", exc_info=True)
-        return pd.DataFrame()
-
-    return metrics_df
+logger.setLevel(settings.LOG_LEVEL.upper())
 
 
+# not used, but kept for potential future use
 def _process_and_link_commit_issues(
     session: Session,
     repository_id: int,
@@ -134,7 +30,7 @@ def _process_and_link_commit_issues(
     owner: str,
     repo_name: str,
     issue_numbers: List[str], # List of numbers like ['123', '45']
-    fetcher: GitHubIssueFetcher
+    fetcher: GitHubClient
 ) -> List[int]:
     """
     Looks up, fetches (conditionally), updates/inserts GitHub issues in the DB,
@@ -274,13 +170,3 @@ def _process_and_link_commit_issues(
     return linked_issue_db_ids
 
 
-def _get_earliest_linked_issue_timestamp(session: Session, commit_metric_id: int) -> Optional[int]:
-    """Queries the DB for the minimum created_at_timestamp among issues linked to a commit."""
-    stmt = (
-        select(func.min(GitHubIssue.created_at_timestamp))
-        .join(commit_github_issue_association_table, GitHubIssue.id == commit_github_issue_association_table.c.github_issue_id)
-        .where(commit_github_issue_association_table.c.commit_guru_metric_id == commit_metric_id)
-        .where(GitHubIssue.created_at_timestamp.isnot(None)) # Ensure we only consider issues with a timestamp
-    )
-    earliest_ts = session.execute(stmt).scalar_one_or_none()
-    return earliest_ts

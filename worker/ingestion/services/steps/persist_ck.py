@@ -4,9 +4,10 @@ import math
 import pandas as pd
 from pathlib import Path
 
-from sqlalchemy.orm import Session
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from .base import IngestionStep, IngestionContext
 from shared.db_session import get_sync_db_session
@@ -34,28 +35,26 @@ class PersistCKMetricsStep(IngestionStep):
             return context
 
         inserted_count = 0
-        total_commits_with_metrics = len(context.raw_ck_metrics)
+        total_commits_to_process = len(context.raw_ck_metrics)
         processed_commit_count = 0
 
-        self._log_info(context, f"Persisting CK metrics for {total_commits_with_metrics} commits...")
-        self._update_progress(context, f"Starting CK persistence for {total_commits_with_metrics} commits...", 0)
+
+        log_msg_prefix = f"Persisting CK metrics for {total_commits_to_process} commits..."
+        if context.is_single_commit_mode:
+            log_msg_prefix = f"Persisting CK metrics for single-commit mode ({total_commits_to_process} commits: target/parent)..."
+
+        self._log_info(context, log_msg_prefix)
+        self._update_progress(context, log_msg_prefix, 0)
 
         with get_sync_db_session() as session:
             try:
+                all_instances_to_upsert = []
                 for commit_hash, metrics_df in context.raw_ck_metrics.items():
                     processed_commit_count += 1
-                    if metrics_df.empty: continue
-
-                    # Check if any metrics for this commit already exist to avoid duplicates
-                    exists_stmt = select(CKMetric.id).where(
-                        CKMetric.repository_id == context.repository_id,
-                        CKMetric.commit_hash == commit_hash
-                    ).limit(1)
-                    if session.execute(exists_stmt).scalar_one_or_none() is not None:
-                        # self._log_info(context, f"CK metrics for commit {commit_hash[:7]} already exist. Skipping.") # Too verbose
+                    
+                    if metrics_df.empty: 
                         continue
 
-                    instances_to_add = []
                     records = metrics_df.to_dict(orient='records')
                     for record in records:
                         try:
@@ -104,23 +103,49 @@ class PersistCKMetricsStep(IngestionStep):
                             # Final filter to ensure only valid attributes remain
                             filtered = {k: v for k, v in record_clean.items() if k in VALID_CK_ATTRS}
 
-                            instances_to_add.append(CKMetric(**filtered))
+                            all_instances_to_upsert.append(filtered)
 
                         except Exception as record_proc_err:
                              logger.error(f"Failed processing CK record for commit {commit_hash[:7]}: {record_proc_err}. Record: {record}", exc_info=False)
                              # Continue to next record
 
-                    if instances_to_add:
-                        session.add_all(instances_to_add)
-                        inserted_count += len(instances_to_add)
-                        # logger.debug(f"Added {len(instances_to_add)} CK records for commit {commit_hash[:7]} to session.")
+                    # Update progress periodically
+                    if total_commits_to_process > 0 and processed_commit_count % 50 == 0:
+                        step_progress = int(100 * (processed_commit_count / total_commits_to_process))
+                        self._update_progress(context, f'Preparing CK ({processed_commit_count}/{total_commits_to_process})...', step_progress)
 
-                    # Update progress periodically (within the step's progress allocation)
-                    if total_commits_with_metrics > 0 and processed_commit_count % 50 == 0:
-                         step_progress = int(100 * (processed_commit_count / total_commits_with_metrics))
-                         self._update_progress(context, f'Persisting CK ({processed_commit_count}/{total_commits_with_metrics})...', step_progress)
+                 # --- Perform Bulk UPSERT ---
+                if all_instances_to_upsert:
+                    self._log_info(context, f"Attempting bulk UPSERT for {len(all_instances_to_upsert)} CK records...")
 
-                session.commit() # Commit all CK metrics together
+                    stmt = pg_insert(CKMetric).values(all_instances_to_upsert)
+
+                    # Define columns to update on conflict
+                    # Note: Using constraint name means index_elements isn't used here directly,
+                    # but conceptually these are the columns *not* part of the unique key.
+                    # You might want to be more explicit about which columns *should* be updated.
+                    update_columns = {
+                         col.name: col
+                         for col in stmt.excluded # Use 'excluded' to refer to values proposed for insertion
+                         # Filter which columns get updated - e.g., exclude id, repository_id, commit_hash, file, class_name?
+                         if col.name not in ['id', 'repository_id', 'commit_hash', 'file', 'class_name']
+                    }
+
+                    # Create the ON CONFLICT DO UPDATE statement using the CONSTRAINT NAME
+                    upsert_stmt = stmt.on_conflict_do_update(
+                        constraint='uq_ck_metric_key',
+                        set_=update_columns
+                    )
+
+                    result = session.execute(upsert_stmt) 
+                    # rowcount might not be reliable for UPSERT across DBs/drivers
+                    # We can't easily distinguish inserts vs updates here without more complex queries
+                    # Log based on total attempted
+                    self._log_info(context, f"Bulk UPSERT executed for {len(all_instances_to_upsert)} CK records.")
+                    inserted_count = len(all_instances_to_upsert) # Assume all were potentially inserted/updated
+
+
+                session.commit()
 
             except SQLAlchemyError as db_err:
                 self._log_error(context, f"Database error during CK persistence: {db_err}", exc_info=True)

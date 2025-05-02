@@ -39,5 +39,7 @@ class Dataset(Base):
 
     repository: Mapped["Repository"] = relationship("Repository", back_populates="datasets")
 
+    background_data_path: Mapped[str | None] = mapped_column(String, nullable=True, comment="Path to sampled background data for XAI")
+
     def __repr__(self):
         return f"<Dataset(id={self.id}, name='{self.name}', repo_id={self.repository_id}, status='{self.status.value}')>"

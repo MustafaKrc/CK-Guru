@@ -2,17 +2,19 @@
 import logging
 from typing import Dict, Optional, Set, List
 
-from sqlalchemy import update, select
+from sqlalchemy import func, update, select
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+
+from shared.db.models.github_issue import GitHubIssue
 
 from .base import IngestionStep, IngestionContext
 from shared.db_session import get_sync_db_session
 from shared.db.models import CommitGuruMetric
-from shared.utils.commit_guru_utils import GitCommitLinker
+from shared.utils.bug_linker import GitCommitLinker
 from shared.core.config import settings
-# Import the helper function from utils.py
-from ..utils import _get_earliest_linked_issue_timestamp
+
+from shared.db.models.commit_github_issue_association import commit_github_issue_association_table
 
 logger = logging.getLogger(__name__)
 log_level = getattr(settings, 'LOG_LEVEL', 'INFO')
@@ -137,3 +139,14 @@ class LinkBugsStep(IngestionStep):
 
         self._update_progress(context, "Bug linking step complete.", 100) # Step complete progress
         return context
+    
+def _get_earliest_linked_issue_timestamp(session: Session, commit_metric_id: int) -> Optional[int]:
+    """Queries the DB for the minimum created_at_timestamp among issues linked to a commit."""
+    stmt = (
+        select(func.min(GitHubIssue.created_at_timestamp))
+        .join(commit_github_issue_association_table, GitHubIssue.id == commit_github_issue_association_table.c.github_issue_id)
+        .where(commit_github_issue_association_table.c.commit_guru_metric_id == commit_metric_id)
+        .where(GitHubIssue.created_at_timestamp.isnot(None)) # Ensure we only consider issues with a timestamp
+    )
+    earliest_ts = session.execute(stmt).scalar_one_or_none()
+    return earliest_ts

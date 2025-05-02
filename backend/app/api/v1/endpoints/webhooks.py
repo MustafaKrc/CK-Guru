@@ -12,7 +12,6 @@ from shared import schemas
 from shared.core.config import settings
 from shared.db_session import get_async_db_session
 from app import crud
-from app.services.inference_orchestrator import InferenceOrchestrator
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())

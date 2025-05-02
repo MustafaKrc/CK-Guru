@@ -206,7 +206,7 @@ class DatasetGenerator:
         return full_df
 
     def _select_and_write_output(self, final_df: pd.DataFrame):
-        """Selects final columns and writes the output Parquet file."""
+        """Selects final columns and writes the output Parquet file AND background sample."""
         logger.info(f"Task {self.task.request.id}: Step 4: Finalizing and writing output...")
         self._update_status("Selecting final features...", 91)
 
@@ -223,18 +223,44 @@ class DatasetGenerator:
         self.written_row_count = len(final_df_selected)
 
         self._update_status("Writing final dataset...", 95)
-        self.output_writer.write_parquet(final_df_selected, self.object_storage_uri)
+        self.output_writer.write_parquet(final_df_selected, self.object_storage_uri, target_column_name=self.target_column)
+
+         # --- Create and Write Background Sample ---
+        background_s3_uri = None # Initialize
+        try:
+            # Configuration for sampling (could come from dataset_config)
+            sample_size = 500 # Example size
+            min_rows_for_sampling = 50 # Don't sample if dataset is too small
+
+            if self.written_row_count >= min_rows_for_sampling:
+                self._update_status("Creating background data sample...", 97)
+                # Use features selected for the main dataset
+                background_sample_df = final_df_selected.sample(
+                    n=min(sample_size, self.written_row_count), # Sample up to sample_size or dataset size
+                    random_state=42 # Use a fixed seed
+                )
+                # Define background file path
+                background_filename = f"dataset_{self.dataset_id}_background.parquet"
+                background_s3_uri = f"s3://{settings.S3_BUCKET_NAME}/datasets/{background_filename}" # Store in same "folder"
+                logger.info(f"Writing background sample ({background_sample_df.shape}) to {background_s3_uri}")
+                self.output_writer.write_parquet(background_sample_df, background_s3_uri, target_column_name=self.target_column)
+            else:
+                logger.warning(f"Dataset too small ({self.written_row_count} rows) for background sampling (min: {min_rows_for_sampling}). Skipping background data generation.")
+
+        except Exception as sample_err:
+            logger.error(f"Failed to create or write background data sample: {sample_err}", exc_info=True)
+            # Don't fail the whole job, just log it. background_s3_uri remains None.
 
         # --- Final Success Update in DB ---
         # This commit should happen only if write_parquet succeeds
         self.dataset.status = DatasetStatusEnum.READY
         self.dataset.storage_path = self.object_storage_uri
-        self.dataset.status_message = f"Dataset generated successfully. {self.written_row_count} rows written."
-        self.session.add(self.dataset) # Ensure it's added if detached
+        self.dataset.background_data_path = background_s3_uri # Store path (will be None if sampling failed/skipped)
+        self.dataset.status_message = f"Dataset generated. {self.written_row_count} rows. Background sample: {'Yes' if background_s3_uri else 'No'}."
+        #self.session.add(self.dataset)
         self.session.commit()
         logger.info(f"Dataset {self.dataset_id} status updated to READY.")
 
-        # Update Celery task status *after* DB commit
         self._update_status(self.dataset.status_message, 100, state='SUCCESS')
         logger.info(f"Task {self.task.request.id}: Dataset generation successful.")
 

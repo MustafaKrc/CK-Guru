@@ -13,7 +13,6 @@ from .hp_search_job import HPSearchJobBase, HPSearchJobCreate, HPSearchJobUpdate
 from .inference_job import (
     InferenceJobBase, InferenceJobRead, InferenceJobUpdate,
     InferenceJobCreateInternal as InferenceJobCreate, # Use alias for creation
-    InferenceJobSubmitResponse as TrainingInferenceJobSubmitResponse # Avoid name clash if needed
 )
 
 from .inference import ManualInferenceRequest, InferenceTriggerResponse, GitHubPushPayload 

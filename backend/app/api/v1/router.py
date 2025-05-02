@@ -14,12 +14,12 @@ api_router.include_router(datasets.router, prefix="", tags=["Datasets"]) # Use p
 # Bot Patterns endpoints (global and repo-specific might be defined within)
 # If bot_patterns.py defines both /bot-patterns and /repositories/{id}/bot-patterns:
 api_router.include_router(bot_patterns.router, prefix="", tags=["Bot Patterns"])
-# Alternatively, if they were split:
-# api_router.include_router(global_bot_patterns.router, prefix="/bot-patterns", tags=["Global Bot Patterns"])
-# api_router.include_router(repo_bot_patterns.router, prefix="/repositories", tags=["Repository Bot Patterns"])
 
-api_router.include_router(ml_jobs.router, prefix="/ml", tags=["ML Jobs & Models"])
+# ML Jobs (Training, HP Search), Models, Inference Triggering, XAI Triggering
+api_router.include_router(ml_jobs.router, prefix="/ml", tags=["ML & Inference Jobs"]) # Consolidated tag
 
+# XAI Results Reading
+api_router.include_router(xai.router, prefix="/xai", tags=["XAI Explanations"]) # Endpoint for reading XAI results
+
+# Webhooks
 api_router.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
-
-api_router.include_router(xai.router, prefix="/xai", tags=["XAI Explanations"])

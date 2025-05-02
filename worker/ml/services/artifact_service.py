@@ -6,6 +6,7 @@ from typing import Any, Optional
 
 import s3fs
 from shared.core.config import settings
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
@@ -134,6 +135,36 @@ class ArtifactService:
         except Exception as e:
             logger.error(f"Error deleting artifact {s3_uri}: {e}", exc_info=True)
             return False
+        
+    def load_dataframe_artifact(self, s3_uri: str) -> Optional[pd.DataFrame]:
+        """Loads a DataFrame artifact from S3 (assuming Parquet format)."""
+        # Ensure pandas is imported (add 'import pandas as pd' at the top if not already present)
+
+        if not s3_uri:
+            logger.error("Cannot load DataFrame artifact: S3 URI is empty.")
+            return None
+
+        try:
+            fs_client = self.fs # Trigger lazy init if needed
+            s3_path = self._get_s3_path(s3_uri)
+            logger.info(f"Attempting to load DataFrame artifact (Parquet) from: {s3_uri}")
+
+            if not fs_client.exists(s3_path):
+                logger.error(f"DataFrame artifact not found at S3 location: {s3_uri}")
+                return None
+
+            # Use pd.read_parquet with the s3fs file object
+            with fs_client.open(s3_path, 'rb') as f:
+                df = pd.read_parquet(f)
+
+            logger.info(f"Successfully loaded DataFrame artifact (Parquet) from: {s3_uri}")
+            return df
+        except ImportError:
+             logger.error("Pandas or required Parquet engine (e.g., pyarrow, fastparquet) not installed.", exc_info=True)
+             return None
+        except Exception as e:
+            logger.error(f"Error loading DataFrame artifact (Parquet) from {s3_uri}: {e}", exc_info=True)
+            return None
 
 # Create a singleton instance (initialization is now lazy)
 artifact_service = ArtifactService()

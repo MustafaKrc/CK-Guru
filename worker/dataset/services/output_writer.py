@@ -1,9 +1,11 @@
 # worker/dataset/services/output_writer.py
 import logging
-from typing import Dict
+from typing import Dict, Optional
 from pathlib import Path
 
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 import s3fs # Import s3fs
 
 from shared.core.config import settings
@@ -50,7 +52,7 @@ class OutputWriter:
             # Log error but don't fail the whole process just for cleanup failure
             logger.error(f"Could not ensure removal of existing object at {s3_uri}: {e}. Proceeding anyway.", exc_info=False)
 
-    def write_parquet(self, df: pd.DataFrame, s3_uri: str):
+    def write_parquet(self, df: pd.DataFrame, s3_uri: str, target_column_name: Optional[str] = None):
         """Writes the DataFrame to a Parquet file in S3."""
         logger.info(f"Writing final dataset ({len(df)} rows) to {s3_uri}")
         try:
@@ -60,13 +62,35 @@ class OutputWriter:
             if parent != '.': # Avoid trying to create '.' directory
                 self.fs.mkdirs(parent, exist_ok=True) # Access fs property
 
-            df.to_parquet(
-                s3_uri, # Pass the full URI including s3://
-                engine='pyarrow',
-                compression='snappy',
-                index=False,
-                storage_options=self.storage_options # Pass storage options directly
-            )
+            # Convert Pandas DataFrame to Arrow Table
+            table = pa.Table.from_pandas(df, preserve_index=False)
+
+            # --- Add Custom Metadata ---
+            existing_metadata = table.schema.metadata or {} # Get existing metadata or empty dict
+            custom_metadata = existing_metadata.copy() # Don't modify original
+            if target_column_name:
+                # Add the target column name. Ensure it's bytes-encoded.
+                custom_metadata[b'label_column_name'] = target_column_name.encode('utf-8')
+                # You could add other metadata like feature columns list if desired
+                # feature_cols_str = ",".join(df.columns.drop(target_column_name).tolist())
+                # custom_metadata[b'feature_column_names'] = feature_cols_str.encode('utf-8')
+
+            # Update the table schema with the new metadata
+            if custom_metadata != existing_metadata: # Only update if metadata changed
+                 updated_schema = table.schema.with_metadata(custom_metadata)
+                 table = table.cast(updated_schema) # Cast table to the schema with new metadata
+            # ------------------------
+
+            # Write using pyarrow.parquet.write_table
+            with self.fs.open(s3_path, 'wb') as f:
+                 pq.write_table(
+                     table,
+                     f,
+                     compression='snappy',
+                     # index=False is handled by preserve_index=False in from_pandas
+                 )
+
+
             logger.info(f"Successfully wrote final dataset to {s3_uri}")
         except Exception as write_err:
             logger.error(f"Error writing final dataset to {s3_uri}: {write_err}", exc_info=True)

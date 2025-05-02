@@ -13,12 +13,14 @@ from sqlalchemy.orm import Session
 
 # Import shared components
 from shared.core.config import settings
+from shared.db.models.dataset import Dataset
 from shared.schemas.enums import JobStatusEnum, DatasetStatusEnum
 from shared.db_session import get_sync_db_session
 from shared.utils.task_utils import update_task_state
+from services.artifact_service import artifact_service
 
 # Import ML worker services
-from .. import feature_db_service, job_db_service, model_db_service
+from .. import job_db_service, model_db_service
 from ..strategies.base_strategy import BaseModelStrategy
 # Factory needed by subclasses
 from ..factories.strategy_factory import create_model_strategy
@@ -131,25 +133,45 @@ class BaseMLJobHandler(ABC):
         logger.info(f"{self.job_type_name} {self.job_id} status set/confirmed as RUNNING with Task ID {current_task_id}.")
 
     def _load_data(self, session: Session) -> pd.DataFrame:
-        """Loads dataset based on dataset_id. Can be overridden."""
+        """
+        Loads the full dataset Parquet file from storage based on dataset_id.
+        Used by Training and HP Search handlers.
+        Inference handler bypasses this method.
+        """
         if self.dataset_id is None:
+            # This check might be redundant if _load_job_details ensures it for relevant types
             raise ValueError("Dataset ID not available for loading data.")
-        logger.info(f"Loading data for Dataset ID: {self.dataset_id}")
 
-        status, path = feature_db_service.get_dataset_status_and_path(session, self.dataset_id)
+        logger.info(f"BaseHandler: Loading data for Dataset ID: {self.dataset_id}")
+
+        # Fetch Dataset record directly using the session
+        dataset_record = session.get(Dataset, self.dataset_id)
+        if not dataset_record:
+            raise ValueError(f"Dataset record {self.dataset_id} not found.")
+
+        status = dataset_record.status
+        path = dataset_record.storage_path # Path to the main dataset file
+
         if status != DatasetStatusEnum.READY or not path:
-            raise ValueError(f"Dataset {self.dataset_id} is not ready or its path is missing.")
+            raise ValueError(f"Dataset {self.dataset_id} is not ready (status: {status.value}) or its path is missing.")
 
-        logger.info(f"Reading dataset parquet file from: {path}")
+        logger.info(f"BaseHandler: Reading dataset parquet file from: {path}")
         try:
+            #df = artifact_service.load_artifact(path)
+            # here we use read_parquest file 
+            # artifact service is used for pickle files
             df = pd.read_parquet(path, storage_options=settings.s3_storage_options)
+            if df is None: # load_dataframe_artifact returns None on error
+                raise ValueError(f"Artifact service failed to load dataset from {path}.")
             if df.empty:
                 raise ValueError(f"Loaded dataset from {path} is empty.")
-            logger.info(f"Dataset loaded successfully, shape: {df.shape}")
+
+            logger.info(f"BaseHandler: Dataset loaded successfully, shape: {df.shape}")
             return df
         except Exception as e:
-            logger.error(f"Failed to read dataset parquet from {path}: {e}", exc_info=True)
-            raise IOError(f"Failed to read dataset file: {e}") from e
+            logger.error(f"BaseHandler: Failed to read dataset parquet from {path}: {e}", exc_info=True)
+            # Wrap exception for clarity
+            raise IOError(f"Failed to read dataset file '{path}': {e}") from e
 
     @abstractmethod
     def _prepare_data(self, data: pd.DataFrame) -> Any:

@@ -4,58 +4,58 @@ from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict, AliasChoices
 
 from shared.schemas.enums import JobStatusEnum
-# Import the specific detail schema
-from shared.schemas.xai import FilePredictionDetail 
+from shared.schemas.xai import FilePredictionDetail
 
 # --- Result package stored in InferenceJob ---
 class InferenceResultPackage(BaseModel):
     """Structured result stored in the prediction_result field of InferenceJob."""
-    commit_prediction: int = Field(..., description="Aggregated prediction label for the entire commit (0 or 1).")
-    max_bug_probability: float = Field(..., description="Maximum probability of being defect-prone found among analyzed instances.")
+    commit_prediction: int = Field(..., description="Aggregated prediction label for the entire commit (0 or 1, -1 for error).")
+    max_bug_probability: float = Field(..., description="Maximum probability of being defect-prone found among analyzed instances (-1.0 for error).")
     num_files_analyzed: int = Field(..., description="Number of file/class instances analyzed within the commit.")
-    # Keep details of file-level predictions here
-    details: Optional[List[FilePredictionDetail]] = Field(None, description="List of prediction details for each analyzed file/class instance.")
-
+    # List of prediction details for each analyzed file/class instance
+    details: Optional[List[FilePredictionDetail]] = Field(None, description="Detailed predictions per file/class.")
+    # Error message if prediction failed at the handler level
     error: Optional[str] = Field(None, description="Error message if prediction failed.")
+
+    model_config = ConfigDict(extra='ignore') # Ignore extra fields if any
 
 class InferenceJobBase(BaseModel):
     ml_model_id: int = Field(..., description="ID of the ML model to use for inference.")
-    # Flexible input: Can be a dictionary of features, S3 URI, commit hash, etc.
-    # Standardizing on a dict containing commit hash for this feature
     input_reference: Dict[str, Any] = Field(..., description="Reference to input data (e.g., {'commit_hash': '...', 'repo_id': ..., 'trigger_source': 'manual'|'webhook'}).")
 
-# --- Create (API Request Body - used internally by orchestrator) ---
+# --- Create (Internal use) ---
 class InferenceJobCreateInternal(InferenceJobBase):
-    # Internal creation schema might include initial status
     status: JobStatusEnum = JobStatusEnum.PENDING
-    celery_task_id: Optional[str] = None # Task ID of the *initial* ingestion task
+    celery_task_id: Optional[str] = None
 
-# --- Update (Used internally by worker/orchestrator) ---
+# --- Update (Internal use) ---
 class InferenceJobUpdate(BaseModel):
-    celery_task_id: Optional[str] = None # Can be updated if retried etc.
+    celery_task_id: Optional[str] = None
     status: Optional[JobStatusEnum] = None
     status_message: Optional[str] = None
+    # Use the result package schema here for validation on update
     prediction_result: Optional[InferenceResultPackage] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
 
-    model_config = ConfigDict(extra='ignore') # Allow extra fields if needed for flexibility
+    model_config = ConfigDict(extra='ignore')
 
-# --- Read (API Response for GET /infer/{job_id}) ---
+# --- Read (API Response) ---
 class InferenceJobRead(InferenceJobBase):
     id: int
-    celery_task_id: Optional[str] = None # Task ID of the *latest* Celery task associated
+    celery_task_id: Optional[str] = None
     status: JobStatusEnum
     status_message: Optional[str] = None
+    # Use the result package schema here for consistent response structure
     prediction_result: Optional[InferenceResultPackage] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
+
     model_config = ConfigDict(from_attributes=True, use_enum_values=True)
 
-# --- API Response for Job Submission ---
-class InferenceJobSubmitResponse(BaseModel):
-    job_id: int
-    celery_task_id: str
-    message: str = "Inference job pipeline initiated successfully."
+# --- API Response for Job Submission (Feature Extraction Task) ---
+class InferenceTriggerResponse(BaseModel):
+    inference_job_id: int = Field(..., description="The ID of the created InferenceJob record.")
+    initial_task_id: str = Field(..., description="The Celery task ID for the initial feature extraction step.")

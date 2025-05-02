@@ -43,6 +43,7 @@ class DatasetRead(DatasetBase):
     storage_path: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+    background_data_path: Optional[str] = None
 
     model_config = {
         "from_attributes": True, # Pydantic V2 way
@@ -54,12 +55,14 @@ class DatasetUpdate(DatasetBase):
     description: Optional[str] = None
     config: Optional[DatasetConfig] = None
     storage_path: Optional[str] = None
+    background_data_path: Optional[str] = None
     
 
 class DatasetStatusUpdate(BaseModel):
     status: DatasetStatusEnum # This now correctly refers to the imported enum
     status_message: Optional[str] = None
     storage_path: Optional[str] = None
+    background_data_path: Optional[str] = None
 
 # --- Schema for Task Submission Response ---
 class DatasetTaskResponse(BaseModel):

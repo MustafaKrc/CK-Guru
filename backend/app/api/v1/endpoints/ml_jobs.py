@@ -14,8 +14,9 @@ from shared.db_session import get_async_db_session
 from shared.core.config import settings
 from shared.schemas.enums import DatasetStatusEnum, JobStatusEnum # Add other imports if needed
 
-# Import the new orchestrator service
-from app.services.inference_orchestrator import InferenceOrchestrator
+from app.services.inference_service import InferenceService
+from app.services.xai_service import XAIService
+
 
 
 logger = logging.getLogger(__name__)
@@ -392,51 +393,30 @@ async def list_hp_search_jobs(
 
 @router.post(
     "/infer/manual",
-    response_model=schemas.InferenceTriggerResponse, # Use the new response schema
+    response_model=schemas.InferenceTriggerResponse, # Use shared schema
     status_code=status.HTTP_202_ACCEPTED,
     summary="Trigger Inference for a Specific Commit",
     description="Manually triggers the feature extraction and inference pipeline for a given commit hash.",
 )
 async def trigger_manual_inference(
-    *,
-    db: AsyncSession = Depends(get_async_db_session),
     request_body: schemas.ManualInferenceRequest, # Use the new request schema
+    inference_service: InferenceService = Depends(InferenceService) # Inject service
 ):
     """
-    Initiates the inference process for a specified repository commit.
-    This involves queuing background tasks for feature extraction and model prediction.
+    Initiates the inference process for a specified repository commit using the InferenceService.
     """
-    logger.info(f"Received manual inference request: {request_body}")
-
-    # Validate short hash? API can accept short, but orchestrator might need full?
-    # For now, assume orchestrator or worker handles hash resolution if needed.
-    # Basic check: ensure hash is not empty
-    if not request_body.target_commit_hash:
-         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="target_commit_hash cannot be empty.")
-
-    orchestrator = InferenceOrchestrator()
-    try:
-        inference_job_id, initial_task_id = await orchestrator.trigger_inference_pipeline(
-            db=db,
-            repo_id=request_body.repo_id,
-            commit_hash=request_body.target_commit_hash,
-            ml_model_id=request_body.ml_model_id,
-            trigger_source="manual"
-        )
-        return schemas.InferenceTriggerResponse(
-            inference_job_id=inference_job_id,
-            initial_task_id=initial_task_id
-        )
-    except HTTPException as http_exc:
-         # Re-raise HTTP exceptions from the orchestrator (e.g., 404 Not Found)
-         raise http_exc
-    except Exception as e:
-         logger.error(f"Error triggering manual inference pipeline: {e}", exc_info=True)
-         # Catch potential runtime errors from orchestrator logic
-         raise HTTPException(
-             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-             detail=f"Failed to trigger inference pipeline: {e}"
-         )
+    logger.info(f"API: Received manual inference request: {request_body}")
+    # Service handles validation, DB creation, and task dispatch
+    job_id, task_id = await inference_service.trigger_inference(
+        repo_id=request_body.repo_id,
+        commit_hash=request_body.target_commit_hash,
+        model_id=request_body.ml_model_id,
+        trigger_source="manual"
+    )
+    return schemas.InferenceTriggerResponse(
+        inference_job_id=job_id,
+        initial_task_id=task_id # This is now the feature extraction task ID
+    )
 
 
 @router.get(
@@ -448,14 +428,11 @@ async def trigger_manual_inference(
 )
 async def get_inference_job_details(
     job_id: int,
-    db: AsyncSession = Depends(get_async_db_session),
+    inference_service: InferenceService = Depends(InferenceService) # Inject service
 ):
-    """Retrieve details for a single inference job by its ID."""
-    db_job = await crud.crud_inference_job.get_inference_job(db, job_id=job_id)
-    if db_job is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inference job not found")
-    # CRUD function can optionally load related ml_model info if needed
-    return db_job
+    """Retrieve details for a single inference job by its ID using the InferenceService."""
+    return await inference_service.get_inference_status(job_id)
+
 
 @router.get(
     "/infer",
@@ -464,14 +441,40 @@ async def get_inference_job_details(
     description="Retrieves a list of inference jobs with optional filters and pagination.",
 )
 async def list_inference_jobs(
-    db: AsyncSession = Depends(get_async_db_session),
+    db: AsyncSession = Depends(get_async_db_session), # Keep DB for simple reads
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=200),
     model_id: Optional[int] = Query(None, description="Filter by ML Model ID used."),
     status: Optional[JobStatusEnum] = Query(None, description="Filter by job status"),
 ):
-    """Retrieve a list of inference jobs."""
+    """Retrieve a list of inference jobs (using CRUD directly for simple listing)."""
     jobs = await crud.crud_inference_job.get_inference_jobs(
         db, skip=skip, limit=limit, model_id=model_id, status=status
     )
-    return jobs
+    # Convert to Read schemas before returning
+    return [schemas.InferenceJobRead.model_validate(job) for job in jobs]
+
+# --- XAI Orchestration ---
+@router.post(
+    "/infer/{job_id}/explain",
+    response_model=schemas.TaskResponse, # Return orchestrator task info
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger XAI Explanation Generation",
+    description="Initiates the background process to generate all applicable XAI explanations for a completed inference job.",
+    responses={
+        404: {"description": "Inference job not found"},
+        409: {"description": "Inference job not in SUCCESS state"},
+        500: {"description": "Failed to dispatch XAI orchestration task"},
+    }
+)
+async def trigger_xai_explanations(
+    job_id: int,
+    xai_service: XAIService = Depends(XAIService) # Inject service
+):
+    """Triggers the XAI orchestration task for a given inference job ID."""
+    logger.info(f"API: Received request to trigger XAI orchestration for InferenceJob {job_id}")
+    orchestration_task_id = await xai_service.trigger_xai_orchestration(job_id)
+    return schemas.TaskResponse(
+        task_id=orchestration_task_id,
+        message="XAI orchestration task submitted successfully."
+    )

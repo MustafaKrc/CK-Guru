@@ -52,3 +52,4 @@ class XAIStatusEnum(str, enum.Enum):
     RUNNING = "running"
     SUCCESS = "success"
     FAILED = "failed"
+    REVOKED = "revoked"
