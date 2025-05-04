@@ -1,8 +1,8 @@
-# shared/utils/commit_state_tracker.py
+# worker/ingestion/services/commit_state_tracker.py
 import logging
 from typing import Dict, List, Optional, Set, NamedTuple
 
-from shared.utils.git_log_parser import ParsedNumstatLine # Import from sibling module
+from .git_log_parser import ParsedNumstatLine # Import from sibling module
 from shared.core.config import settings
 
 logger = logging.getLogger(__name__)

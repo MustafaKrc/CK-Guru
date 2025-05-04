@@ -10,7 +10,7 @@ class CKMetric(Base):
     # NOTE: Attribute names use CamelCase to directly match CK tool output headers,
     # deviating from Python's standard snake_case convention for easier mapping.
     # Explicit Column("DbName", ...) is used to ensure DB column names also match CK headers.
-    # Keywords ('class', 'type') and invalid identifiers ('lcom*') are handled explicitly.
+    # Keywords ('class', 'type') are handled explicitly.
     __tablename__ = 'ck_metrics'
 
     id = Column(Integer, primary_key=True, index=True)
@@ -37,8 +37,7 @@ class CKMetric(Base):
     noc = Column(Integer, nullable=True)
     rfc = Column(Float, nullable=True)
     lcom = Column(Float, nullable=True)
-    # Explicit handling for invalid identifier char '*'
-    lcom_norm = Column("lcom*", Float, nullable=True)
+    lcom_norm = Column(Float, nullable=True)
     tcc = Column(Float, nullable=True)
     lcc = Column(Float, nullable=True)
 

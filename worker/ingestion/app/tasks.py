@@ -1,37 +1,23 @@
 # worker/ingestion/app/tasks.py
 import logging
 from pathlib import Path
-from typing import List, Optional, Dict, Tuple, Any
-import traceback
 
 from celery import shared_task, Task
 from celery.exceptions import Ignore, Terminated, Reject
-import git
-from sqlalchemy import select, exists # Import exists
-from sqlalchemy.orm import Session
-from sqlalchemy.exc import SQLAlchemyError
+
 
 from shared.core.config import settings
-from shared.utils.task_utils import update_task_state
-from shared.db_session import get_sync_db_session
-# Import specific models needed for checks
-from shared.db.models import InferenceJob
+from shared.db_session import SyncSessionLocal
+from shared.db.models import InferenceJob 
 from shared.schemas.enums import JobStatusEnum
-from .main import celery_app # Import app to send tasks
+from .main import celery_app
 
-# Import steps and context
-from services.steps.base import IngestionContext, IngestionStep
-from services.steps.prepare_repo import PrepareRepositoryStep
-from services.steps.calculate_guru import CalculateCommitGuruMetricsStep
-from services.steps.calculate_ck import CalculateCKMetricsStep
-from services.steps.resolve_commit_hashes import ResolveCommitHashesStep
-from services.steps.ensure_commits_exist import EnsureCommitsExistLocallyStep
-from services.steps.combine_features import CombineFeaturesStep
-from services.steps.persist_guru_and_link_issues import PersistCommitGuruAndLinkIssuesStep
-from services.steps.link_bugs import LinkBugsStep
-from services.steps.persist_ck import PersistCKMetricsStep
+# --- Import Pipeline Structures ---
+from services.steps.base import IngestionContext # Keep context
+from services.strategies import FullHistoryIngestionStrategy, SingleCommitFeatureExtractionStrategy
+from services.pipeline import PipelineRunner
+from services.dependencies import StepRegistry, DependencyProvider
 
-from shared.db_utils.job_status_utils import update_job_start_sync, update_job_status_sync, update_inference_job_feature_path_sync
 
 from celery.utils.log import get_task_logger
 
@@ -40,197 +26,186 @@ logger = get_task_logger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
 
 
-# --- New Task for Feature Extraction ---
-@shared_task(bind=True, name='tasks.ingest_features_for_inference', acks_late=True)
+# --- Feature Extraction Task ---
+@shared_task(bind=True, name='tasks.ingest_features_for_inference', acks_late=True,
+            )
 def ingest_features_for_inference_task(self: Task, inference_job_id: int, repo_id: int, commit_hash_input: str):
     """
-    Extracts features for a single commit using adapted ingestion steps,
-    then dispatches the prediction task to the ML worker.
+    Celery task to orchestrate feature extraction for a single commit inference
+    using the PipelineRunner and SingleCommitFeatureExtractionStrategy.
     """
     task_id = self.request.id
-    logger.info(f"Task {task_id}: Starting feature extraction for InferenceJob {inference_job_id} (Repo: {repo_id}, CommitInput: {commit_hash_input[:7]})")
+    logger.info(f"Task {task_id}: INIT Feature Extraction for InferenceJob {inference_job_id} (Repo: {repo_id}, Commit: {commit_hash_input[:7]})")
+    self.update_state(state='STARTED', meta={'step': 'Initializing Pipeline'})
 
-    self.update_state(state='STARTED', meta={'step': 'Initializing'})
-
+    # --- Context Setup ---
     base_storage_path = Path(settings.STORAGE_BASE_PATH)
     repo_local_path = base_storage_path / "clones" / f"repo_{repo_id}"
-
     context = IngestionContext(
-        repository_id=repo_id,
-        git_url="", # URL might not be needed if repo already exists
-        repo_local_path=repo_local_path,
-        task_instance=self,
-        is_single_commit_mode=True, # Crucial flag
-        target_commit_hash=commit_hash_input, # Start with input hash
-        parent_commit_hash=None, # Will be resolved
-        inference_job_id=inference_job_id,
-        final_combined_features=None # Initialize combined features holder
+        repository_id=repo_id, git_url="", repo_local_path=repo_local_path,
+        task_instance=self, is_single_commit_mode=True,
+        target_commit_hash=commit_hash_input, inference_job_id=inference_job_id,
     )
 
-    pipeline: List[IngestionStep] = [
-        PrepareRepositoryStep(),
-        ResolveCommitHashesStep(),
-        EnsureCommitsExistLocallyStep(),
-        CalculateCommitGuruMetricsStep(),   # Calculates for target/parent
-        PersistCommitGuruAndLinkIssuesStep(),# Persists target/parent Guru, links issues
-        CalculateCKMetricsStep(),           # Calculates for target/parent
-        PersistCKMetricsStep()              # Persists target/parent CK
-    ]
-    total_steps = len(pipeline)
-
-    # --- Update DB Job Status to RUNNING using SHARED util ---
-    try:
-        update_job_start_sync(inference_job_id, "inference", task_id)
-    except Exception as db_err:
-        # Log error, decide if task should fail immediately
-        logger.error(f"Task {task_id}: Failed initial DB status update via shared util: {db_err}", exc_info=True)
-        self.update_state(state='FAILURE', meta={'exc_type': type(db_err).__name__, 'exc_message': f'DB update failed: {db_err}'})
-        raise Reject("Initial DB update failed", requeue=False) from db_err
-
-    final_status = JobStatusEnum.FAILED # Default
+    # --- Strategy and Dependency Setup ---
+    strategy = SingleCommitFeatureExtractionStrategy()
+    dependency_provider = DependencyProvider(session_factory=SyncSessionLocal)
+    step_registry = StepRegistry()
+    runner = PipelineRunner(strategy, step_registry, dependency_provider)
+    job_status_updater = dependency_provider.job_status_updater
 
     try:
-        # Execute pipeline steps sequentially
-        for i, step in enumerate(pipeline):
-            step_name = step.name
-            progress = int(90 * (i / total_steps)) # Allocate 90% for steps
-            logger.info(f"Task {task_id}: Running step {i+1}/{total_steps}: {step_name}")
-            self.update_state(state='STARTED', meta={'step': step_name, 'progress': progress})
-            context = step.execute(context) # Adapt steps for single_commit_mode
+        # --- Update Job Status to RUNNING ---
+        if not job_status_updater.update_job_start(inference_job_id, InferenceJob, task_id):
+            # If initial update fails, reject the task permanently
+            raise Reject("Initial DB update to RUNNING failed", requeue=False)
 
-        # feature combination is not processed here anymore
-        # # Extract final features calculated by CombineFeaturesStep
-        # final_features_dict: Optional[Dict[str, Any]] = getattr(context, 'final_combined_features', None)
-        # if not final_features_dict:
-        #     raise RuntimeError("Feature combination step did not produce features.")
+        # --- Execute the Pipeline ---
+        logger.info(f"Task {task_id}: === Executing Feature Extraction Pipeline ===")
+        final_context = runner.run(context)
+        logger.info(f"Task {task_id}: === Feature Extraction Pipeline Finished ===")
 
-        # --- Dispatch Prediction Task to ML Worker ---
-        self.update_state(state='STARTED', meta={'step': 'Dispatching Prediction', 'progress': 95})
-        task_name = "tasks.inference_predict" # Task in ML worker
-        args = [inference_job_id] # Pass features directly
-        prediction_task = celery_app.send_task(task_name, args=args, queue="ml_queue") # Use own celery_app instance to send
+        # --- Dispatch Prediction Task (on success) ---
+        self.update_state(state='RUNNING', meta={'step': 'Dispatching Prediction', 'progress': 95}) # Use RUNNING state
+        task_name = "tasks.inference_predict"
+        args = [inference_job_id] # Pass only job ID
+        prediction_task = celery_app.send_task(task_name, args=args, queue="ml_queue")
 
         if not prediction_task or not prediction_task.id:
-            raise RuntimeError("Failed to dispatch prediction task (invalid task object returned).")
+            # If dispatch fails *after* pipeline success, it's tricky.
+            # Log critical error. The InferenceJob remains RUNNING in DB.
+            # Manual intervention or monitoring needed.
+            # Mark this Celery task as failed, but don't change DB job status here.
+            error_msg = "Feature extraction pipeline succeeded, but failed to dispatch prediction task."
+            logger.critical(f"Task {task_id}: {error_msg}")
+            self.update_state(state='FAILURE', meta={'exc_type': 'DispatchError', 'exc_message': error_msg})
+            # Don't raise Reject here, as the feature extraction *did* complete.
+            # Let the Celery task state reflect the dispatch failure.
+            return {"status": "FAILURE", "error": error_msg} # Return error info
 
-        # --- Update Inference Job Status to PENDING (handled by ML worker) ---
-        # No status update needed here, ML worker handles transitions
-        message = f"Feature extraction complete. Prediction task dispatched: {prediction_task.id}"
-        final_status = JobStatusEnum.SUCCESS # Mark this task as successful
-
-        self.update_state(state='SUCCESS', meta={'step': 'Completed', 'progress': 100, 'message': message})
-        logger.info(f"Task {task_id}: {message}")
+        # --- Finalize Task (Success) ---
+        success_message = f"Feature extraction complete. Prediction task dispatched: {prediction_task.id}"
+        # Note: InferenceJob status remains RUNNING; ML worker updates it upon prediction completion.
+        self.update_state(state='SUCCESS', meta={'step': 'Completed', 'progress': 100, 'message': success_message})
+        logger.info(f"Task {task_id}: {success_message}")
         return {"status": "SUCCESS", "prediction_task_id": prediction_task.id}
 
     except Terminated as e:
-        logger.warning(f"Task {task_id}: Terminated during feature extraction for job {inference_job_id}")
+        # Handle termination signal cleanly
+        logger.warning(f"Task {task_id}: Terminated during feature extraction pipeline for job {inference_job_id}")
         status_message = "Task terminated during feature extraction."
-        final_status = JobStatusEnum.FAILED # Treat termination as failure for the job
-        # Update DB using sync helper
-        try: update_job_status_sync(inference_job_id, "inference", final_status, status_message)
-        except Exception as db_err: logger.error(f"Failed DB update on Terminated: {db_err}")
-        raise e # Let Celery handle state
+        # Update final job status to FAILED
+        job_status_updater.update_job_completion(inference_job_id, InferenceJob, JobStatusEnum.FAILED, status_message)
+        # Celery handles the REVOKED state update automatically if revoke(terminate=True) was used
+        # We log it, update DB, but don't need to explicitly set REVOKED state here.
+        raise # Re-raise for Celery to handle
 
-    except (Ignore, Reject) as e: # Handle Ignore/Reject explicitly
+    except (Ignore, Reject) as e:
+         # Handle specific Celery control flow exceptions
          logger.info(f"Task {task_id}: Ignoring or Rejecting task for job {inference_job_id}: {e}")
-         # DB status likely handled by the code raising Ignore/Reject, or needs check
-         raise e # Re-raise for Celery
+         # Assume DB status was handled before Ignore/Reject was raised if necessary
+         raise # Re-raise for Celery
 
     except Exception as e:
-        logger.critical(f"Task {task_id}: Unhandled error during feature extraction for job {inference_job_id}", exc_info=True)
-        error_msg = f"Feature extraction failed: {type(e).__name__}: {e}"
-        final_status = JobStatusEnum.FAILED
-        # Update DB using sync helper
-        try: update_job_status_sync(inference_job_id, "inference", final_status, error_msg)
-        except Exception as db_err: logger.error(f"Failed DB update on Exception: {db_err}")
-        self.update_state(state='FAILURE', meta={'exc_type': type(e).__name__, 'exc_message': error_msg})
-        raise Reject(error_msg, requeue=False) from e # Fail permanently
+        # Catch all other exceptions from the PipelineRunner
+        pipeline_failed_step = getattr(runner.current_step_instance, 'name', 'Unknown')
+        error_msg_detail = f"Feature extraction failed at step [{pipeline_failed_step}]: {type(e).__name__}: {str(e)[:200]}"
+        logger.critical(f"Task {task_id}: Pipeline Error for job {inference_job_id}. {error_msg_detail}", exc_info=True)
 
-# Note: Adapt steps CalculateCommitGuruMetricsStep, CalculateCKMetricsStep, PrepareRepositoryStep
-# to handle the `is_single_commit_mode=False` case (their original behavior).
-@shared_task(bind=True, name='tasks.ingest_repository')
+        # Update final job status to FAILED using the service
+        job_status_updater.update_job_completion(inference_job_id, InferenceJob, JobStatusEnum.FAILED, error_msg_detail)
+
+        # Update Celery task state to FAILURE
+        self.update_state(state='FAILURE', meta={'exc_type': type(e).__name__, 'exc_message': error_msg_detail, 'failed_step': pipeline_failed_step})
+
+        # Raise Reject to prevent retries unless explicitly configured
+        raise Reject(error_msg_detail, requeue=False) from e
+
+
+# --- Simplified Full Ingestion Task ---
+@shared_task(bind=True, name='tasks.ingest_repository', acks_late=True)
 def ingest_repository_task(self: Task, repository_id: int, git_url: str):
     """
-    Orchestrates the FULL ingestion pipeline using distinct steps.
-    (Ensure adapted steps still work correctly in this mode).
+    Celery task to orchestrate the full repository ingestion pipeline
+    using the PipelineRunner and FullHistoryIngestionStrategy.
     """
     task_id = self.request.id
-    logger.info(f"Task {task_id}: Starting FULL ingestion pipeline for repo ID: {repository_id}, URL: {git_url}")
-    try:
-        self.update_state(state='STARTED', meta={'step': 'Initializing'})
-    except Exception as e:
-        logger.error(f"Task {task_id}: Failed initial state update: {e}", exc_info=True)
+    logger.info(f"Task {task_id}: INIT Full Ingestion for repo ID: {repository_id}, URL: {git_url}")
+    self.update_state(state='STARTED', meta={'step': 'Initializing Pipeline'})
 
+    # --- Context Setup ---
     base_storage_path = Path(settings.STORAGE_BASE_PATH)
     repo_local_path = base_storage_path / "clones" / f"repo_{repository_id}"
-
     try:
         repo_local_path.parent.mkdir(parents=True, exist_ok=True)
     except OSError as e:
-        logger.critical(f"Task {task_id}: Failed to create base directory {repo_local_path.parent}: {e}", exc_info=True)
-        self.update_state(state='FAILURE', meta={'exc_type': 'OSError', 'exc_message': f'Failed to create storage directory: {e}'})
-        raise RuntimeError(f"Cannot proceed: Failed to create required directory {repo_local_path.parent}") from e
+        # If directory creation fails, reject the task
+        error_msg = f'Failed to create storage directory: {e}'
+        logger.critical(f"Task {task_id}: {error_msg}", exc_info=True)
+        self.update_state(state='FAILURE', meta={'exc_type': 'OSError', 'exc_message': error_msg})
+        raise Reject(error_msg, requeue=False) from e
 
     context = IngestionContext(
-        repository_id=repository_id,
-        git_url=git_url,
-        repo_local_path=repo_local_path,
-        task_instance=self,
-        is_single_commit_mode=False, # Explicitly false for full ingestion
-        target_commit_hash=None,
-        parent_commit_hash=None,
-        inference_job_id=None,
-        final_combined_features=None
+        repository_id=repository_id, git_url=git_url, repo_local_path=repo_local_path,
+        task_instance=self, is_single_commit_mode=False,
     )
 
-    pipeline: List[IngestionStep] = [
-        PrepareRepositoryStep(),             # Clones/fetches repo
-        CalculateCommitGuruMetricsStep(),    # Calculates raw Guru metrics for history
-        PersistCommitGuruAndLinkIssuesStep(),# Saves Guru metrics, fetches/saves/links GitHub issues
-        LinkBugsStep(),                      # Runs GitCommitLinker, updates bug flags in DB
-        CalculateCKMetricsStep(),            # Calculates raw CK metrics for commits
-        PersistCKMetricsStep()               # Saves CK metrics
-    ]
-
-    total_steps = len(pipeline)
-    final_status = "Completed successfully"
-    failed_step_name = "Initialization"
+    # --- Strategy and Dependency Setup ---
+    strategy = FullHistoryIngestionStrategy()
+    dependency_provider = DependencyProvider(session_factory=SyncSessionLocal)
+    step_registry = StepRegistry()
+    runner = PipelineRunner(strategy, step_registry, dependency_provider)
 
     try:
-        for i, step in enumerate(pipeline):
-            step_name = step.name
-            failed_step_name = step_name
-            progress = int(95 * (i / total_steps))
-            logger.info(f"Task {task_id}: === Running Full Ingestion Step {i+1}/{total_steps}: {step_name} ===")
-            self.update_state(state='STARTED', meta={'step': step_name, 'progress': progress})
-            context = step.execute(context)
-            logger.info(f"Task {task_id}: === Completed Full Ingestion Step {i+1}/{total_steps}: {step_name} ===")
-            progress_end = int(95 * ((i + 1) / total_steps))
-            self.update_state(state='STARTED', meta={'step': f"{step_name} Complete", 'progress': min(progress_end, 98)})
+        # --- Execute the Pipeline ---
+        logger.info(f"Task {task_id}: === Executing Full Ingestion Pipeline ===")
+        final_context = runner.run(context)
+        logger.info(f"Task {task_id}: === Full Ingestion Pipeline Finished ===")
 
-        self.update_state(state='STARTED', meta={'step': 'Finalizing', 'progress': 99})
-        if context.warnings: final_status = "Completed with warnings"
+        # --- Finalize Task (Success) ---
+        final_status_message = "Completed successfully"
+        if final_context.warnings:
+             final_status_message = "Completed with warnings"
+             logger.warning(f"Task {task_id}: Full ingestion completed with warnings: {final_context.warnings}")
 
+        # Prepare result payload based on final context state
         result_payload = {
-            'status': final_status, 'repository_id': context.repository_id,
-            'commit_guru_metrics_processed': len(context.raw_commit_guru_data),
-            'commit_guru_metrics_inserted': context.inserted_guru_metrics_count,
-            'ck_metrics_processed_commits': len(context.raw_ck_metrics),
-            'ck_metrics_inserted': context.inserted_ck_metrics_count,
-            'warnings': "; ".join(context.warnings) if context.warnings else None
+            'status': final_status_message,
+            'repository_id': final_context.repository_id,
+            'commit_guru_metrics_processed': len(final_context.raw_commit_guru_data),
+            'commit_guru_metrics_inserted': final_context.inserted_guru_metrics_count,
+            'ck_metrics_processed_commits': len(final_context.raw_ck_metrics),
+            'ck_metrics_inserted': final_context.inserted_ck_metrics_count,
+            'warnings': "; ".join(final_context.warnings) if final_context.warnings else None
         }
-        logger.info(f"Task {task_id}: Full ingestion pipeline finished for repo ID: {repository_id}. Final Status: {final_status}")
-        self.update_state(state='SUCCESS', meta={'step': 'Complete', 'progress': 100, 'message': final_status})
+        self.update_state(state='SUCCESS', meta=result_payload) # Use payload in meta
+        logger.info(f"Task {task_id}: Final State: SUCCESS. {final_status_message}")
         return result_payload
 
     except Terminated as term_exc:
+        # Handle termination signal cleanly
+        failed_step_name = getattr(runner.current_step_instance, 'name', 'Unknown')
         error_msg = f"Full ingestion task terminated during step: {failed_step_name}."
         logger.warning(f"Task {task_id}: {error_msg}")
-        self.update_state(state='REVOKED', meta={'exc_type': 'Terminated', 'exc_message': error_msg})
-        raise
+        # Update Celery task state; DB job status isn't applicable here
+        self.update_state(state='REVOKED', meta={'exc_type': 'Terminated', 'exc_message': error_msg, 'failed_step': failed_step_name})
+        raise # Re-raise for Celery
+
+    except (Ignore, Reject) as e:
+         # Handle specific Celery control flow exceptions
+         logger.info(f"Task {task_id}: Ignoring or Rejecting task for repo {repository_id}: {e}")
+         raise # Re-raise for Celery
+
     except Exception as e:
+        # Catch all other exceptions from the PipelineRunner
+        pipeline_failed_step = getattr(runner.current_step_instance, 'name', 'Unknown')
         error_type = type(e).__name__
-        error_message = f"Full ingestion pipeline failed at step '{failed_step_name}' due to {error_type}: {str(e)}"
-        logger.critical(f"Task {task_id}: {error_message}", exc_info=True)
-        self.update_state(state='FAILURE', meta={'exc_type': error_type, 'exc_message': error_message, 'failed_step': failed_step_name})
-        raise
+        error_message = f"Full ingestion pipeline failed at step '{pipeline_failed_step}' due to {error_type}: {str(e)[:500]}" # Truncate
+        logger.critical(f"Task {task_id}: Pipeline Error for repo {repository_id}. {error_message}", exc_info=True)
+
+        # Update Celery task state to FAILURE
+        self.update_state(state='FAILURE', meta={'exc_type': error_type, 'exc_message': error_message, 'failed_step': pipeline_failed_step})
+
+        # Raise Reject to prevent retries unless explicitly configured
+        raise Reject(error_message, requeue=False) from e
+    

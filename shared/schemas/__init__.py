@@ -27,6 +27,8 @@ from .xai_job import (
     XAIResultBase, XAIResultCreate, XAIResultUpdate, XAIResultRead
 )
 
+from .repo_api_client import RepoApiResponseStatus, RepoApiClientResponse
+
 __all__ = [
     # Enums
     "JobStatusEnum", "DatasetStatusEnum", "ObjectiveMetricEnum", "SamplerTypeEnum", "PrunerTypeEnum", "ModelTypeEnum",
@@ -41,5 +43,5 @@ __all__ = [
     "TrainingJobBase", "TrainingJobCreate", "TrainingJobRead", "TrainingJobUpdate", "TrainingConfig", "TrainingJobSubmitResponse",
     "HPSearchJobBase", "HPSearchJobCreate", "HPSearchJobUpdate", "HPSearchJobRead", "HPSearchConfig", "OptunaConfig", "HPSuggestion", "HPSearchJobSubmitResponse",
     "InferenceJobBase", "InferenceJobCreate", "InferenceJobUpdate", "InferenceJobRead",
-    "ManualInferenceRequest", "InferenceTriggerResponse", "GitHubPushPayload", # Add new ones
+    "ManualInferenceRequest", "InferenceTriggerResponse", "GitHubPushPayload", "RepoAPIResponseStatus", "RepoApiClientResponse",
 ]

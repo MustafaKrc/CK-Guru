@@ -97,7 +97,7 @@ class InferenceJobHandler(BaseMLJobHandler):
         data = features_df
 
         # --- Define Identifier Columns ---
-        identifier_cols = ['file', 'class_name'] # Match keys used in CombineFeaturesStep
+        identifier_cols = ['file', 'class_name'] 
         missing_ids = [col for col in identifier_cols if col not in data.columns]
         if missing_ids: raise ValueError(f"Input features missing required identifier columns: {missing_ids}")
         identifiers_df = data[identifier_cols].copy()

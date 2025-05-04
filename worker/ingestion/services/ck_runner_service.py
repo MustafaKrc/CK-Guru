@@ -6,6 +6,8 @@ import subprocess
 from pathlib import Path
 import pandas as pd
 
+from services.interfaces.i_ck_runner_service import ICKRunnerService
+
 from shared.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -15,7 +17,7 @@ logger.setLevel(settings.LOG_LEVEL.upper())
 # Assuming Dockerfile places it at /app/third_party/ck.jar
 CK_JAR_PATH = Path('/app/third_party/ck.jar')
 
-class CKRunnerService:
+class CKRunnerService(ICKRunnerService):
     """Encapsulates the logic for running the CK metric tool."""
 
     def __init__(self):
@@ -85,6 +87,8 @@ class CKRunnerService:
                 if expected_class_csv_path.is_file():
                     try:
                         metrics_df = pd.read_csv(expected_class_csv_path)
+                        # rename lcom* to lcom_norm
+                        metrics_df.rename(columns={'lcom*': 'lcom_norm'}, inplace=True)
                     except pd.errors.EmptyDataError:
                         logger.warning(f"CK output file {expected_class_csv_path.name} was empty for {commit_hash[:7]}.")
                         metrics_df = pd.DataFrame()
@@ -101,8 +105,3 @@ class CKRunnerService:
             return pd.DataFrame()
 
         return metrics_df
-
-# --- Create a singleton instance for potential reuse ---
-# Note: If state is ever added, remove the singleton pattern
-
-ck_runner_service = CKRunnerService()

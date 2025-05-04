@@ -1,4 +1,4 @@
-# shared/utils/bug_linker.py
+# worker/ingestion/services/bug_linker.py
 import re
 import json
 import logging
@@ -7,8 +7,7 @@ from pathlib import Path
 from typing import Dict, List, Mapping, Set, Any, Optional, Tuple
 
 from shared.core.config import settings
-# Assuming git_utils is in the same directory or accessible
-from shared.utils.git_utils import run_git_command, find_commit_hash_before_timestamp
+from services.interfaces import IGitService
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
@@ -38,14 +37,12 @@ class GitCommitLinker:
     _HUNK_HEADER_REGEX = re.compile(r"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@")
     _DIFF_GIT_HEADER_REGEX = re.compile(r'diff --git a/(.*?) b/(.*)')
 
-    def __init__(self, repo_path: Path):
+    def __init__(self, git_service: IGitService):
         """
-        Constructor. Sets the repository path.
+        Constructor. Sets the repository path and GitService instance.
         """
-        if not repo_path or not repo_path.is_dir():
-            raise FileNotFoundError(f"Repository path does not exist or is not a directory: {repo_path}")
-        self.repo_path: Path = repo_path
-        logger.info(f"GitCommitLinker initialized for repository: {self.repo_path}")
+        self.git_service = git_service # Store injected service
+        logger.info(f"GitCommitLinker initialized for repository: {git_service.repo_path}")
 
     def link_corrective_commits(
         self,
@@ -115,17 +112,17 @@ class GitCommitLinker:
         Focuses only on code files based on CODE_FILE_EXTENSIONS.
         """
         # Use ^1 explicitly to target the first parent, common for non-merge fixes
-        diff_cmd = f"git diff -U0 {commit_hash}^1 {commit_hash}"
-        files_cmd = f"git diff --name-only {commit_hash}^1 {commit_hash}"
+        diff_cmd_args = f"diff -U0 {commit_hash}^1 {commit_hash}"
+        files_cmd_args = f"diff --name-only {commit_hash}^1 {commit_hash}"
         modified_regions: Dict[str, List[int]] = {}
 
         try:
             # Check if the commit has a parent first
-            parent_check_cmd = f"git rev-parse --verify {commit_hash}^1"
-            run_git_command(parent_check_cmd, cwd=self.repo_path) # Throws error if no parent
+            parent_check_cmd_args = f"rev-parse --verify {commit_hash}^1"
+            self.git_service.run_git_command(parent_check_cmd_args, check=True)
 
-            diff_output = run_git_command(diff_cmd, cwd=self.repo_path)
-            files_modified_output = run_git_command(files_cmd, cwd=self.repo_path)
+            diff_output = self.git_service.run_git_command(diff_cmd_args, check=True)
+            files_modified_output = self.git_service.run_git_command(files_cmd_args, check=True)
             files_modified = set(fn.strip() for fn in files_modified_output.splitlines() if fn.strip())
 
             modified_regions = self._parse_diff_for_modified_lines(diff_output, files_modified)
@@ -194,20 +191,8 @@ class GitCommitLinker:
         initial_blame_start_commit: Optional[str] = default_blame_start
         used_issue_timestamp = False
 
-        # --- Determine Blame Start Commit ---
-        if earliest_issue_timestamp:
-            logger.debug(f"BugLinker: Using issue timestamp {earliest_issue_timestamp} for {corrective_commit_hash[:7]}")
-            commit_before_issue = find_commit_hash_before_timestamp(self.repo_path, earliest_issue_timestamp)
-            if commit_before_issue:
-                initial_blame_start_commit = commit_before_issue
-                used_issue_timestamp = True
-                logger.debug(f"BugLinker: Initial blame start: {initial_blame_start_commit[:7]} (from timestamp)")
-            else:
-                logger.warning(f"BugLinker: Could not find commit before timestamp {earliest_issue_timestamp}. Using parent {default_blame_start[:7]}.")
-                initial_blame_start_commit = default_blame_start
-        else:
-            logger.debug(f"BugLinker: Initial blame start: {default_blame_start[:7]} (parent)")
-        # --- End Determine Blame Start ---
+        # Determine initial_blame_start_commit 
+        initial_blame_start_commit = self.git_service.find_commit_hash_before_timestamp(earliest_issue_timestamp)
 
         if not initial_blame_start_commit:
              logger.error(f"BugLinker: Could not determine blame start for {corrective_commit_hash[:7]}. Skipping blame.")
@@ -230,10 +215,10 @@ class GitCommitLinker:
                 line_args = " ".join([f"-L {ln},{ln}" for ln in line_numbers])
                 # Use -- C essential if file paths might start with -
                 # -w: ignore whitespace changes
-                blame_cmd = f"git blame --porcelain -w {current_blame_start} {line_args} -- \"{file_path}\""
+                blame_cmd_args = f"blame --porcelain -w {current_blame_start} {line_args} -- \"{file_path}\""
 
                 try:
-                    blame_output = run_git_command(blame_cmd, cwd=self.repo_path)
+                    blame_output = self.git_service.run_git_command(blame_cmd_args)
                     blame_succeeded = True
                     break # Success, exit attempt loop
                 except subprocess.CalledProcessError as e:

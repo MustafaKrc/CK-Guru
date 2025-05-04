@@ -1,4 +1,4 @@
-# shared/utils/metric_calculator.py
+# worker/ingestion/services/metric_calculator.py
 import logging
 import math
 import numpy as np
@@ -6,8 +6,8 @@ from typing import Dict, List, Optional, Any, Set
 
 from shared.core.config import settings
 # Import helper structures if needed (though not strictly necessary here)
-from shared.utils.commit_state_tracker import FileUpdateResult, DevExperienceMetrics
-from shared.utils.git_log_parser import ParsedNumstatLine
+from .commit_state_tracker import FileUpdateResult, DevExperienceMetrics
+from .git_log_parser import ParsedNumstatLine
 
 
 logger = logging.getLogger(__name__)

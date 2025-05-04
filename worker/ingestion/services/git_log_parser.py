@@ -1,4 +1,4 @@
-# shared/utils/git_log_parser.py
+# worker/ingestion/services/git_log_parser.py
 import re
 import logging
 from typing import Any, Dict, List, Optional, NamedTuple
@@ -9,7 +9,6 @@ logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
 
 # --- Constants ---
-# Moved format here as it's specific to parsing this log type
 COMMIT_GURU_LOG_FORMAT = (
     '--pretty=format:\"<CAS_COMMIT_START>'
     '<CAS_FIELD>parent_hashes<CAS_DELIM>%P<CAS_END>'
