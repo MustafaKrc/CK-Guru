@@ -1,54 +1,127 @@
 # worker/dataset/app/tasks.py
-import traceback
 import logging
+import traceback
+from typing import Optional # Import traceback
 
 import s3fs
 from celery import shared_task, Task
-from celery.exceptions import Ignore, Terminated
+from celery.exceptions import Ignore, Terminated, Reject # Import Reject
 
-# Import the generator and config/session utils
-from services.dataset_generator import DatasetGenerator
-from services.cleaning_rules.base import WORKER_RULE_REGISTRY
+# --- Remove old generator import ---
+# from services.dataset_generator import DatasetGenerator
+
+# --- Import New Pipeline Structures ---
+from services.context import DatasetContext
+from services.dependencies import DependencyProvider, StepRegistry
+from services.strategies import DefaultDatasetGenerationStrategy # Import default strategy
+from services.pipeline import PipelineRunner
+
+# --- Import Config, Session, Enums, Status Updater Interface ---
 from shared.core.config import settings
-from shared.db_session import get_sync_db_session # Keep for delete task
+from shared.db_session import get_sync_db_session, SyncSessionLocal # Import factory
+from shared.schemas.enums import DatasetStatusEnum
+from shared.services.interfaces import IJobStatusUpdater # For type hint if needed
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
 
-@shared_task(bind=True, name='tasks.generate_dataset')
+@shared_task(bind=True, name='tasks.generate_dataset', acks_late=True) # Enable acks_late
 def generate_dataset_task(self: Task, dataset_id: int):
     """
-    Celery task to generate a dataset using the DatasetGenerator.
+    Celery task to generate a dataset using the PipelineRunner.
     """
     task_id = self.request.id
-    logger.info(f"Celery Task {task_id}: Received request for dataset ID {dataset_id}")
-    
+    logger.info(f"Celery Task {task_id}: INIT Dataset Generation for ID {dataset_id}")
+    self.update_state(state='STARTED', meta={'step': 'Initializing Pipeline'})
+
+    # --- Instantiate Pipeline Components ---
+    dependency_provider: Optional[DependencyProvider] = None # Initialize for finally block
+    job_status_updater: Optional[IJobStatusUpdater] = None
+
     try:
-        generator = DatasetGenerator(dataset_id, self)
-        result = generator.generate() # generate() handles internal state updates and cleanup
-        logger.info(f"Celery Task {task_id}: generate() finished with result: {result}")
-        return result # Return success payload
-    except Terminated:
-         # Task was revoked, generate() already handled logging/cleanup
-         # Celery marks task as REVOKED based on the exception
-         logger.warning(f"Celery Task {task_id}: generate() raised Terminated. Task state should be REVOKED.")
-         # No return value needed, Celery handles state.
-         raise
-    except Exception as e:
-        # Catch any exception that escaped generate() - should be rare if generate() handles its errors
-        error_msg = f"Unhandled exception in generate_dataset_task for dataset {dataset_id}: {type(e).__name__}"
-        logger.critical(f"Celery Task {task_id}: {error_msg}", exc_info=True)
-        # Ensure Celery backend receives exception type and message
-        self.update_state(
-            state='FAILURE',
-            meta={
-                'exc_type': type(e).__name__,
-                'exc_message': str(e)
-            }
+        # Pass the synchronous session factory
+        dependency_provider = DependencyProvider(session_factory=SyncSessionLocal)
+        step_registry = StepRegistry()
+        strategy = DefaultDatasetGenerationStrategy()
+        runner = PipelineRunner(strategy, step_registry, dependency_provider)
+        job_status_updater = dependency_provider._get_job_status_updater() # Get updater for error handling
+
+        # --- Create Initial Context ---
+        initial_context = DatasetContext(
+            dataset_id=dataset_id,
+            task_instance=self,
+            # Other fields will be populated by LoadConfigurationStep
         )
-        raise e # Re-raise to let Celery handle the task failure
 
+        # --- Execute Pipeline ---
+        logger.info(f"Task {task_id}: === Executing Dataset Generation Pipeline ===")
+        final_context = runner.run(initial_context)
+        logger.info(f"Task {task_id}: === Dataset Generation Pipeline Finished ===")
 
+        # --- Finalize Task (Success) ---
+        # DB status is updated by WriteOutputStep via JobStatusUpdater
+        # Celery status updated by PipelineRunner/WriteOutputStep
+        success_message = f"Dataset generation complete. Rows written: {final_context.rows_written}."
+        # Update Celery state one last time to ensure SUCCESS state and final message
+        self.update_state(state='SUCCESS', meta={'progress': 100, 'step': 'Completed', 'message': success_message, 'path': final_context.output_storage_uri})
+        logger.info(f"Task {task_id}: Final State: SUCCESS. {success_message}")
+        return { # Return final status payload
+            'dataset_id': final_context.dataset_id,
+            'status': 'SUCCESS',
+            'rows_written': final_context.rows_written,
+            'path': final_context.output_storage_uri,
+            'background_path': final_context.background_sample_uri,
+            'warnings': final_context.warnings
+        }
+
+    except Terminated as e:
+        # Handle termination signal cleanly
+        logger.warning(f"Task {task_id}: Terminated during dataset generation pipeline for dataset {dataset_id}.")
+        if job_status_updater:
+             # Attempt to update DB status to FAILED
+             status_message = "Task terminated by revoke request."
+             job_status_updater.update_dataset_completion(dataset_id, DatasetStatusEnum.FAILED, status_message)
+        else:
+             logger.error("JobStatusUpdater not available during termination handling.")
+        # Celery handles the REVOKED state update automatically
+        raise # Re-raise for Celery
+
+    except (Ignore, Reject) as e:
+         # Handle specific Celery control flow exceptions
+         logger.info(f"Task {task_id}: Ignoring or Rejecting task for dataset {dataset_id}: {e}")
+         # Assume DB status was handled before Ignore/Reject was raised if necessary
+         raise # Re-raise for Celery
+
+    except Exception as e:
+        # Catch all other exceptions from the PipelineRunner or setup
+        failed_step = "Initialization"
+        if runner and runner.current_step_instance:
+             failed_step = runner.current_step_instance.name
+
+        error_msg_detail = f"Dataset generation failed at step [{failed_step}]: {type(e).__name__}: {str(e)}"
+        logger.critical(f"Task {task_id}: Pipeline Error for dataset {dataset_id}. {error_msg_detail}", exc_info=True)
+
+        # Update final job status to FAILED using the service
+        if job_status_updater:
+             job_status_updater.update_dataset_completion(dataset_id, DatasetStatusEnum.FAILED, error_msg_detail[:1000]) # Truncate
+        else:
+            logger.error(f"Task {task_id}: JobStatusUpdater not available to mark dataset {dataset_id} as FAILED in DB.")
+
+        # Update Celery task state to FAILURE
+        self.update_state(state='FAILURE', meta={
+            'exc_type': type(e).__name__,
+            'exc_message': traceback.format_exc(), # Include traceback in meta
+            'failed_step': failed_step
+        })
+
+        # Raise Reject to prevent retries unless explicitly configured
+        raise Reject(error_msg_detail, requeue=False) from e
+    finally:
+        # Clean up resources if necessary (though session scope handles DB)
+        logger.debug(f"Task {task_id}: Finalizing dataset generation task.")
+        # dependency_provider might have resources to release if it managed them directly
+
+# --- Keep delete task as is ---
 @shared_task(
     bind=True,
     name='tasks.delete_storage_object',
@@ -83,7 +156,8 @@ def delete_storage_object_task(self: Task, object_storage_uri: str):
         raise Ignore()
     except s3fs.errors.S3PermissionError as e:
          logger.error(f"Task {task_id}: Permission error deleting {object_storage_uri}: {e}")
-         raise Ignore()
+         raise Ignore() # Don't retry permission errors usually
     except Exception as e:
         logger.error(f"Task {task_id}: Failed to delete object {object_storage_uri}: {e}", exc_info=True)
+        # Let retry logic handle this based on autoretry_for
         raise e # Re-raise other errors for Celery retry/failure handling

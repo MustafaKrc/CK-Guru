@@ -27,8 +27,7 @@ logger.setLevel(settings.LOG_LEVEL.upper())
 
 
 # --- Feature Extraction Task ---
-@shared_task(bind=True, name='tasks.ingest_features_for_inference', acks_late=True,
-            )
+@shared_task(bind=True, name='tasks.ingest_features_for_inference', acks_late=True)
 def ingest_features_for_inference_task(self: Task, inference_job_id: int, repo_id: int, commit_hash_input: str):
     """
     Celery task to orchestrate feature extraction for a single commit inference

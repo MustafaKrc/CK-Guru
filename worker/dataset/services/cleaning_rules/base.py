@@ -1,10 +1,9 @@
 # worker/dataset/services/cleaning_rules/base.py
 import logging
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional, Type
+from typing import List, Dict, Any, Type
 
 import pandas as pd
-from pydantic import BaseModel, Field
 
 from shared.schemas.rule_definition import RuleParamDefinition, RuleDefinition
 
