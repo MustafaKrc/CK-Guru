@@ -3,8 +3,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) 
 
 <!--
-[![Build Status](https://img.shields.io/github/actions/workflow/status/your_username/CK-Guru/ci.yml?branch=main)](https://github.com/your_username/CK-Guru/actions) 
-[![Coverage Status](https://coveralls.io/repos/github/your_username/CK-Guru/badge.svg?branch=main)](https://coveralls.io/github/your_username/CK-Guru?branch=main)  -->
+[![Build Status](https://img.shields.io/github/actions/workflow/status/MustafaKrc/CK-Guru/ci.yml?branch=main)](https://github.com/MustafaKrc/CK-Guru/actions) 
+[![Coverage Status](https://coveralls.io/repos/github/MustafaKrc/CK-Guru/badge.svg?branch=main)](https://coveralls.io/github/MustafaKrc/CK-Guru?branch=main)  -->
 
 CK-Guru is an open-source platform designed for Just-In-Time (JIT) software defect prediction. It analyzes Git repositories, extracts relevant metrics (including CK and CommitGuru metrics), allows for dataset creation and cleaning, facilitates ML model training and hyperparameter tuning (using Optuna), provides inference capabilities to predict potentially defective code changes and provides visualizations for explanation of inference results.
 
@@ -112,7 +112,7 @@ This is the recommended way to run CK-Guru.
 
 ### Setup
 
-1.  **Clone:** `git clone https://github.com/your_username/CK-Guru.git`
+1.  **Clone:** `git clone https://github.com/MustafaKrc/CK-Guru.git`
 2.  **Backend & Shared:**
     *   Create a Python virtual environment: `python -m venv .venv`
     *   Activate it: `source .venv/bin/activate` (Linux/macOS) or `.venv\Scripts\activate` (Windows)
