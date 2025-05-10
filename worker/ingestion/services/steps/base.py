@@ -46,9 +46,9 @@ class IngestionContext:
     def __init__(
         self,
         repository_id: int,
-        git_url: str,
         repo_local_path: Path,
         task_instance: Task,
+        git_url: Optional[str] = None,
         is_single_commit_mode: bool = False,
         target_commit_hash: Optional[str] = None,
         parent_commit_hash: Optional[str] = None,

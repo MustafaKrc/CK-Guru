@@ -1,10 +1,12 @@
 # worker/ml/services/strategies/sklearn_strategy.py
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Type
 import pandas as pd
 
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
+
+from services.interfaces.i_artifact_service import IArtifactService
 # Import other sklearn models or components as needed
 
 from .base_strategy import BaseModelStrategy, TrainResult
@@ -15,35 +17,48 @@ logger = logging.getLogger(__name__)
 class SklearnStrategy(BaseModelStrategy):
     """Execution strategy for scikit-learn based models."""
 
-    def __init__(self, model_type: ModelTypeEnum, model_config: Dict, job_config: Dict):
+    def __init__(
+        self,
+        model_type: ModelTypeEnum,
+        model_config: Dict,
+        job_config: Dict,
+        artifact_service: IArtifactService # Accept injected service (use interface type)
+    ):
         """Store the specific model type enum member."""
         self.model_type_enum = model_type # Store the enum member
-        super().__init__(model_config, job_config)
+        super().__init__(model_config, job_config, artifact_service)
 
     def _initialize_model_internals(self):
         """No specific sklearn initialization needed post __init__."""
         pass
 
-    def _get_model_instance(self) -> Any:
-        """Creates the specific scikit-learn model instance based on stored enum."""
-        hyperparams = self.model_config # Direct hyperparameters for this instance
-        random_state = self.job_config.get('random_seed', 42)
-
-        # Compare against the stored enum member
+    def _get_model_class(self) -> Type:
+        """Return the estimator class corresponding to the enum member."""
         if self.model_type_enum == ModelTypeEnum.SKLEARN_RANDOMFOREST:
-            # Filter hyperparameters to only those accepted by the model
-            valid_params = {k: v for k, v in hyperparams.items() if k in RandomForestClassifier().get_params()}
-            model = RandomForestClassifier(**valid_params, random_state=random_state)
+            return RandomForestClassifier
         # elif self.model_type_enum == ModelTypeEnum.SKLEARN_LOGISTICREGRESSION:
-        #     from sklearn.linear_model import LogisticRegression
-        #     valid_params = {k: v for k, v in hyperparams.items() if k in LogisticRegression().get_params()}
-        #     model = LogisticRegression(**valid_params, random_state=random_state)
+        #     return LogisticRegression
         else:
-            # Use the enum's value for the error message
-            raise ValueError(f"Unsupported scikit-learn model type in SklearnStrategy: {self.model_type_enum.value}")
+            raise ValueError(
+                f"Unsupported scikit‑learn model type: {self.model_type_enum}"
+            )
 
-        logger.info(f"Initialized sklearn model: {model.__class__.__name__} with params: {model.get_params()}")
-        return model
+    def _get_model_instance(self) -> Any:
+        """Instantiate the model with *filtered* hyper‑parameters."""
+        model_cls = self._get_model_class()
+
+        random_state = self.job_config.get("random_seed", 42)
+        default_instance = model_cls(random_state=random_state)
+
+        # keep only valid kwargs
+        valid_params = default_instance.get_params(deep=False).keys()
+        filtered_cfg = {
+            k: v for k, v in self.model_config.items() if k in valid_params
+        }
+        if "random_state" in valid_params and "random_state" not in filtered_cfg:
+            filtered_cfg["random_state"] = random_state
+
+        return model_cls(**filtered_cfg)
 
     def train(self, X: pd.DataFrame, y: pd.Series) -> TrainResult:
         """Trains a scikit-learn model with train/test split evaluation."""

@@ -9,6 +9,7 @@ from shared.repositories.github_issue_repository import GitHubIssueRepository
 
 
 from shared.core.config import settings
+from shared.repositories.repository_repository import RepositoryRepository
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
@@ -21,6 +22,7 @@ class RepositoryFactory:
         self._guru_repo = None
         self._ck_repo = None
         self._issue_repo = None
+        self._repo_repo = None
 
     def get_commit_guru_repo(self) -> CommitGuruMetricRepository:
         # logger.warning("Placeholder: get_commit_guru_repo() called - Returning None")
@@ -39,6 +41,12 @@ class RepositoryFactory:
         if not self._issue_repo:
              self._issue_repo = GitHubIssueRepository(self.session_factory)
         return self._issue_repo
+    
+    def get_repository_repo(self) -> RepositoryRepository:
+        # logger.warning("Placeholder: get_repository_repo() called - Returning None")
+        if not self._repo_repo:
+             self._repo_repo = RepositoryRepository(self.session_factory)
+        return self._repo_repo
 
     # --- Unit of Work Methods ---
     # We preferred to not use UoW pattern for a single pipeline.

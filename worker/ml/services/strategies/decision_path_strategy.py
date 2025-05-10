@@ -4,16 +4,9 @@ import pandas as pd
 import numpy as np
 from typing import Optional, List, Any
 
-# Import specific model types for checking compatibility
-try:
-    from sklearn.ensemble import RandomForestClassifier
-    from sklearn.tree import DecisionTreeClassifier, _tree
-    SKLEARN_AVAILABLE = True
-except ImportError:
-    RandomForestClassifier = None
-    DecisionTreeClassifier = None
-    _tree = None
-    SKLEARN_AVAILABLE = False
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier, _tree
+
 
 from .base_xai_strategy import BaseXAIStrategy
 from shared.schemas.xai import (
@@ -26,9 +19,6 @@ class DecisionPathStrategy(BaseXAIStrategy):
     """Generates Decision Path explanations for compatible tree-based models."""
 
     def explain(self, X_inference: pd.DataFrame, identifiers_df: pd.DataFrame) -> Optional[DecisionPathResultData]:
-        if not SKLEARN_AVAILABLE:
-            logger.error("Scikit-learn is not installed. Cannot generate Decision Path explanations.")
-            return None
         if X_inference.empty:
             logger.warning("DecisionPathStrategy: Input DataFrame is empty.")
             return None

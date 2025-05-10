@@ -84,23 +84,26 @@ class DependencyProvider:
     # --- Factory Method for Repository API Client (Context/Config-Dependent) ---
     def _get_repository_api_client(self, context: IngestionContext) -> IRepositoryApiClient:
         """Creates the appropriate API client based on context or config."""
-        # Example logic: Check URL or a config setting
-        # default_client_type = settings.DEFAULT_API_CLIENT # Example setting
-        if "github.com" in context.git_url.lower(): # Simple check for now
-            if IRepositoryApiClient not in self._cached_services:
-                self._cached_services[IRepositoryApiClient] = GitHubClient()
+        if IRepositoryApiClient in self._cached_services:
             return self._cached_services[IRepositoryApiClient]
-        # elif "gitlab.com" in context.git_url.lower():
-        #    # return GitLabClient() # Hypothetical
-        #    pass
+
+        if not context.git_url:
+            repo_repo = self.repo_factory.get_repository_repo()
+            repo_meta = repo_repo.get_by_id(context.repository_id)
+            if repo_meta is None:
+                raise ValueError(f"Repository {context.repository_id} not found")
+            context.git_url = repo_meta.git_url.lower()
+        
+
+        if "github.com" in context.git_url:
+            client = GitHubClient()
+        # elif "gitlab.com" in git_url:
+        #     client = GitLabClient()
         else:
-            # Fallback or error if type cannot be determined
-            logger.warning(f"Could not determine repository API type for URL: {context.git_url}. Defaulting.")
-            # Return default if already cached, otherwise error?
-            if IRepositoryApiClient not in self._cached_services:
-                # Or raise an error if no default is sensible
-                raise ValueError(f"Unsupported repository hosting provider for URL: {context.git_url}")
-            return self._cached_services[IRepositoryApiClient]
+            raise ValueError(f"Unsupported provider for URL: {git_url}")
+
+        self._cached_services[IRepositoryApiClient] = client
+        return client
 
 
     # --- Factory Method for CK Runner ---

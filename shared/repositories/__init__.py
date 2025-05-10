@@ -6,6 +6,12 @@ from .github_issue_repository import GitHubIssueRepository
 from .dataset_repository import DatasetRepository
 from .repository_repository import RepositoryRepository
 from .bot_pattern_repository import BotPatternRepository
+from .ml_feature_repository import MLFeatureRepository
+from .model_repository import ModelRepository
+from .xai_result_repository import XaiResultRepository
+from .inference_job_repository import InferenceJobRepository
+from .training_job_repository import TrainingJobRepository
+from .hp_search_job_repository import HPSearchJobRepository
 
 
 __all__ = [
@@ -16,4 +22,10 @@ __all__ = [
     "DatasetRepository",
     "RepositoryRepository",
     "BotPatternRepository",
+    "MLFeatureRepository",
+    "ModelRepository",
+    "XaiResultRepository",
+    "InferenceJobRepository",
+    "TrainingJobRepository",
+    "HPSearchJobRepository",
 ]

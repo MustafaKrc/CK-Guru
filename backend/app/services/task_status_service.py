@@ -126,7 +126,7 @@ class TaskStatusService:
         except Exception as outer_e:
              # Catch errors during AsyncResult interaction itself
              logger.error(f"Unexpected error processing task {task_id} state '{task_state_str}': {outer_e}", exc_info=True)
-             if task_state_str == 'FAILURE' and error_details is None:
+             if task_state_str == JobStatusEnum.FAILED and error_details is None:
                  error_details = f"Task failed, error processing status: {str(outer_e)[:100]}"
              elif status_message is None:
                  status_message = f"Error processing task status: {str(outer_e)[:100]}"

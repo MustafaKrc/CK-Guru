@@ -19,7 +19,8 @@ from services.pipeline import PipelineRunner
 # --- Import Config, Session, Enums, Status Updater Interface ---
 from shared.core.config import settings
 from shared.db_session import get_sync_db_session, SyncSessionLocal # Import factory
-from shared.schemas.enums import DatasetStatusEnum
+from shared.exceptions import build_failure_meta
+from shared.schemas.enums import DatasetStatusEnum, JobStatusEnum
 from shared.services.interfaces import IJobStatusUpdater # For type hint if needed
 
 logger = logging.getLogger(__name__)
@@ -63,11 +64,11 @@ def generate_dataset_task(self: Task, dataset_id: int):
         # Celery status updated by PipelineRunner/WriteOutputStep
         success_message = f"Dataset generation complete. Rows written: {final_context.rows_written}."
         # Update Celery state one last time to ensure SUCCESS state and final message
-        self.update_state(state='SUCCESS', meta={'progress': 100, 'step': 'Completed', 'message': success_message, 'path': final_context.output_storage_uri})
+        self.update_state(state=JobStatusEnum.SUCCESS, meta={'progress': 100, 'step': 'Completed', 'message': success_message, 'path': final_context.output_storage_uri})
         logger.info(f"Task {task_id}: Final State: SUCCESS. {success_message}")
         return { # Return final status payload
             'dataset_id': final_context.dataset_id,
-            'status': 'SUCCESS',
+            'status': JobStatusEnum.SUCCESS,
             'rows_written': final_context.rows_written,
             'path': final_context.output_storage_uri,
             'background_path': final_context.background_sample_uri,
@@ -108,11 +109,7 @@ def generate_dataset_task(self: Task, dataset_id: int):
             logger.error(f"Task {task_id}: JobStatusUpdater not available to mark dataset {dataset_id} as FAILED in DB.")
 
         # Update Celery task state to FAILURE
-        self.update_state(state='FAILURE', meta={
-            'exc_type': type(e).__name__,
-            'exc_message': traceback.format_exc(), # Include traceback in meta
-            'failed_step': failed_step
-        })
+        self.update_state(state=JobStatusEnum.FAILED, meta=build_failure_meta(e, {'failed_step': failed_step}))
 
         # Raise Reject to prevent retries unless explicitly configured
         raise Reject(error_msg_detail, requeue=False) from e
@@ -121,7 +118,7 @@ def generate_dataset_task(self: Task, dataset_id: int):
         logger.debug(f"Task {task_id}: Finalizing dataset generation task.")
         # dependency_provider might have resources to release if it managed them directly
 
-# --- Keep delete task as is ---
+
 @shared_task(
     bind=True,
     name='tasks.delete_storage_object',

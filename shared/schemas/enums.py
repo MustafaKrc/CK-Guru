@@ -5,6 +5,7 @@ class JobStatusEnum(str, enum.Enum):
     PENDING = "pending"
     RUNNING = "running"
     SUCCESS = "success"
+    SKIPPED = "skipped"
     FAILED = "failed"
     REVOKED = "revoked"
 

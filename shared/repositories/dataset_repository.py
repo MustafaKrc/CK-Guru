@@ -16,12 +16,20 @@ logger = logging.getLogger(__name__)
 class DatasetRepository(BaseRepository[Dataset]):
     """Handles synchronous database operations for Dataset."""
 
-    def get_by_id(self, db_id: int) -> Optional[Dataset]:
-        """Get a single dataset by ID."""
+    def get_record(self, dataset_id: int) -> Optional[Dataset]:
+        """Gets a full Dataset record by ID."""
+        logger.debug(f"DatasetRepo: Fetching record for ID {dataset_id}")
         with self._session_scope() as session:
-            # Use session.get for primary key lookup
-            return session.get(Dataset, db_id)
+            return session.get(Dataset, dataset_id)
 
+    def get_storage_path(self, dataset_id: int) -> Optional[str]:
+        """Gets only the storage_path for a Dataset by ID."""
+        logger.debug(f"DatasetRepo: Fetching storage path for ID {dataset_id}")
+        with self._session_scope() as session:
+            stmt = select(Dataset.storage_path).where(Dataset.id == dataset_id)
+            path = session.execute(stmt).scalar_one_or_none()
+        return path
+    
     def get_by_repository(self, repository_id: int, skip: int = 0, limit: int = 100) -> Sequence[Dataset]:
         """Get datasets associated with a specific repository."""
         with self._session_scope() as session:

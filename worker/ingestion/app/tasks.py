@@ -9,6 +9,7 @@ from celery.exceptions import Ignore, Terminated, Reject
 from shared.core.config import settings
 from shared.db_session import SyncSessionLocal
 from shared.db.models import InferenceJob 
+from shared.exceptions import InternalError, build_failure_meta
 from shared.schemas.enums import JobStatusEnum
 from .main import celery_app
 
@@ -41,7 +42,7 @@ def ingest_features_for_inference_task(self: Task, inference_job_id: int, repo_i
     base_storage_path = Path(settings.STORAGE_BASE_PATH)
     repo_local_path = base_storage_path / "clones" / f"repo_{repo_id}"
     context = IngestionContext(
-        repository_id=repo_id, git_url="", repo_local_path=repo_local_path,
+        repository_id=repo_id, repo_local_path=repo_local_path,
         task_instance=self, is_single_commit_mode=True,
         target_commit_hash=commit_hash_input, inference_job_id=inference_job_id,
     )
@@ -77,7 +78,7 @@ def ingest_features_for_inference_task(self: Task, inference_job_id: int, repo_i
             # Mark this Celery task as failed, but don't change DB job status here.
             error_msg = "Feature extraction pipeline succeeded, but failed to dispatch prediction task."
             logger.critical(f"Task {task_id}: {error_msg}")
-            self.update_state(state='FAILURE', meta={'exc_type': 'DispatchError', 'exc_message': error_msg})
+            self.update_state(state=JobStatusEnum.FAILED, meta=build_failure_meta(InternalError(error_msg)))
             # Don't raise Reject here, as the feature extraction *did* complete.
             # Let the Celery task state reflect the dispatch failure.
             return {"status": "FAILURE", "error": error_msg} # Return error info
@@ -85,7 +86,7 @@ def ingest_features_for_inference_task(self: Task, inference_job_id: int, repo_i
         # --- Finalize Task (Success) ---
         success_message = f"Feature extraction complete. Prediction task dispatched: {prediction_task.id}"
         # Note: InferenceJob status remains RUNNING; ML worker updates it upon prediction completion.
-        self.update_state(state='SUCCESS', meta={'step': 'Completed', 'progress': 100, 'message': success_message})
+        self.update_state(state=JobStatusEnum.SUCCESS, meta={'step': 'Completed', 'progress': 100, 'message': success_message})
         logger.info(f"Task {task_id}: {success_message}")
         return {"status": "SUCCESS", "prediction_task_id": prediction_task.id}
 
@@ -115,7 +116,7 @@ def ingest_features_for_inference_task(self: Task, inference_job_id: int, repo_i
         job_status_updater.update_job_completion(inference_job_id, InferenceJob, JobStatusEnum.FAILED, error_msg_detail)
 
         # Update Celery task state to FAILURE
-        self.update_state(state='FAILURE', meta={'exc_type': type(e).__name__, 'exc_message': error_msg_detail, 'failed_step': pipeline_failed_step})
+        self.update_state(state=JobStatusEnum.FAILED, meta=build_failure_meta(e, {'failed_step': pipeline_failed_step}))
 
         # Raise Reject to prevent retries unless explicitly configured
         raise Reject(error_msg_detail, requeue=False) from e
@@ -141,7 +142,7 @@ def ingest_repository_task(self: Task, repository_id: int, git_url: str):
         # If directory creation fails, reject the task
         error_msg = f'Failed to create storage directory: {e}'
         logger.critical(f"Task {task_id}: {error_msg}", exc_info=True)
-        self.update_state(state='FAILURE', meta={'exc_type': 'OSError', 'exc_message': error_msg})
+        self.update_state(state=JobStatusEnum.FAILED, meta=build_failure_meta(e))
         raise Reject(error_msg, requeue=False) from e
 
     context = IngestionContext(
@@ -177,7 +178,7 @@ def ingest_repository_task(self: Task, repository_id: int, git_url: str):
             'ck_metrics_inserted': final_context.inserted_ck_metrics_count,
             'warnings': "; ".join(final_context.warnings) if final_context.warnings else None
         }
-        self.update_state(state='SUCCESS', meta=result_payload) # Use payload in meta
+        self.update_state(state=JobStatusEnum.SUCCESS, meta=result_payload) # Use payload in meta
         logger.info(f"Task {task_id}: Final State: SUCCESS. {final_status_message}")
         return result_payload
 
@@ -203,7 +204,7 @@ def ingest_repository_task(self: Task, repository_id: int, git_url: str):
         logger.critical(f"Task {task_id}: Pipeline Error for repo {repository_id}. {error_message}", exc_info=True)
 
         # Update Celery task state to FAILURE
-        self.update_state(state='FAILURE', meta={'exc_type': error_type, 'exc_message': error_message, 'failed_step': pipeline_failed_step})
+        self.update_state(state=JobStatusEnum.FAILED, meta=build_failure_meta(e, {'failed_step': pipeline_failed_step}))
 
         # Raise Reject to prevent retries unless explicitly configured
         raise Reject(error_message, requeue=False) from e
