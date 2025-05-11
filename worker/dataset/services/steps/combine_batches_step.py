@@ -1,15 +1,18 @@
 # worker/dataset/services/steps/combine_batches_step.py
 import logging
+
 import pandas as pd
 
-from services.interfaces import IDatasetGeneratorStep
 from services.context import DatasetContext
+from services.interfaces import IDatasetGeneratorStep
 from shared.utils.pipeline_logging import StepLogger
 
 logger = logging.getLogger(__name__)
 
+
 class CombineBatchesStep(IDatasetGeneratorStep):
     """Combines processed data batches into a single DataFrame."""
+
     name = "Combine Batches"
 
     def execute(self, context: DatasetContext, **kwargs) -> DatasetContext:
@@ -17,7 +20,9 @@ class CombineBatchesStep(IDatasetGeneratorStep):
         step_logger = StepLogger(logger, log_prefix=log_prefix)
 
         if not context.processed_batches_data:
-            step_logger.warning("No processed batch data found in context. Setting processed_dataframe to empty.")
+            step_logger.warning(
+                "No processed batch data found in context. Setting processed_dataframe to empty."
+            )
             context.processed_dataframe = pd.DataFrame()
             return context
 
@@ -26,10 +31,14 @@ class CombineBatchesStep(IDatasetGeneratorStep):
 
         try:
             # Concatenate list of DataFrames
-            context.processed_dataframe = pd.concat(context.processed_batches_data, ignore_index=True, sort=False)
+            context.processed_dataframe = pd.concat(
+                context.processed_batches_data, ignore_index=True, sort=False
+            )
             # Clear the batch data list from context to free memory
             context.processed_batches_data = None
-            step_logger.info(f"Combined DataFrame shape: {context.processed_dataframe.shape}")
+            step_logger.info(
+                f"Combined DataFrame shape: {context.processed_dataframe.shape}"
+            )
         except Exception as e:
             step_logger.error(f"Error combining batches: {e}", exc_info=True)
             context.warnings.append(f"{self.name}: Error combining batches: {e}")

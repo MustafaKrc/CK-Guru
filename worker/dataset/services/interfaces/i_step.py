@@ -1,7 +1,9 @@
 # worker/dataset/services/interfaces/i_step.py
 from abc import ABC, abstractmethod
 from typing import Any
-from services.context import DatasetContext # Forward reference ok with '..'
+
+from services.context import DatasetContext  # Forward reference ok with '..'
+
 
 class IDatasetGeneratorStep(ABC):
     """Abstract base class for a step in the dataset generation pipeline."""
@@ -13,7 +15,7 @@ class IDatasetGeneratorStep(ABC):
         pass
 
     @abstractmethod
-    def execute(self, context: 'DatasetContext', **kwargs: Any) -> 'DatasetContext':
+    def execute(self, context: "DatasetContext", **kwargs: Any) -> "DatasetContext":
         """
         Executes the logic for this step.
 

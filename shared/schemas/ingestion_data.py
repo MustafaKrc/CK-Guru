@@ -1,21 +1,24 @@
 # shared/schemas/ingestion_data.py
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field, ConfigDict, field_validator
-import numpy as np
 import math
+from typing import Dict, List, Optional
+
+import numpy as np
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # --- CK Metric Payload ---
 
+
 class CKMetricPayload(BaseModel):
     """Pydantic model for a single CK metric record before persistence."""
+
     # DB identifier fields (added during processing)
     repository_id: Optional[int] = None
     commit_hash: Optional[str] = None
 
     # Core CK fields (handle aliases)
-    file: str # File path is essential
-    class_name: Optional[str] = Field(None, alias='class')
-    type_: Optional[str] = Field(None, alias='type')
+    file: str  # File path is essential
+    class_name: Optional[str] = Field(None, alias="class")
+    type_: Optional[str] = Field(None, alias="type")
 
     # Numeric metrics (use Optional for flexibility)
     cbo: Optional[float] = None
@@ -69,22 +72,25 @@ class CKMetricPayload(BaseModel):
     logStatementsQty: Optional[int] = None
 
     model_config = ConfigDict(
-        populate_by_name=True, # Allow using aliases during init
-        extra='ignore' # Ignore extra fields from input dict/df
+        populate_by_name=True,  # Allow using aliases during init
+        extra="ignore",  # Ignore extra fields from input dict/df
     )
 
     # Validator to replace NaN/Inf with None for numeric fields
-    @field_validator('*', mode='before')
+    @field_validator("*", mode="before")
     @classmethod
     def check_nan_inf(cls, v, field_info):
         if isinstance(v, (float, np.floating)) and (math.isnan(v) or math.isinf(v)):
             return None
         return v
 
+
 # --- Commit Guru Metric Payload ---
+
 
 class CommitGuruMetricPayload(BaseModel):
     """Pydantic model for Commit Guru metric data for one commit before persistence."""
+
     # DB identifier fields (added during processing)
     repository_id: Optional[int] = None
 
@@ -93,14 +99,16 @@ class CommitGuruMetricPayload(BaseModel):
     parent_hashes: Optional[str] = None
     author_name: Optional[str] = None
     author_email: Optional[str] = None
-    author_date: Optional[str] = None # Keep as string from git log? Or parse to datetime?
+    author_date: Optional[str] = (
+        None  # Keep as string from git log? Or parse to datetime?
+    )
     author_date_unix_timestamp: Optional[int] = None
     commit_message: Optional[str] = None
 
     # Bug Linking Info (set during processing/linking)
-    is_buggy: bool = False # Default
-    fix: bool = False      # Set based on keywords during calculation
-    fixing_commit_hashes: Optional[Dict[str, List[str]]] = None # Set by LinkBugs step
+    is_buggy: bool = False  # Default
+    fix: bool = False  # Set based on keywords during calculation
+    fixing_commit_hashes: Optional[Dict[str, List[str]]] = None  # Set by LinkBugs step
 
     # Commit Guru Metrics
     files_changed: Optional[List[str]] = []
@@ -118,12 +126,12 @@ class CommitGuruMetricPayload(BaseModel):
     rexp: Optional[float] = None
     sexp: Optional[float] = None
 
-    model_config = ConfigDict(extra='ignore')
+    model_config = ConfigDict(extra="ignore")
 
     # Validator to replace NaN/Inf with None for numeric fields
-    @field_validator('*', mode='before')
+    @field_validator("*", mode="before")
     @classmethod
     def check_nan_inf(cls, v, field_info):
-         if isinstance(v, (float, np.floating)) and (math.isnan(v) or math.isinf(v)):
-             return None
-         return v
+        if isinstance(v, (float, np.floating)) and (math.isnan(v) or math.isinf(v)):
+            return None
+        return v

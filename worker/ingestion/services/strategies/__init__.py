@@ -1,1 +1,5 @@
-from .strategies import FullHistoryIngestionStrategy, SingleCommitFeatureExtractionStrategy, IngestionStrategy
+from .strategies import (
+    FullHistoryIngestionStrategy,
+    IngestionStrategy,
+    SingleCommitFeatureExtractionStrategy,
+)

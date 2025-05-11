@@ -1,31 +1,20 @@
+import asyncio
+import os
+import sys
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-
 from alembic import context
-
-import sys
-import os
-
-import asyncio
-
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
 
 # Add the app directory to the Python path
 # Adjust the path '../' if your alembic directory is located differently relative to app
-sys.path.insert(0, os.path.realpath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.realpath(os.path.join(os.path.dirname(__file__), "..")))
 
-from shared.db.base_class import Base 
+from shared.core.config import settings  # Import your settings
+from shared.db.base_class import Base
+
 # Import all models here so Base knows about them
-from shared.db.models import (
-    Repository,
-    CKMetric,
-    # Add other models as needed
-)
-
-from shared.core.config import settings # Import your settings
 
 # Add the names of tables managed by external libraries like Optuna
 # Make sure these names exactly match the table names in your database
@@ -42,8 +31,7 @@ EXTERNALLY_MANAGED_TABLES = {
     "trial_values",
     "trials",
     "version_info",
-    "alembic_version", # Optuna's own alembic table
-
+    "alembic_version",  # Optuna's own alembic table
 }
 
 
@@ -71,6 +59,7 @@ target_metadata = Base.metadata
 # We set it to a custom name to avoid conflicts with other applications (optuna)
 ALEMBIC_TABLE_NAME = "ckguru_alembic_version"
 
+
 def include_object(object, name, type_, reflected, compare_to):
     """
     Exclude tables managed by external libraries (like Optuna)
@@ -83,6 +72,7 @@ def include_object(object, name, type_, reflected, compare_to):
     else:
         # Otherwise, include the object in the comparison as usual.
         return True
+
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
@@ -110,6 +100,7 @@ def run_migrations_offline() -> None:
     with context.begin_transaction():
         context.run_migrations()
 
+
 def do_run_migrations(connection):
     context.configure(
         connection=connection,
@@ -122,6 +113,7 @@ def do_run_migrations(connection):
     with context.begin_transaction():
         context.run_migrations()
 
+
 async def run_migrations_online() -> None:
     """Run migrations in 'online' mode.
 
@@ -132,13 +124,13 @@ async def run_migrations_online() -> None:
     # Create async engine using the URL from settings
     connectable = create_async_engine(
         str(settings.DATABASE_URL),
-        poolclass=pool.NullPool, # Use NullPool for migration engine
+        poolclass=pool.NullPool,  # Use NullPool for migration engine
     )
 
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
 
-    await connectable.dispose() # Dispose the engine
+    await connectable.dispose()  # Dispose the engine
 
 
 # --- Select async mode ---

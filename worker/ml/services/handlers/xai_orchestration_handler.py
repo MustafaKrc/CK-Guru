@@ -1,40 +1,44 @@
 # worker/ml/services/handlers/xai_orchestration_handler.py
 import logging
-from typing import Dict, List, Any
-
-from celery import Task # Keep Task for type hint
-from celery.exceptions import Ignore, Reject # Import Celery exceptions
-
-# Import Concrete Repositories and Services needed
-from shared.repositories import XaiResultRepository, ModelRepository, InferenceJobRepository
-
-# Import DB Models and Enums
-from shared.db.models import InferenceJob, MLModel
-from shared.schemas.enums import JobStatusEnum, XAITypeEnum, ModelTypeEnum
+from typing import Any, Dict, List
 
 # Import Celery App from main to dispatch tasks
 from app.main import celery_app
+from celery import Task  # Keep Task for type hint
+from celery.exceptions import Ignore, Reject  # Import Celery exceptions
+
+# Import DB Models and Enums
+# Import Concrete Repositories and Services needed
+from shared.repositories import (
+    InferenceJobRepository,
+    ModelRepository,
+    XaiResultRepository,
+)
+from shared.schemas.enums import JobStatusEnum, ModelTypeEnum, XAITypeEnum
 
 logger = logging.getLogger(__name__)
 
-class XAIOrchestrationHandler: # Doesn't need full BaseMLJobHandler complexity
+
+class XAIOrchestrationHandler:  # Doesn't need full BaseMLJobHandler complexity
     """Handles the orchestration of XAI task dispatching."""
 
     def __init__(
         self,
         inference_job_id: int,
-        task_instance: Task, # Keep task instance for logging context
+        task_instance: Task,  # Keep task instance for logging context
         # --- Inject Dependencies ---
         xai_repo: XaiResultRepository,
         model_repo: ModelRepository,
-        inference_job_repo: InferenceJobRepository, 
+        inference_job_repo: InferenceJobRepository,
     ):
         self.inference_job_id = inference_job_id
-        self.task = task_instance # For logging context primarily
+        self.task = task_instance  # For logging context primarily
         self.xai_repo = xai_repo
-        self.model_repo = model_repo 
+        self.model_repo = model_repo
         self.inference_job_repo = inference_job_repo
-        logger.debug(f"Initialized XAIOrchestrationHandler for Inference Job ID {inference_job_id}")
+        logger.debug(
+            f"Initialized XAIOrchestrationHandler for Inference Job ID {inference_job_id}"
+        )
 
     def process_orchestration(self) -> Dict:
         """
@@ -53,8 +57,7 @@ class XAIOrchestrationHandler: # Doesn't need full BaseMLJobHandler complexity
 
         try:
             # Get job and model using injected repositories
-            inference_job = self.inference_job_repo.get_by_id(
-                self.inference_job_id)
+            inference_job = self.inference_job_repo.get_by_id(self.inference_job_id)
             if not inference_job:
                 raise Ignore("Inference job not found.")
             if inference_job.status != JobStatusEnum.SUCCESS:
@@ -86,7 +89,9 @@ class XAIOrchestrationHandler: # Doesn't need full BaseMLJobHandler complexity
                     self.inference_job_id, xai_type
                 )
                 if existing_id:
-                    logger.warning(f"XAI record type {xai_type.value} exists (ID: {existing_id}).")
+                    logger.warning(
+                        f"XAI record type {xai_type.value} exists (ID: {existing_id})."
+                    )
                     continue
 
                 xai_result_id = self.xai_repo.create_pending_xai_result_sync(
@@ -110,14 +115,23 @@ class XAIOrchestrationHandler: # Doesn't need full BaseMLJobHandler complexity
                 try:
                     task = celery_app.send_task(task_name, args=args, queue=xai_queue)
                     if task and task.id:
-                        self.xai_repo.update_xai_task_id_sync(xai_result_id, task.id) # Implies no commit by hand
+                        self.xai_repo.update_xai_task_id_sync(
+                            xai_result_id, task.id
+                        )  # Implies no commit by hand
                         dispatched_count += 1
-                        logger.info(f"Dispatched XAI task {task.id} for Result {xai_result_id} ({xai_type.value}).")
+                        logger.info(
+                            f"Dispatched XAI task {task.id} for Result {xai_result_id} ({xai_type.value})."
+                        )
                     else:
-                        logger.error(f"Dispatch for XAI Result {xai_result_id} failed (invalid task).")
+                        logger.error(
+                            f"Dispatch for XAI Result {xai_result_id} failed (invalid task)."
+                        )
                         failed_dispatches.append(xai_result_id)
                 except Exception as dispatch_err:
-                    logger.error(f"Failed dispatch XAI Result {xai_result_id}: {dispatch_err}", exc_info=True)
+                    logger.error(
+                        f"Failed dispatch XAI Result {xai_result_id}: {dispatch_err}",
+                        exc_info=True,
+                    )
                     failed_dispatches.append(xai_result_id)
 
             # Mark failed dispatches

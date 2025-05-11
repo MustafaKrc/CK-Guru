@@ -1,13 +1,12 @@
 # worker/ingestion/services/ck_runner_service.py
 import logging
-import os
-import tempfile
 import subprocess
+import tempfile
 from pathlib import Path
+
 import pandas as pd
 
 from services.interfaces.i_ck_runner_service import ICKRunnerService
-
 from shared.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -15,7 +14,8 @@ logger.setLevel(settings.LOG_LEVEL.upper())
 
 # Define path relative to the service file or use an absolute path based on deployment
 # Assuming Dockerfile places it at /app/third_party/ck.jar
-CK_JAR_PATH = Path('/app/third_party/ck.jar')
+CK_JAR_PATH = Path("/app/third_party/ck.jar")
+
 
 class CKRunnerService(ICKRunnerService):
     """Encapsulates the logic for running the CK metric tool."""
@@ -47,61 +47,93 @@ class CKRunnerService(ICKRunnerService):
 
         try:
             # Use a temporary directory for CK's output files
-            with tempfile.TemporaryDirectory(prefix=f"ck_run_{commit_hash}_") as temp_dir_name:
+            with tempfile.TemporaryDirectory(
+                prefix=f"ck_run_{commit_hash}_"
+            ) as temp_dir_name:
                 temp_dir_path = Path(temp_dir_name)
                 # CK expects a file *prefix*, not a directory path for output
                 output_file_prefix = temp_dir_path / f"ck_output_{commit_hash}_"
-                expected_class_csv_path = temp_dir_path / f"ck_output_{commit_hash}_class.csv"
+                expected_class_csv_path = (
+                    temp_dir_path / f"ck_output_{commit_hash}_class.csv"
+                )
 
                 # Construct and run the command
                 command = [
-                    'java', '-jar', str(CK_JAR_PATH), str(repo_dir),
-                    use_jars, str(max_files_per_partition), variables_and_fields,
-                    str(output_file_prefix) # Pass the prefix
+                    "java",
+                    "-jar",
+                    str(CK_JAR_PATH),
+                    str(repo_dir),
+                    use_jars,
+                    str(max_files_per_partition),
+                    variables_and_fields,
+                    str(output_file_prefix),  # Pass the prefix
                 ]
                 logger.debug(f"Executing CK command: {' '.join(command)}")
 
                 try:
                     completed_process = subprocess.run(
-                        command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                        text=True, encoding='utf-8', errors='ignore', # Add text=True
-                        timeout=1200 # Keep timeout
+                        command,
+                        check=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        encoding="utf-8",
+                        errors="ignore",  # Add text=True
+                        timeout=1200,  # Keep timeout
                     )
                     # Log stderr cautiously, filtering common Java/log4j noise
                     if completed_process.stderr:
                         stderr_output = completed_process.stderr.strip()
                         if stderr_output and "log4j" not in stderr_output.lower():
-                            logger.warning(f"CK stderr for {commit_hash[:7]}:\n{stderr_output}")
+                            logger.warning(
+                                f"CK stderr for {commit_hash[:7]}:\n{stderr_output}"
+                            )
 
                 except subprocess.TimeoutExpired:
-                    logger.error(f"CK tool timed out for commit {commit_hash[:7]} at path {repo_dir}")
-                    return pd.DataFrame() # Return empty on timeout
+                    logger.error(
+                        f"CK tool timed out for commit {commit_hash[:7]} at path {repo_dir}"
+                    )
+                    return pd.DataFrame()  # Return empty on timeout
                 except subprocess.CalledProcessError as e:
-                    logger.error(f"CK tool failed (exit code {e.returncode}) for commit {commit_hash[:7]} at path {repo_dir}.\nStderr: {e.stderr}")
-                    return pd.DataFrame() # Return empty on error
+                    logger.error(
+                        f"CK tool failed (exit code {e.returncode}) for commit {commit_hash[:7]} at path {repo_dir}.\nStderr: {e.stderr}"
+                    )
+                    return pd.DataFrame()  # Return empty on error
                 except Exception as e:
-                     logger.error(f"Unexpected error running CK tool for commit {commit_hash[:7]}: {e}", exc_info=True)
-                     return pd.DataFrame()
+                    logger.error(
+                        f"Unexpected error running CK tool for commit {commit_hash[:7]}: {e}",
+                        exc_info=True,
+                    )
+                    return pd.DataFrame()
 
                 # Process the output file
                 if expected_class_csv_path.is_file():
                     try:
                         metrics_df = pd.read_csv(expected_class_csv_path)
                         # rename lcom* to lcom_norm
-                        metrics_df.rename(columns={'lcom*': 'lcom_norm'}, inplace=True)
+                        metrics_df.rename(columns={"lcom*": "lcom_norm"}, inplace=True)
                     except pd.errors.EmptyDataError:
-                        logger.warning(f"CK output file {expected_class_csv_path.name} was empty for {commit_hash[:7]}.")
+                        logger.warning(
+                            f"CK output file {expected_class_csv_path.name} was empty for {commit_hash[:7]}."
+                        )
                         metrics_df = pd.DataFrame()
                     except Exception as e:
-                        logger.error(f"Error reading CK output CSV {expected_class_csv_path.name} for {commit_hash[:7]}: {e}")
+                        logger.error(
+                            f"Error reading CK output CSV {expected_class_csv_path.name} for {commit_hash[:7]}: {e}"
+                        )
                         metrics_df = pd.DataFrame()
                     # Optional: Clean up files immediately if needed, though temp dir handles it
                 else:
-                    logger.error(f"CK class output file not found at expected path: {expected_class_csv_path}")
+                    logger.error(
+                        f"CK class output file not found at expected path: {expected_class_csv_path}"
+                    )
 
         except Exception as outer_e:
             # Catch errors related to temp directory creation/cleanup
-            logger.error(f"Error during CK temporary directory handling for {commit_hash[:7]}: {outer_e}", exc_info=True)
+            logger.error(
+                f"Error during CK temporary directory handling for {commit_hash[:7]}: {outer_e}",
+                exc_info=True,
+            )
             return pd.DataFrame()
 
         return metrics_df

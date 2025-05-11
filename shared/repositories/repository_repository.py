@@ -1,18 +1,18 @@
 # shared/repositories/repository_repository.py
 import logging
-import re
-from urllib.parse import urlparse
 from typing import Optional, Sequence
+from urllib.parse import urlparse
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
-from .base_repository import BaseRepository
 from shared.db.models import Repository
 from shared.schemas.repository import RepositoryCreate, RepositoryUpdate
 
+from .base_repository import BaseRepository
+
 logger = logging.getLogger(__name__)
+
 
 class RepositoryRepository(BaseRepository[Repository]):
     """Handles synchronous database operations for Repository."""
@@ -20,13 +20,17 @@ class RepositoryRepository(BaseRepository[Repository]):
     def _extract_repo_name(self, git_url: str) -> str:
         """Extracts a plausible repository name from a Git URL."""
         try:
-            if ':' in git_url and '@' in git_url.split(':')[0]: path_part = git_url.split(':')[-1]
-            else: path_part = urlparse(git_url).path
-            cleaned_path = path_part.strip('/').replace('.git', '')
-            if not cleaned_path: return "unknown_repo"
-            name = cleaned_path.split('/')[-1]
+            if ":" in git_url and "@" in git_url.split(":")[0]:
+                path_part = git_url.split(":")[-1]
+            else:
+                path_part = urlparse(git_url).path
+            cleaned_path = path_part.strip("/").replace(".git", "")
+            if not cleaned_path:
+                return "unknown_repo"
+            name = cleaned_path.split("/")[-1]
             return name if name else "unknown_repo"
-        except Exception: return "unknown_repo"
+        except Exception:
+            return "unknown_repo"
 
     def get_by_id(self, db_id: int) -> Optional[Repository]:
         """Gets a repository by its database ID."""
@@ -62,23 +66,35 @@ class RepositoryRepository(BaseRepository[Repository]):
                 logger.info(f"Created repository ID {db_obj.id} ('{db_obj.name}')")
                 return db_obj
             except SQLAlchemyError as e:
-                logger.error(f"RepositoryRepository: DB error creating repository {obj_in.git_url}: {e}", exc_info=True)
+                logger.error(
+                    f"RepositoryRepository: DB error creating repository {obj_in.git_url}: {e}",
+                    exc_info=True,
+                )
                 raise
             except Exception as e:
-                logger.error(f"RepositoryRepository: Unexpected error creating repository {obj_in.git_url}: {e}", exc_info=True)
+                logger.error(
+                    f"RepositoryRepository: Unexpected error creating repository {obj_in.git_url}: {e}",
+                    exc_info=True,
+                )
                 raise
 
     def update(self, db_obj: Repository, obj_in: RepositoryUpdate) -> Repository:
         """Update an existing repository."""
         with self._session_scope() as session:
             try:
-                if db_obj not in session: db_obj = session.merge(db_obj)
+                if db_obj not in session:
+                    db_obj = session.merge(db_obj)
                 update_data = obj_in.model_dump(exclude_unset=True)
                 for field, value in update_data.items():
-                    if value is not None: # Avoid setting None explicitly unless intended
-                        setattr(db_obj, field, str(value) if field == 'git_url' else value)
-                if hasattr(db_obj, 'updated_at'):
+                    if (
+                        value is not None
+                    ):  # Avoid setting None explicitly unless intended
+                        setattr(
+                            db_obj, field, str(value) if field == "git_url" else value
+                        )
+                if hasattr(db_obj, "updated_at"):
                     from datetime import datetime, timezone
+
                     db_obj.updated_at = datetime.now(timezone.utc)
                 session.add(db_obj)
                 session.commit()
@@ -86,10 +102,16 @@ class RepositoryRepository(BaseRepository[Repository]):
                 logger.info(f"Updated repository ID {db_obj.id}")
                 return db_obj
             except SQLAlchemyError as e:
-                logger.error(f"RepositoryRepository: DB error updating repository {db_obj.id}: {e}", exc_info=True)
+                logger.error(
+                    f"RepositoryRepository: DB error updating repository {db_obj.id}: {e}",
+                    exc_info=True,
+                )
                 raise
             except Exception as e:
-                logger.error(f"RepositoryRepository: Unexpected error updating repository {db_obj.id}: {e}", exc_info=True)
+                logger.error(
+                    f"RepositoryRepository: Unexpected error updating repository {db_obj.id}: {e}",
+                    exc_info=True,
+                )
                 raise
 
     def delete(self, repo_id: int) -> bool:
@@ -106,8 +128,14 @@ class RepositoryRepository(BaseRepository[Repository]):
                     logger.warning(f"Repository ID {repo_id} not found for deletion.")
                     return False
             except SQLAlchemyError as e:
-                logger.error(f"RepositoryRepository: DB error deleting repository {repo_id}: {e}", exc_info=True)
+                logger.error(
+                    f"RepositoryRepository: DB error deleting repository {repo_id}: {e}",
+                    exc_info=True,
+                )
                 raise
             except Exception as e:
-                logger.error(f"RepositoryRepository: Unexpected error deleting repository {repo_id}: {e}", exc_info=True)
+                logger.error(
+                    f"RepositoryRepository: Unexpected error deleting repository {repo_id}: {e}",
+                    exc_info=True,
+                )
                 raise

@@ -1,19 +1,23 @@
 # worker/ingestion/services/steps/base.py
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
 from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 import git
 from celery import Task
-from shared.core.config import settings 
-from shared.schemas.ingestion_data import CommitGuruMetricPayload, CKMetricPayload
+
+from shared.core.config import settings
+from shared.schemas.ingestion_data import CKMetricPayload, CommitGuruMetricPayload
 from shared.utils.task_utils import update_task_state
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
 
+
 class IngestionContext:
     """Holds state shared between ingestion steps."""
+
     # Input Parameters
     repository_id: int
     git_url: str
@@ -25,23 +29,32 @@ class IngestionContext:
 
     # Processing State & Data
     repo_object: Optional[git.Repo] = None
-    raw_commit_guru_data: List[CommitGuruMetricPayload]          # Raw data from calculate_commit_guru_metrics util
-    commit_hash_to_db_id_map: Dict[str, int]  # Map commit hash to DB ID after persistence
-    commit_fix_keyword_map: Dict[str, bool]   # Map commit hash to 'fix' keyword presence
-    bug_link_map_hash: Dict[str, List[str]]   # Map buggy_hash -> [fixing_hash1, ...]
-    raw_ck_metrics: Dict[str, List[CKMetricPayload]]   # commit_hash -> DataFrame of CK metrics for that commit
+    raw_commit_guru_data: List[
+        CommitGuruMetricPayload
+    ]  # Raw data from calculate_commit_guru_metrics util
+    commit_hash_to_db_id_map: Dict[
+        str, int
+    ]  # Map commit hash to DB ID after persistence
+    commit_fix_keyword_map: Dict[str, bool]  # Map commit hash to 'fix' keyword presence
+    bug_link_map_hash: Dict[str, List[str]]  # Map buggy_hash -> [fixing_hash1, ...]
+    raw_ck_metrics: Dict[
+        str, List[CKMetricPayload]
+    ]  # commit_hash -> DataFrame of CK metrics for that commit
     inserted_guru_metrics_count: int
     inserted_ck_metrics_count: int
 
-    is_single_commit_mode: bool             # Flag for operation mode
-    target_commit_hash: Optional[str] = None # Specific commit for single mode or general tracking
-    parent_commit_hash: Optional[str] = None # Determined parent hash for single mode
-    inference_job_id: Optional[int] = None   # Link back to inference job
+    is_single_commit_mode: bool  # Flag for operation mode
+    target_commit_hash: Optional[str] = (
+        None  # Specific commit for single mode or general tracking
+    )
+    parent_commit_hash: Optional[str] = None  # Determined parent hash for single mode
+    inference_job_id: Optional[int] = None  # Link back to inference job
     # Flag to indicate if parent metrics existed/were calculated (used in single mode)
     parent_metrics_processed: bool = False
     # Holder for combined features in single mode before passing to ML worker
-    final_combined_features: Optional[List[Dict[str, Any]]] = None # Changed from Dict to List[Dict]
-
+    final_combined_features: Optional[List[Dict[str, Any]]] = (
+        None  # Changed from Dict to List[Dict]
+    )
 
     def __init__(
         self,
@@ -53,7 +66,9 @@ class IngestionContext:
         target_commit_hash: Optional[str] = None,
         parent_commit_hash: Optional[str] = None,
         inference_job_id: Optional[int] = None,
-        final_combined_features: Optional[List[Dict[str, Any]]] = None # Keep this as dict for now
+        final_combined_features: Optional[
+            List[Dict[str, Any]]
+        ] = None,  # Keep this as dict for now
     ):
         self.repository_id = repository_id
         self.git_url = git_url
@@ -104,28 +119,38 @@ class IngestionStep(ABC):
         """
         pass
 
-    def _update_progress(self, context: IngestionContext, message: str, progress: int, warning: Optional[str] = None):
+    def _update_progress(
+        self,
+        context: IngestionContext,
+        message: str,
+        progress: int,
+        warning: Optional[str] = None,
+    ):
         """Helper to update Celery task progress via the context."""
         if context.task_instance:
-            update_task_state(context.task_instance, 'STARTED', message, progress, warning)
+            update_task_state(
+                context.task_instance, "STARTED", message, progress, warning
+            )
 
     def _log_info(self, context: IngestionContext, message: str):
         """Helper for consistent logging prefix."""
-        task_id = context.task_instance.request.id if context.task_instance else 'N/A'
+        task_id = context.task_instance.request.id if context.task_instance else "N/A"
         logger.info(f"Task {task_id} - Step [{self.name}]: {message}")
 
     def _log_warning(self, context: IngestionContext, message: str):
         """Helper for consistent logging prefix and adding to context warnings."""
-        task_id = context.task_instance.request.id if context.task_instance else 'N/A'
+        task_id = context.task_instance.request.id if context.task_instance else "N/A"
         logger.warning(f"Task {task_id} - Step [{self.name}]: {message}")
         context.warnings.append(f"[{self.name}] {message}")
 
     def _log_error(self, context: IngestionContext, message: str, exc_info=True):
         """Helper for consistent error logging prefix."""
-        task_id = context.task_instance.request.id if context.task_instance else 'N/A'
-        logger.error(f"Task {task_id} - Step [{self.name}]: {message}", exc_info=exc_info)
+        task_id = context.task_instance.request.id if context.task_instance else "N/A"
+        logger.error(
+            f"Task {task_id} - Step [{self.name}]: {message}", exc_info=exc_info
+        )
 
     def _log_debug(self, context: IngestionContext, message: str):
         """Helper for consistent debug logging prefix."""
-        task_id = context.task_instance.request.id if context.task_instance else 'N/A'
+        task_id = context.task_instance.request.id if context.task_instance else "N/A"
         logger.debug(f"Task {task_id} - Step [{self.name}]: {message}")

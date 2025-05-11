@@ -1,22 +1,28 @@
 # worker/dataset/app/main.py
 
 import logging
+from typing import Any, Dict, List
+
+# Corrected import path for discover_rules and registry
+from services.cleaning_rules.base import (
+    WORKER_RULE_REGISTRY,
+    RuleDefinition,
+    discover_rules,
+)
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from typing import List, Dict, Any
 
+from shared.celery_config.app import create_celery_app
+from shared.core.config import settings
 from shared.db.models import CleaningRuleDefinitionDB
 from shared.db_session import get_sync_db_session
-from shared.core.config import settings
-# Corrected import path for discover_rules and registry
-from services.cleaning_rules.base import discover_rules, WORKER_RULE_REGISTRY, RuleDefinition
-from shared.celery_config.app import create_celery_app
 
 # Use standard logging
 logging.basicConfig(level=settings.LOG_LEVEL.upper())
 logger = logging.getLogger(__name__)
 
 WORKER_IDENTIFIER = "dataset-worker"
+
 
 def update_rule_registry_in_db(registry_snapshot: Dict[str, Any]):
     """UPSERTs rule definitions into the database using a snapshot of the registry."""
@@ -28,50 +34,65 @@ def update_rule_registry_in_db(registry_snapshot: Dict[str, Any]):
         try:
             instance = rule_cls()
             definition: RuleDefinition = instance.get_definition()
-            db_data = definition.model_dump(mode='json') # Use model_dump
-            db_data['is_implemented'] = True
-            db_data['last_updated_by'] = WORKER_IDENTIFIER
+            db_data = definition.model_dump(mode="json")  # Use model_dump
+            db_data["is_implemented"] = True
+            db_data["last_updated_by"] = WORKER_IDENTIFIER
             definitions_to_upsert.append(db_data)
         except Exception as e:
-            logger.error(f"Failed to get definition for rule '{rule_name}': {e}", exc_info=True)
+            logger.error(
+                f"Failed to get definition for rule '{rule_name}': {e}", exc_info=True
+            )
 
     if not definitions_to_upsert and not discovered_rule_names:
-        logger.warning("No rule definitions discovered or to upsert. DB registry not updated.")
+        logger.warning(
+            "No rule definitions discovered or to upsert. DB registry not updated."
+        )
         return
 
     try:
         with get_sync_db_session() as session:
             # --- UPSERT Logic ---
             if definitions_to_upsert:
-                 logger.info(f"Upserting {len(definitions_to_upsert)} rule definitions into DB...")
-                 # Ensure 'name' is the index element
-                 insert_stmt = pg_insert(CleaningRuleDefinitionDB).values(definitions_to_upsert)
-                 # Define update columns based on the model, excluding the primary key 'name'
-                 update_columns = {
-                     col.name: getattr(insert_stmt.excluded, col.name)
-                     for col in CleaningRuleDefinitionDB.__table__.columns if col.name != 'name'
-                 }
-                 upsert_stmt = insert_stmt.on_conflict_do_update(
-                     index_elements=['name'], # Correct index element name
-                     set_=update_columns
-                 )
-                 session.execute(upsert_stmt)
+                logger.info(
+                    f"Upserting {len(definitions_to_upsert)} rule definitions into DB..."
+                )
+                # Ensure 'name' is the index element
+                insert_stmt = pg_insert(CleaningRuleDefinitionDB).values(
+                    definitions_to_upsert
+                )
+                # Define update columns based on the model, excluding the primary key 'name'
+                update_columns = {
+                    col.name: getattr(insert_stmt.excluded, col.name)
+                    for col in CleaningRuleDefinitionDB.__table__.columns
+                    if col.name != "name"
+                }
+                upsert_stmt = insert_stmt.on_conflict_do_update(
+                    index_elements=["name"],  # Correct index element name
+                    set_=update_columns,
+                )
+                session.execute(upsert_stmt)
 
             # --- Mark missing rules as not implemented ---
             # Only mark as unimplemened if they were previously known by *this* worker
             # AND are not in the currently discovered set.
-            logger.info(f"Marking rules not implemented by {WORKER_IDENTIFIER} if previously known and not currently discovered...")
+            logger.info(
+                f"Marking rules not implemented by {WORKER_IDENTIFIER} if previously known and not currently discovered..."
+            )
             update_stmt = (
                 update(CleaningRuleDefinitionDB)
                 .where(
                     CleaningRuleDefinitionDB.last_updated_by == WORKER_IDENTIFIER,
-                    ~CleaningRuleDefinitionDB.name.in_(discovered_rule_names) # Use discovered_rule_names set
+                    ~CleaningRuleDefinitionDB.name.in_(
+                        discovered_rule_names
+                    ),  # Use discovered_rule_names set
                 )
                 .values(is_implemented=False, last_updated_by=WORKER_IDENTIFIER)
                 .execution_options(synchronize_session=False)
             )
             result = session.execute(update_stmt)
-            logger.info(f"Marked {result.rowcount} rules as not implemented for {WORKER_IDENTIFIER}.")
+            logger.info(
+                f"Marked {result.rowcount} rules as not implemented for {WORKER_IDENTIFIER}."
+            )
 
             session.commit()
             logger.info("Rule registry DB update complete.")
@@ -80,11 +101,14 @@ def update_rule_registry_in_db(registry_snapshot: Dict[str, Any]):
         logger.error(f"Failed to update rule registry in DB: {e}", exc_info=True)
         # Consider if this should prevent worker startup
 
+
 # --- Worker Initialization ---
 logger.info("Dataset worker starting up...")
 logger.info(f"Log Level: {settings.LOG_LEVEL}")
 logger.info(f"Broker URL: {settings.CELERY_BROKER_URL}")
-logger.info(f"Result Backend: {'Configured' if settings.CELERY_RESULT_BACKEND else 'Not Configured'}")
+logger.info(
+    f"Result Backend: {'Configured' if settings.CELERY_RESULT_BACKEND else 'Not Configured'}"
+)
 
 
 # 1. Discover rules - populates the global WORKER_RULE_REGISTRY
@@ -100,6 +124,6 @@ update_rule_registry_in_db(initial_registry_view)
 #    The tasks themselves will now access the registry snapshot when needed via DependencyProvider.
 celery_app = create_celery_app(
     main_name="dataset_worker",
-    include_tasks=["app.tasks"] # Path relative to where celery worker cmd is run
+    include_tasks=["app.tasks"],  # Path relative to where celery worker cmd is run
 )
 logger.info("Celery app created for dataset worker.")

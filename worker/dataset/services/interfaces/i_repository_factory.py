@@ -2,13 +2,14 @@
 from abc import ABC, abstractmethod
 
 from shared.repositories import (
+    BotPatternRepository,
     CKMetricRepository,
     CommitGuruMetricRepository,
+    DatasetRepository,
     GitHubIssueRepository,
-    DatasetRepository,        
-    RepositoryRepository,     
-    BotPatternRepository      
+    RepositoryRepository,
 )
+
 
 class IRepositoryFactory(ABC):
     """Interface for providing instances of database repositories."""

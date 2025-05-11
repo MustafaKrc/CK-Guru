@@ -1,7 +1,9 @@
 # worker/ml/services/interfaces/i_artifact_service.py
 from abc import ABC, abstractmethod
 from typing import Any, Optional
+
 import pandas as pd
+
 
 class IArtifactService(ABC):
     """Interface for saving and loading ML artifacts."""

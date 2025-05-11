@@ -1,13 +1,16 @@
 # shared/db_session/sync_session.py
 import logging
-from typing import Optional, Generator
 from contextlib import contextmanager
+from typing import Generator, Optional
 
 from sqlalchemy import create_engine
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import sessionmaker, Session as SqlaSession # Rename Session to avoid conflict
+from sqlalchemy.orm import Session as SqlaSession  # Rename Session to avoid conflict
+from sqlalchemy.orm import (
+    sessionmaker,
+)
 
-from shared.core.config import settings # Use shared config
+from shared.core.config import settings  # Use shared config
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
@@ -20,15 +23,20 @@ if not settings.DATABASE_URL:
 
 # Create sync engine based on DATABASE_URL
 try:
-    sync_db_url = str(settings.DATABASE_URL).replace("+asyncpg", "") # Assume sync driver needed is psycopg2
-    sync_engine = create_engine(sync_db_url, pool_pre_ping=True, echo=False) # Set echo=True for debugging SQL
-    SyncSessionLocal = sessionmaker(
-        autocommit=False, autoflush=False, bind=sync_engine
-    )
+    sync_db_url = str(settings.DATABASE_URL).replace(
+        "+asyncpg", ""
+    )  # Assume sync driver needed is psycopg2
+    sync_engine = create_engine(
+        sync_db_url, pool_pre_ping=True, echo=False
+    )  # Set echo=True for debugging SQL
+    SyncSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
     logger.info("SYNC database session factory configured.")
 except Exception as e:
-    logger.error(f"Failed to configure SYNC database engine/session: {e}", exc_info=True)
-    raise # Fail hard if DB cannot be configured
+    logger.error(
+        f"Failed to configure SYNC database engine/session: {e}", exc_info=True
+    )
+    raise  # Fail hard if DB cannot be configured
+
 
 @contextmanager
 def get_sync_db_session() -> Generator[SqlaSession, None, None]:
@@ -47,7 +55,7 @@ def get_sync_db_session() -> Generator[SqlaSession, None, None]:
     except Exception as e:
         logger.error(f"Non-DB error during SYNC session: {e}", exc_info=True)
         if session:
-             session.rollback()
+            session.rollback()
         raise
     finally:
         if session:

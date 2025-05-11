@@ -1,47 +1,142 @@
 # shared/schemas/__init__.py
+from .bot_pattern import (
+    BotPatternBase,
+    BotPatternCreate,
+    BotPatternRead,
+    BotPatternUpdate,
+)
+from .dataset import (
+    DatasetBase,
+    DatasetConfig,
+    DatasetCreate,
+    DatasetRead,
+    DatasetStatusUpdate,
+    DatasetTaskResponse,
+)
 from .enums import (
-    JobStatusEnum, DatasetStatusEnum, ObjectiveMetricEnum, SamplerTypeEnum, PrunerTypeEnum, ModelTypeEnum
+    DatasetStatusEnum,
+    JobStatusEnum,
+    ModelTypeEnum,
+    ObjectiveMetricEnum,
+    PrunerTypeEnum,
+    SamplerTypeEnum,
 )
-from .repository import RepositoryBase, RepositoryCreate, RepositoryRead, RepositoryUpdate, RepositoryInDB
-from .task import TaskResponse, TaskStatusResponse, TaskStatusEnum
-from .bot_pattern import BotPatternBase, BotPatternCreate, BotPatternRead, BotPatternUpdate
-from .dataset import DatasetBase, DatasetCreate, DatasetRead, DatasetConfig, DatasetStatusUpdate, DatasetTaskResponse
-from .rule_definition import RuleDefinition, RuleParamDefinition
-from .ml_model import MLModelBase, MLModelCreate, MLModelRead, MLModelUpdate
-from .training_job import TrainingJobBase, TrainingJobCreate, TrainingJobRead, TrainingJobUpdate, TrainingConfig, TrainingJobSubmitResponse
-from .hp_search_job import HPSearchJobBase, HPSearchJobCreate, HPSearchJobUpdate, HPSearchJobRead, HPSearchConfig, OptunaConfig, HPSuggestion, HPSearchJobSubmitResponse
+from .hp_search_job import (
+    HPSearchConfig,
+    HPSearchJobBase,
+    HPSearchJobCreate,
+    HPSearchJobRead,
+    HPSearchJobSubmitResponse,
+    HPSearchJobUpdate,
+    HPSuggestion,
+    OptunaConfig,
+)
+from .inference import (
+    GitHubPushPayload,
+    InferenceTriggerResponse,
+    ManualInferenceRequest,
+)
 from .inference_job import (
-    InferenceJobBase, InferenceJobRead, InferenceJobUpdate,
-    InferenceJobCreateInternal as InferenceJobCreate, # Use alias for creation
+    InferenceJobBase,
+    InferenceJobRead,
+    InferenceJobUpdate,
 )
-
-from .inference import ManualInferenceRequest, InferenceTriggerResponse, GitHubPushPayload 
-
+from .inference_job import (
+    InferenceJobCreateInternal as InferenceJobCreate,  # Use alias for creation
+)
+from .ml_model import MLModelBase, MLModelCreate, MLModelRead, MLModelUpdate
+from .repo_api_client import RepoApiClientResponse, RepoApiResponseStatus
+from .repository import (
+    RepositoryBase,
+    RepositoryCreate,
+    RepositoryInDB,
+    RepositoryRead,
+    RepositoryUpdate,
+)
+from .rule_definition import RuleDefinition, RuleParamDefinition
+from .task import TaskResponse, TaskStatusEnum, TaskStatusResponse
+from .training_job import (
+    TrainingConfig,
+    TrainingJobBase,
+    TrainingJobCreate,
+    TrainingJobRead,
+    TrainingJobSubmitResponse,
+    TrainingJobUpdate,
+)
 from .xai import (
-    FilePredictionDetail, FeatureImportanceValue, FeatureImportanceResultData, FeatureSHAPValue,
-    InstanceSHAPResult, SHAPResultData, InstanceLIMEResult, LIMEResultData, CounterfactualExample,
-    InstanceCounterfactualResult, CounterfactualResultData, DecisionPathNode, DecisionPathEdge,
-    InstanceDecisionPath, DecisionPathResultData)
-
-from .xai_job import (
-    XAIResultBase, XAIResultCreate, XAIResultUpdate, XAIResultRead
+    CounterfactualExample,
+    CounterfactualResultData,
+    DecisionPathEdge,
+    DecisionPathNode,
+    DecisionPathResultData,
+    FeatureImportanceResultData,
+    FeatureImportanceValue,
+    FeatureSHAPValue,
+    FilePredictionDetail,
+    InstanceCounterfactualResult,
+    InstanceDecisionPath,
+    InstanceLIMEResult,
+    InstanceSHAPResult,
+    LIMEResultData,
+    SHAPResultData,
 )
-
-from .repo_api_client import RepoApiResponseStatus, RepoApiClientResponse
+from .xai_job import XAIResultBase, XAIResultCreate, XAIResultRead, XAIResultUpdate
 
 __all__ = [
     # Enums
-    "JobStatusEnum", "DatasetStatusEnum", "ObjectiveMetricEnum", "SamplerTypeEnum", "PrunerTypeEnum", "ModelTypeEnum",
-    "XAITypeEnum", "XAIStatusEnum"
+    "JobStatusEnum",
+    "DatasetStatusEnum",
+    "ObjectiveMetricEnum",
+    "SamplerTypeEnum",
+    "PrunerTypeEnum",
+    "ModelTypeEnum",
+    "XAITypeEnum",
+    "XAIStatusEnum"
     # Schemas
-    "RepositoryBase", "RepositoryCreate", "RepositoryRead", "RepositoryUpdate", "RepositoryInDB",
-    "TaskResponse", "TaskStatusResponse",
-    "BotPatternBase", "BotPatternCreate", "BotPatternRead", "BotPatternUpdate",
-    "DatasetBase", "DatasetCreate", "DatasetRead", "DatasetConfig", "DatasetStatusUpdate", "DatasetTaskResponse",
-    "RuleDefinition", "RuleParamDefinition",
-    "MLModelBase", "MLModelCreate", "MLModelRead", "MLModelUpdate",
-    "TrainingJobBase", "TrainingJobCreate", "TrainingJobRead", "TrainingJobUpdate", "TrainingConfig", "TrainingJobSubmitResponse",
-    "HPSearchJobBase", "HPSearchJobCreate", "HPSearchJobUpdate", "HPSearchJobRead", "HPSearchConfig", "OptunaConfig", "HPSuggestion", "HPSearchJobSubmitResponse",
-    "InferenceJobBase", "InferenceJobCreate", "InferenceJobUpdate", "InferenceJobRead",
-    "ManualInferenceRequest", "InferenceTriggerResponse", "GitHubPushPayload", "RepoAPIResponseStatus", "RepoApiClientResponse",
+    "RepositoryBase",
+    "RepositoryCreate",
+    "RepositoryRead",
+    "RepositoryUpdate",
+    "RepositoryInDB",
+    "TaskResponse",
+    "TaskStatusResponse",
+    "BotPatternBase",
+    "BotPatternCreate",
+    "BotPatternRead",
+    "BotPatternUpdate",
+    "DatasetBase",
+    "DatasetCreate",
+    "DatasetRead",
+    "DatasetConfig",
+    "DatasetStatusUpdate",
+    "DatasetTaskResponse",
+    "RuleDefinition",
+    "RuleParamDefinition",
+    "MLModelBase",
+    "MLModelCreate",
+    "MLModelRead",
+    "MLModelUpdate",
+    "TrainingJobBase",
+    "TrainingJobCreate",
+    "TrainingJobRead",
+    "TrainingJobUpdate",
+    "TrainingConfig",
+    "TrainingJobSubmitResponse",
+    "HPSearchJobBase",
+    "HPSearchJobCreate",
+    "HPSearchJobUpdate",
+    "HPSearchJobRead",
+    "HPSearchConfig",
+    "OptunaConfig",
+    "HPSuggestion",
+    "HPSearchJobSubmitResponse",
+    "InferenceJobBase",
+    "InferenceJobCreate",
+    "InferenceJobUpdate",
+    "InferenceJobRead",
+    "ManualInferenceRequest",
+    "InferenceTriggerResponse",
+    "GitHubPushPayload",
+    "RepoAPIResponseStatus",
+    "RepoApiClientResponse",
 ]

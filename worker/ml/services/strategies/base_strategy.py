@@ -1,30 +1,28 @@
 # worker/ml/services/strategies/base_strategy.py
 import logging
 from abc import ABC, abstractmethod
+from inspect import Parameter, signature
 from typing import Any, Dict, NamedTuple, Set, Type
+
 import pandas as pd
-from inspect import signature, Parameter
+from sklearn.metrics import accuracy_score, f1_score
 
 from services.interfaces import IArtifactService
 
-from sklearn.metrics import accuracy_score, f1_score 
-
-
 logger = logging.getLogger(__name__)
+
 
 # Define a structure for training results
 class TrainResult(NamedTuple):
     model: Any
     metrics: Dict[str, float]
 
+
 class BaseModelStrategy(ABC):
     """Abstract base class for model-specific execution strategies."""
 
     def __init__(
-        self,
-        model_config: Dict,
-        job_config: Dict,
-        artifact_service: IArtifactService 
+        self, model_config: Dict, job_config: Dict, artifact_service: IArtifactService
     ):
         """
         Initializes the strategy with configs and artifact service.
@@ -36,8 +34,8 @@ class BaseModelStrategy(ABC):
         """
         self.model_config = model_config
         self.job_config = job_config
-        self.artifact_service: IArtifactService = artifact_service #
-        self.model: Any = None # Holds the actual model object
+        self.artifact_service: IArtifactService = artifact_service  #
+        self.model: Any = None  # Holds the actual model object
         self._initialize_model_internals()
         logger.debug(f"Initialized strategy: {self.__class__.__name__}")
 
@@ -58,11 +56,10 @@ class BaseModelStrategy(ABC):
             name
             for name, param in sig.parameters.items()
             if name != "self"
-            and param.kind
-            in (Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY)
+            and param.kind in (Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY)
         }
         return hp_names
-        
+
     @abstractmethod
     def _get_model_class(self) -> Type:
         """Return the *class* (not instance) of the underlying ML model."""
@@ -85,16 +82,22 @@ class BaseModelStrategy(ABC):
 
     def evaluate(self, X_test: pd.DataFrame, y_test: pd.Series) -> Dict[str, float]:
         """Default evaluation logic (remains the same)."""
-        if self.model is None: raise RuntimeError("Model not available for evaluation.")
+        if self.model is None:
+            raise RuntimeError("Model not available for evaluation.")
         logger.info(f"Evaluating model {self.model.__class__.__name__}...")
         try:
-            if not hasattr(self.model, 'predict'): raise TypeError("Model lacks 'predict'.")
+            if not hasattr(self.model, "predict"):
+                raise TypeError("Model lacks 'predict'.")
             y_pred = self.model.predict(X_test)
-            y_test_eval = pd.to_numeric(y_test, errors='coerce').fillna(-1).astype(int)
-            y_pred_eval = pd.to_numeric(pd.Series(y_pred), errors='coerce').fillna(-1).astype(int)
+            y_test_eval = pd.to_numeric(y_test, errors="coerce").fillna(-1).astype(int)
+            y_pred_eval = (
+                pd.to_numeric(pd.Series(y_pred), errors="coerce").fillna(-1).astype(int)
+            )
             accuracy = accuracy_score(y_test_eval, y_pred_eval)
-            f1 = f1_score(y_test_eval, y_pred_eval, average='weighted', zero_division=0)
-            logger.info(f"Evaluation Metrics - Accuracy: {accuracy:.4f}, F1 (weighted): {f1:.4f}")
+            f1 = f1_score(y_test_eval, y_pred_eval, average="weighted", zero_division=0)
+            logger.info(
+                f"Evaluation Metrics - Accuracy: {accuracy:.4f}, F1 (weighted): {f1:.4f}"
+            )
             return {"accuracy": accuracy, "f1_weighted": f1}
         except Exception as e:
             logger.error(f"Error during model evaluation: {e}", exc_info=True)
@@ -102,7 +105,9 @@ class BaseModelStrategy(ABC):
 
     def load_model(self, artifact_path: str):
         """Loads the model object using the *injected* artifact service."""
-        logger.info(f"Strategy {self.__class__.__name__}: Loading model from {artifact_path}")
+        logger.info(
+            f"Strategy {self.__class__.__name__}: Loading model from {artifact_path}"
+        )
         self.model = self.artifact_service.load_artifact(artifact_path)
         if self.model is None:
             raise IOError(f"Failed to load model from artifact path: {artifact_path}")
@@ -113,5 +118,7 @@ class BaseModelStrategy(ABC):
         if self.model is None:
             logger.error("Cannot save model: Internal model object is None.")
             return False
-        logger.info(f"Strategy {self.__class__.__name__}: Saving model to {artifact_path}")
+        logger.info(
+            f"Strategy {self.__class__.__name__}: Saving model to {artifact_path}"
+        )
         return self.artifact_service.save_artifact(self.model, artifact_path)

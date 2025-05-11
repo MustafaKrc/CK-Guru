@@ -1,10 +1,12 @@
 # worker/ml/services/strategies/base_xai_strategy.py
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Optional
+
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
 
 class BaseXAIStrategy(ABC):
     """Abstract Base Class for different XAI explanation generation methods."""
@@ -15,7 +17,9 @@ class BaseXAIStrategy(ABC):
         logger.debug(f"Initialized XAI Strategy: {self.__class__.__name__}")
 
     @abstractmethod
-    def explain(self, X_inference: pd.DataFrame, identifiers_df: pd.DataFrame) -> Optional[Any]:
+    def explain(
+        self, X_inference: pd.DataFrame, identifiers_df: pd.DataFrame
+    ) -> Optional[Any]:
         """
         Generates the explanation for the given inference instances.
 

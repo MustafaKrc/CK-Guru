@@ -11,4 +11,3 @@ class ICKRunnerService(ABC):
     def run(self, repo_dir: Path, commit_hash: str) -> pd.DataFrame:
         """Runs CK tool and returns metrics as a DataFrame."""
         pass
-

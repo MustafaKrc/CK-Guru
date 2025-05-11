@@ -1,26 +1,30 @@
 # backend/app/api/v1/endpoints/tasks.py
 import logging
-from typing import Any, Dict, Optional # Import Any for result type hint
+from typing import Dict  # Import Any for result type hint
 
-from fastapi import APIRouter, HTTPException, Query, status, Depends
-from celery.result import AsyncResult
 from celery.exceptions import CeleryError
-
-# Import the TaskStatusService
-from app.services.task_status_service import task_status_service # Using Option 1 (Global Instance)
-# If using Option 2 (Depends):
-# from app.services.task_status_service import TaskStatusService, get_task_status_service
+from celery.result import AsyncResult
+from fastapi import APIRouter, HTTPException, Query, status
 
 # Import Celery app for revoke endpoint
 from app.core.celery_app import backend_celery_app as celery_app
 
+# Import the TaskStatusService
+from app.services.task_status_service import (  # Using Option 1 (Global Instance)
+    task_status_service,
+)
 from shared import schemas
 from shared.core.config import settings
+
+# If using Option 2 (Depends):
+# from app.services.task_status_service import TaskStatusService, get_task_status_service
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
 
 router = APIRouter()
+
 
 @router.get(
     "/{task_id}",
@@ -49,41 +53,54 @@ async def get_task_status(
         return response
     except Exception as e:
         # Catch unexpected errors during service interaction
-        logger.error(f"Error getting status for task {task_id} via service: {e}", exc_info=True)
+        logger.error(
+            f"Error getting status for task {task_id} via service: {e}", exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve task status."
+            detail="Failed to retrieve task status.",
         )
+
 
 @router.post(
     "/{task_id}/revoke",
-    response_model=Dict[str, str], # Return simple message dict
-    status_code=status.HTTP_202_ACCEPTED, # Accepted for processing
+    response_model=Dict[str, str],  # Return simple message dict
+    status_code=status.HTTP_202_ACCEPTED,  # Accepted for processing
     summary="Revoke/Terminate a Task",
     description="Attempts to stop a pending or running task. Uses SIGTERM for termination by default.",
     responses={
         500: {"description": "Failed to send revoke command"},
         400: {"description": "Invalid signal specified"},
-        404: {"description": "Task backend might not know this ID (but revoke sent anyway)"} # Revoke can be sent even for unknown IDs
-    }
+        404: {
+            "description": "Task backend might not know this ID (but revoke sent anyway)"
+        },  # Revoke can be sent even for unknown IDs
+    },
 )
 async def revoke_task(
     task_id: str,
-    terminate: bool = Query(True, description="If true, attempt to terminate the running task process (SIGTERM). If false, just prevent pending task from starting or ignore result if running."),
-    signal: str = Query("TERM", description="Signal to use for termination (e.g., TERM, KILL). Only used if terminate=True.")
+    terminate: bool = Query(
+        True,
+        description="If true, attempt to terminate the running task process (SIGTERM). If false, just prevent pending task from starting or ignore result if running.",
+    ),
+    signal: str = Query(
+        "TERM",
+        description="Signal to use for termination (e.g., TERM, KILL). Only used if terminate=True.",
+    ),
 ):
     """
     Sends a revoke command to Celery for the given task ID.
     By default, it attempts to terminate the task process using SIGTERM.
     """
-    logger.info(f"Received request to revoke task ID: {task_id} (terminate={terminate}, signal={signal})")
+    logger.info(
+        f"Received request to revoke task ID: {task_id} (terminate={terminate}, signal={signal})"
+    )
 
     # Validate signal if terminating
-    valid_signals = ['TERM', 'KILL'] # Common signals, add others if needed
+    valid_signals = ["TERM", "KILL"]  # Common signals, add others if needed
     if terminate and signal.upper() not in valid_signals:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid signal '{signal}'. Valid signals are: {', '.join(valid_signals)}"
+            detail=f"Invalid signal '{signal}'. Valid signals are: {', '.join(valid_signals)}",
         )
 
     try:
@@ -96,19 +113,25 @@ async def revoke_task(
         task_result.revoke(terminate=terminate, signal=signal.upper())
 
         logger.info(f"Revoke command sent for task ID: {task_id}")
-        return {"message": f"Revoke command sent for task {task_id}. State may take time to update."}
+        return {
+            "message": f"Revoke command sent for task {task_id}. State may take time to update."
+        }
 
     except CeleryError as e:
         # Catch potential errors communicating with the broker/backend when sending revoke
-        logger.error(f"Celery error while sending revoke for task {task_id}: {e}", exc_info=True)
+        logger.error(
+            f"Celery error while sending revoke for task {task_id}: {e}", exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to send revoke command due to a Celery communication error: {e}"
+            detail=f"Failed to send revoke command due to a Celery communication error: {e}",
         )
     except Exception as e:
         # Catch any other unexpected errors
-        logger.error(f"Unexpected error during revoke for task {task_id}: {e}", exc_info=True)
+        logger.error(
+            f"Unexpected error during revoke for task {task_id}: {e}", exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {e}"
+            detail=f"An unexpected error occurred: {e}",
         )

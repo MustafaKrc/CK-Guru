@@ -1,10 +1,16 @@
 # shared/schemas/hp_search_job.py
-import enum
-from typing import Optional, Dict, Any, List
 from datetime import datetime
-from pydantic import BaseModel, Field, ConfigDict
+from typing import Any, Dict, List, Optional
 
-from shared.schemas.enums import ObjectiveMetricEnum, SamplerTypeEnum, PrunerTypeEnum, JobStatusEnum, ModelTypeEnum
+from pydantic import BaseModel, ConfigDict, Field
+
+from shared.schemas.enums import (
+    JobStatusEnum,
+    ModelTypeEnum,
+    ObjectiveMetricEnum,
+    PrunerTypeEnum,
+    SamplerTypeEnum,
+)
 from shared.schemas.ml_model import MLModelRead
 
 
@@ -12,7 +18,7 @@ class OptunaConfig(BaseModel):
     n_trials: int = Field(..., gt=0, description="Number of trials to run.")
     objective_metric: ObjectiveMetricEnum = Field(
         default=ObjectiveMetricEnum.F1_WEIGHTED,
-        description="Metric to optimize ('minimize' or 'maximize' inferred from metric)."
+        description="Metric to optimize ('minimize' or 'maximize' inferred from metric).",
     )
     sampler_type: SamplerTypeEnum = Field(
         default=SamplerTypeEnum.TPE, description="Optuna sampler algorithm."
@@ -28,10 +34,12 @@ class OptunaConfig(BaseModel):
     )
     continue_if_exists: bool = Field(
         default=False,
-        description="Attempt to continue study if name exists (requires matching dataset/model)."
+        description="Attempt to continue study if name exists (requires matching dataset/model).",
     )
     hp_search_cv_folds: Optional[int] = Field(
-        3, ge=2, description="Number of cross-validation folds within the objective function."
+        3,
+        ge=2,
+        description="Number of cross-validation folds within the objective function.",
     )
     # Direction is now inferred from objective_metric
 
@@ -43,19 +51,35 @@ class HPSuggestion(BaseModel):
     low: Optional[float | int] = None
     high: Optional[float | int] = None
     step: Optional[float | int] = None
-    log: bool = Field(default=False, description="Use logarithmic scale (for float/int).")
+    log: bool = Field(
+        default=False, description="Use logarithmic scale (for float/int)."
+    )
     choices: Optional[List[Any]] = None
 
 
 # --- HP Search Job Config ---
 class HPSearchConfig(BaseModel):
-    model_name: str = Field(..., description="Logical name prefix for models created during search.")
-    model_type: ModelTypeEnum = Field(..., description="Type/architecture of the model.")
-    hp_space: List[HPSuggestion] = Field(..., description="List defining the hyperparameter search space.")
-    optuna_config: OptunaConfig = Field(..., description="Optuna configuration for the search.")
-    save_best_model: bool = Field(True, description="Whether to train and save the model with best parameters.")
-    feature_columns: List[str] = Field(..., description="List of features to use for evaluating trials.")
-    target_column: str = Field(..., description="Name of the target column for evaluating trials.")
+    model_name: str = Field(
+        ..., description="Logical name prefix for models created during search."
+    )
+    model_type: ModelTypeEnum = Field(
+        ..., description="Type/architecture of the model."
+    )
+    hp_space: List[HPSuggestion] = Field(
+        ..., description="List defining the hyperparameter search space."
+    )
+    optuna_config: OptunaConfig = Field(
+        ..., description="Optuna configuration for the search."
+    )
+    save_best_model: bool = Field(
+        True, description="Whether to train and save the model with best parameters."
+    )
+    feature_columns: List[str] = Field(
+        ..., description="List of features to use for evaluating trials."
+    )
+    target_column: str = Field(
+        ..., description="Name of the target column for evaluating trials."
+    )
     random_seed: Optional[int] = Field(42)
 
 
@@ -63,7 +87,9 @@ class HPSearchConfig(BaseModel):
 class HPSearchJobBase(BaseModel):
     dataset_id: int = Field(..., description="ID of the dataset to use for the search.")
     optuna_study_name: str = Field(..., description="Unique name for the Optuna study.")
-    config: HPSearchConfig = Field(..., description="Hyperparameter search configuration.")
+    config: HPSearchConfig = Field(
+        ..., description="Hyperparameter search configuration."
+    )
 
 
 # --- Create (API Request Body) ---
@@ -83,7 +109,7 @@ class HPSearchJobUpdate(BaseModel):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
 
-    model_config = ConfigDict(extra='ignore') # Allow extra fields if needed
+    model_config = ConfigDict(extra="ignore")  # Allow extra fields if needed
 
 
 class HPSearchJobRead(HPSearchJobBase):
@@ -95,15 +121,16 @@ class HPSearchJobRead(HPSearchJobBase):
     best_params: Optional[Dict[str, Any]] = None
     best_value: Optional[float] = None
     best_ml_model_id: Optional[int] = None
-    best_ml_model: Optional[MLModelRead] = Field(None, description="Details of the best model created (if any).")
+    best_ml_model: Optional[MLModelRead] = Field(
+        None, description="Details of the best model created (if any)."
+    )
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(
-        from_attributes=True,
-        use_enum_values=True # Serialize Enum member to its value
+        from_attributes=True, use_enum_values=True  # Serialize Enum member to its value
     )
 
 

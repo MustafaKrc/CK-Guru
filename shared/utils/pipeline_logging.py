@@ -1,8 +1,10 @@
 # shared/utils/pipeline_logging.py
 import logging
 
+
 class StepLogger:
     """Simple wrapper to add a prefix to log messages."""
+
     def __init__(self, logger: logging.Logger, log_prefix: str):
         self.logger = logger
         self.log_prefix = log_prefix

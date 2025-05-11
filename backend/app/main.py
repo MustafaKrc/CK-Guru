@@ -1,12 +1,9 @@
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse
-from fastapi import status
+from fastapi import FastAPI, status
 from fastapi.logger import logger
+from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.v1.router import api_router
-
-from shared.core.config import settings # Import settings if needed later for app config
 
 # --- Metadata for OpenAPI Docs ---
 description = """
@@ -34,19 +31,21 @@ app = FastAPI(
     #     "name": "Apache 2.0",
     #     "url": "https://www.apache.org/licenses/LICENSE-2.0.html",
     # },
-    openapi_url="/api/v1/openapi.json", # Standard location
-    docs_url="/api/docs",              # Standard location for Swagger UI
-    redoc_url="/api/redoc",            # Standard location for ReDoc
+    openapi_url="/api/v1/openapi.json",  # Standard location
+    docs_url="/api/docs",  # Standard location for Swagger UI
+    redoc_url="/api/redoc",  # Standard location for ReDoc
 )
 
 # Include the API router
-app.include_router(api_router, prefix="/api/v1") # Add the /api/v1 prefix here
+app.include_router(api_router, prefix="/api/v1")  # Add the /api/v1 prefix here
+
 
 # --- Root Endpoint ---
 @app.get("/", tags=["Health Check"])
 async def read_root():
     """Basic health check endpoint."""
     return {"status": "ok", "message": "Welcome to JIT Defect Prediction API!"}
+
 
 @app.exception_handler(SQLAlchemyError)
 async def sqlalchemy_exception_handler(request, exc):
@@ -56,6 +55,7 @@ async def sqlalchemy_exception_handler(request, exc):
         content={"detail": "A database error occurred."},
     )
 
+
 @app.exception_handler(Exception)
 async def generic_exception_handler(request, exc):
     logger.error(f"Unhandled Exception: {exc}", exc_info=True)
@@ -63,6 +63,7 @@ async def generic_exception_handler(request, exc):
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={"detail": "Internal server error."},
     )
+
 
 # --- Optional: Add Middleware (CORS, etc.) ---
 # from fastapi.middleware.cors import CORSMiddleware

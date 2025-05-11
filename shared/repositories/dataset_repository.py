@@ -1,17 +1,20 @@
 # shared/repositories/dataset_repository.py
 import logging
-from typing import Optional, Sequence, Dict, Any
+from typing import Any, Dict, Optional, Sequence
 
-from sqlalchemy import select, update, func
-from sqlalchemy.orm import Session
+from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 
-from .base_repository import BaseRepository
-from shared.db.models import Dataset, Repository # Import Repository if needed for relations
+from shared.db.models import (  # Import Repository if needed for relations
+    Dataset,
+)
 from shared.schemas.dataset import DatasetCreate, DatasetUpdate
 from shared.schemas.enums import DatasetStatusEnum
 
+from .base_repository import BaseRepository
+
 logger = logging.getLogger(__name__)
+
 
 class DatasetRepository(BaseRepository[Dataset]):
     """Handles synchronous database operations for Dataset."""
@@ -29,8 +32,10 @@ class DatasetRepository(BaseRepository[Dataset]):
             stmt = select(Dataset.storage_path).where(Dataset.id == dataset_id)
             path = session.execute(stmt).scalar_one_or_none()
         return path
-    
-    def get_by_repository(self, repository_id: int, skip: int = 0, limit: int = 100) -> Sequence[Dataset]:
+
+    def get_by_repository(
+        self, repository_id: int, skip: int = 0, limit: int = 100
+    ) -> Sequence[Dataset]:
         """Get datasets associated with a specific repository."""
         with self._session_scope() as session:
             stmt = (
@@ -48,17 +53,29 @@ class DatasetRepository(BaseRepository[Dataset]):
             try:
                 # Pydantic v2: model_dump() instead of dict()
                 create_data = obj_in.model_dump()
-                db_obj = Dataset(**create_data, repository_id=repository_id, status=DatasetStatusEnum.PENDING)
+                db_obj = Dataset(
+                    **create_data,
+                    repository_id=repository_id,
+                    status=DatasetStatusEnum.PENDING,
+                )
                 session.add(db_obj)
                 session.commit()
                 session.refresh(db_obj)
-                logger.info(f"Created dataset definition ID {db_obj.id} for repository {repository_id}")
+                logger.info(
+                    f"Created dataset definition ID {db_obj.id} for repository {repository_id}"
+                )
                 return db_obj
             except SQLAlchemyError as e:
-                logger.error(f"DatasetRepository: DB error creating dataset for repo {repository_id}: {e}", exc_info=True)
+                logger.error(
+                    f"DatasetRepository: DB error creating dataset for repo {repository_id}: {e}",
+                    exc_info=True,
+                )
                 raise
             except Exception as e:
-                logger.error(f"DatasetRepository: Unexpected error creating dataset for repo {repository_id}: {e}", exc_info=True)
+                logger.error(
+                    f"DatasetRepository: Unexpected error creating dataset for repo {repository_id}: {e}",
+                    exc_info=True,
+                )
                 raise
 
     def update(self, db_obj: Dataset, obj_in: DatasetUpdate) -> Dataset:
@@ -75,20 +92,29 @@ class DatasetRepository(BaseRepository[Dataset]):
                     if hasattr(db_obj, field):
                         setattr(db_obj, field, value)
                 # Manually update 'updated_at' for sync sessions if model doesn't handle it
-                if hasattr(db_obj, 'updated_at'):
+                if hasattr(db_obj, "updated_at"):
                     from datetime import datetime, timezone
+
                     db_obj.updated_at = datetime.now(timezone.utc)
 
-                session.add(db_obj) # Add the modified object (important after merge/update)
+                session.add(
+                    db_obj
+                )  # Add the modified object (important after merge/update)
                 session.commit()
                 session.refresh(db_obj)
                 logger.info(f"Updated dataset ID {db_obj.id}")
                 return db_obj
             except SQLAlchemyError as e:
-                logger.error(f"DatasetRepository: DB error updating dataset {db_obj.id}: {e}", exc_info=True)
+                logger.error(
+                    f"DatasetRepository: DB error updating dataset {db_obj.id}: {e}",
+                    exc_info=True,
+                )
                 raise
             except Exception as e:
-                logger.error(f"DatasetRepository: Unexpected error updating dataset {db_obj.id}: {e}", exc_info=True)
+                logger.error(
+                    f"DatasetRepository: Unexpected error updating dataset {db_obj.id}: {e}",
+                    exc_info=True,
+                )
                 raise
 
     def update_status(
@@ -103,16 +129,19 @@ class DatasetRepository(BaseRepository[Dataset]):
         """Update the status, message, paths, and task ID of a dataset."""
         values_to_update: Dict[str, Any] = {"status": status}
         if status_message is not None:
-            values_to_update["status_message"] = status_message[:1000] # Truncate message
+            values_to_update["status_message"] = status_message[
+                :1000
+            ]  # Truncate message
         if storage_path is not None:
             values_to_update["storage_path"] = storage_path
         if background_data_path is not None:
             values_to_update["background_data_path"] = background_data_path
         if celery_task_id is not None:
-             values_to_update["celery_task_id"] = celery_task_id
+            values_to_update["celery_task_id"] = celery_task_id
 
         # Add updated_at timestamp manually
         from datetime import datetime, timezone
+
         values_to_update["updated_at"] = datetime.now(timezone.utc)
 
         with self._session_scope() as session:
@@ -127,18 +156,28 @@ class DatasetRepository(BaseRepository[Dataset]):
                 session.commit()
 
                 if result.rowcount == 0:
-                     logger.warning(f"Attempted to update status for non-existent dataset ID {dataset_id}")
-                     return None
+                    logger.warning(
+                        f"Attempted to update status for non-existent dataset ID {dataset_id}"
+                    )
+                    return None
                 else:
-                     logger.info(f"Updated status for dataset ID {dataset_id} to {status.value}")
-                     # Fetch the updated object after commit
-                     return session.get(Dataset, dataset_id)
+                    logger.info(
+                        f"Updated status for dataset ID {dataset_id} to {status.value}"
+                    )
+                    # Fetch the updated object after commit
+                    return session.get(Dataset, dataset_id)
             except SQLAlchemyError as e:
-                 logger.error(f"DatasetRepository: DB error updating status for dataset {dataset_id}: {e}", exc_info=True)
-                 raise
+                logger.error(
+                    f"DatasetRepository: DB error updating status for dataset {dataset_id}: {e}",
+                    exc_info=True,
+                )
+                raise
             except Exception as e:
-                 logger.error(f"DatasetRepository: Unexpected error updating status for dataset {dataset_id}: {e}", exc_info=True)
-                 raise
+                logger.error(
+                    f"DatasetRepository: Unexpected error updating status for dataset {dataset_id}: {e}",
+                    exc_info=True,
+                )
+                raise
 
     def delete(self, dataset_id: int) -> bool:
         """Delete a dataset definition by ID. Returns True if deleted, False otherwise."""
@@ -149,14 +188,24 @@ class DatasetRepository(BaseRepository[Dataset]):
                     repo_id = db_obj.repository_id
                     session.delete(db_obj)
                     session.commit()
-                    logger.info(f"Deleted dataset definition ID {dataset_id} for repository {repo_id}")
+                    logger.info(
+                        f"Deleted dataset definition ID {dataset_id} for repository {repo_id}"
+                    )
                     return True
                 else:
-                     logger.warning(f"Dataset definition ID {dataset_id} not found for deletion.")
-                     return False
+                    logger.warning(
+                        f"Dataset definition ID {dataset_id} not found for deletion."
+                    )
+                    return False
             except SQLAlchemyError as e:
-                logger.error(f"DatasetRepository: DB error deleting dataset {dataset_id}: {e}", exc_info=True)
+                logger.error(
+                    f"DatasetRepository: DB error deleting dataset {dataset_id}: {e}",
+                    exc_info=True,
+                )
                 raise
             except Exception as e:
-                logger.error(f"DatasetRepository: Unexpected error deleting dataset {dataset_id}: {e}", exc_info=True)
+                logger.error(
+                    f"DatasetRepository: Unexpected error deleting dataset {dataset_id}: {e}",
+                    exc_info=True,
+                )
                 raise

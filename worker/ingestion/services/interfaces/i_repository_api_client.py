@@ -8,7 +8,13 @@ class IRepositoryApiClient(ABC):
     """Interface for fetching data from the GitHub API."""
 
     @abstractmethod
-    def get_issue(self, owner: str, repo_name: str, issue_number: str, current_etag: Optional[str] = None) -> RepoApiClientResponse:
+    def get_issue(
+        self,
+        owner: str,
+        repo_name: str,
+        issue_number: str,
+        current_etag: Optional[str] = None,
+    ) -> RepoApiClientResponse:
         """Fetches data for a specific issue."""
         pass
 

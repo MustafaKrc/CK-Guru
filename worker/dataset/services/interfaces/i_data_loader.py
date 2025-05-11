@@ -1,7 +1,9 @@
 # worker/dataset/services/interfaces/i_data_loader.py
 from abc import ABC, abstractmethod
 from typing import Generator
+
 import pandas as pd
+
 
 class IDataLoader(ABC):
     """Interface for fetching and streaming data batches."""

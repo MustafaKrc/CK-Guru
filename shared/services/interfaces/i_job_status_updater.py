@@ -2,23 +2,38 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Optional, Type, Union
 
-from shared.schemas.enums import JobStatusEnum, DatasetStatusEnum # Add DatasetStatusEnum
-from shared.db.models import TrainingJob, HyperparameterSearchJob, InferenceJob, Dataset # Add Dataset
+from shared.db.models import (  # Add Dataset
+    Dataset,
+    HyperparameterSearchJob,
+    InferenceJob,
+    TrainingJob,
+)
+from shared.schemas.enums import (  # Add DatasetStatusEnum
+    DatasetStatusEnum,
+    JobStatusEnum,
+)
 
 # Type alias for job models
-JobModel = Union[TrainingJob, HyperparameterSearchJob, InferenceJob, Dataset] # Add Dataset
+JobModel = Union[
+    TrainingJob, HyperparameterSearchJob, InferenceJob, Dataset
+]  # Add Dataset
+
 
 class IJobStatusUpdater(ABC):
     """Interface for updating job/dataset statuses in the database."""
 
     # --- Generic Methods ---
     @abstractmethod
-    def update_job_start(self, job_id: int, job_type: Union[str, Type[JobModel]], task_id: str) -> bool:
+    def update_job_start(
+        self, job_id: int, job_type: Union[str, Type[JobModel]], task_id: str
+    ) -> bool:
         """Updates job/dataset status to RUNNING/GENERATING, records task ID and start time."""
         pass
 
     @abstractmethod
-    def update_job_progress(self, job_id: int, job_type: Union[str, Type[JobModel]], message: str) -> bool:
+    def update_job_progress(
+        self, job_id: int, job_type: Union[str, Type[JobModel]], message: str
+    ) -> bool:
         """Updates only the status message of a job/dataset."""
         pass
 
@@ -27,9 +42,9 @@ class IJobStatusUpdater(ABC):
         self,
         job_id: int,
         job_type: Union[str, Type[JobModel]],
-        status: Union[JobStatusEnum, DatasetStatusEnum], # Allow either enum
+        status: Union[JobStatusEnum, DatasetStatusEnum],  # Allow either enum
         message: str,
-        results: Optional[Dict] = None
+        results: Optional[Dict] = None,
     ) -> bool:
         """Updates final job/dataset status, message, completion time, and potentially results."""
         pass
@@ -59,7 +74,7 @@ class IJobStatusUpdater(ABC):
         status: DatasetStatusEnum,
         message: str,
         storage_path: Optional[str] = None,
-        background_data_path: Optional[str] = None
+        background_data_path: Optional[str] = None,
     ) -> bool:
         """Convenience method to update final Dataset status and paths."""
         pass

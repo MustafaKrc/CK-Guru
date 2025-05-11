@@ -8,4 +8,7 @@ backend_celery_app = create_celery_app(main_name="backend_sender")
 if not backend_celery_app.conf.result_backend:
     # Log warning or raise error depending on requirements
     import logging
-    logging.getLogger(__name__).warning("Celery result backend is not configured for the backend sender. Task status polling will not work.")
+
+    logging.getLogger(__name__).warning(
+        "Celery result backend is not configured for the backend sender. Task status polling will not work."
+    )

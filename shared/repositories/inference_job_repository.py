@@ -1,18 +1,24 @@
 # shared/repositories/inference_job_repository.py
 import logging
-from typing import Optional, Sequence, Dict, Any, Callable # Added Callable
-from sqlalchemy.orm import Session # Keep Session for type hint
-from sqlalchemy import select, update # Import update
-from datetime import datetime, timezone # For updated_at
+from datetime import datetime, timezone  # For updated_at
+from typing import Callable, Optional, Sequence  # Added Callable
 
-# Import Base Repository
-from .base_repository import BaseRepository
+from sqlalchemy import select  # Import update
+from sqlalchemy.orm import Session  # Keep Session for type hint
+
 # Import DB Model and Enums/Schemas
 from shared.db.models import InferenceJob
 from shared.schemas.enums import JobStatusEnum
-from shared.schemas.inference_job import InferenceJobCreateInternal, InferenceJobUpdate # Use internal create
+from shared.schemas.inference_job import (  # Use internal create
+    InferenceJobCreateInternal,
+    InferenceJobUpdate,
+)
+
+# Import Base Repository
+from .base_repository import BaseRepository
 
 logger = logging.getLogger(__name__)
+
 
 # Inherit from BaseRepository and specify ModelType
 class InferenceJobRepository(BaseRepository[InferenceJob]):
@@ -20,7 +26,7 @@ class InferenceJobRepository(BaseRepository[InferenceJob]):
 
     # Add __init__ to accept session_factory
     def __init__(self, session_factory: Callable[[], Session]):
-        super().__init__(session_factory) # Initialize BaseRepository
+        super().__init__(session_factory)  # Initialize BaseRepository
         logger.debug("InferenceJobRepository initialized.")
 
     def get_by_id(self, job_id: int) -> Optional[InferenceJob]:
@@ -32,12 +38,15 @@ class InferenceJobRepository(BaseRepository[InferenceJob]):
             # return session.query(InferenceJob).options(selectinload(InferenceJob.ml_model)).get(job_id)
             return session.get(InferenceJob, job_id)
 
-
     def get_by_task_id(self, celery_task_id: str) -> Optional[InferenceJob]:
         """Gets an inference job by its Celery task ID (returns first match)."""
         logger.debug(f"InferenceJobRepo: Fetching job by task ID {celery_task_id}")
         with self._session_scope() as session:
-            stmt = select(InferenceJob).where(InferenceJob.celery_task_id == celery_task_id).limit(1)
+            stmt = (
+                select(InferenceJob)
+                .where(InferenceJob.celery_task_id == celery_task_id)
+                .limit(1)
+            )
             return session.execute(stmt).scalar_one_or_none()
 
     def list_jobs(
@@ -45,10 +54,12 @@ class InferenceJobRepository(BaseRepository[InferenceJob]):
         skip: int = 0,
         limit: int = 100,
         model_id: Optional[int] = None,
-        status: Optional[JobStatusEnum] = None
+        status: Optional[JobStatusEnum] = None,
     ) -> Sequence[InferenceJob]:
         """Gets multiple inference jobs with optional filtering and pagination."""
-        logger.debug(f"InferenceJobRepo: Listing jobs (model_id={model_id}, status={status})")
+        logger.debug(
+            f"InferenceJobRepo: Listing jobs (model_id={model_id}, status={status})"
+        )
         with self._session_scope() as session:
             stmt = select(InferenceJob).order_by(InferenceJob.created_at.desc())
             if model_id is not None:
@@ -65,15 +76,13 @@ class InferenceJobRepository(BaseRepository[InferenceJob]):
             # obj_in is already InferenceJobCreateInternal Pydantic model
             db_obj = InferenceJob(**obj_in.model_dump())
             session.add(db_obj)
-            session.commit() # Commit to get ID and save
+            session.commit()  # Commit to get ID and save
             session.refresh(db_obj)
             logger.info(f"InferenceJobRepo: Created Inference Job ID {db_obj.id}")
         return db_obj
 
     def update_job(
-        self,
-        job_id: int,
-        obj_in: InferenceJobUpdate # Pydantic model for updates
+        self, job_id: int, obj_in: InferenceJobUpdate  # Pydantic model for updates
     ) -> Optional[InferenceJob]:
         """Updates an existing inference job record."""
         logger.info(f"InferenceJobRepo: Updating job ID {job_id}")
@@ -88,14 +97,18 @@ class InferenceJobRepository(BaseRepository[InferenceJob]):
                 if hasattr(db_obj, field):
                     setattr(db_obj, field, value)
                 else:
-                    logger.warning(f"Field '{field}' not found on InferenceJob model for update.")
+                    logger.warning(
+                        f"Field '{field}' not found on InferenceJob model for update."
+                    )
 
             # Manually set updated_at if not handled by DB's onupdate
             db_obj.updated_at = datetime.now(timezone.utc)
             session.add(db_obj)
             session.commit()
             session.refresh(db_obj)
-            logger.info(f"InferenceJobRepo: Updated Inference Job ID {job_id}, Status: {db_obj.status.value if db_obj.status else 'N/A'}")
+            logger.info(
+                f"InferenceJobRepo: Updated Inference Job ID {job_id}, Status: {db_obj.status.value if db_obj.status else 'N/A'}"
+            )
         return db_obj
 
     def delete_job(self, job_id: int) -> bool:

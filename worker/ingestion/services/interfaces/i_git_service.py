@@ -6,7 +6,9 @@ class IGitService(ABC):
     """Interface defining Git command operations for a repository."""
 
     @abstractmethod
-    def run_git_command(self, cmd_args: str, check: bool = True, suppress_stderr: bool = False) -> str:
+    def run_git_command(
+        self, cmd_args: str, check: bool = True, suppress_stderr: bool = False
+    ) -> str:
         """Runs a git command."""
         pass
 

@@ -1,22 +1,28 @@
-from typing import Optional, List
 from datetime import datetime
+from typing import Optional
 
-from pydantic import BaseModel, HttpUrl, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+
 
 # Shared properties
 class RepositoryBase(BaseModel):
-    git_url: HttpUrl = Field(..., json_schema_extra={'example': "https://github.com/user/repo.git"})
+    git_url: HttpUrl = Field(
+        ..., json_schema_extra={"example": "https://github.com/user/repo.git"}
+    )
+
 
 # Properties to receive via API on creation
 class RepositoryCreate(RepositoryBase):
     pass
 
+
 # Properties to receive via API on update (optional)
 class RepositoryUpdate(BaseModel):
     name: Optional[str] = None
     git_url: Optional[HttpUrl] = None
-    
+
     model_config = ConfigDict(from_attributes=True)
+
 
 # Properties shared by models stored in DB
 class RepositoryInDBBase(RepositoryBase):
@@ -33,8 +39,9 @@ class RepositoryInDBBase(RepositoryBase):
 class RepositoryRead(RepositoryInDBBase):
     # Include counts of related items for API responses
     bot_patterns_count: Optional[int] = 0
-    datasets_count: Optional[int] = 0 
+    datasets_count: Optional[int] = 0
     github_issues_count: Optional[int] = 0
+
 
 # Properties stored in DB
 class RepositoryInDB(RepositoryInDBBase):

@@ -1,27 +1,37 @@
 # shared/db/models/commit_guru_metric.py
-from datetime import datetime
-from typing import Optional, List, Dict, Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from sqlalchemy import (
-    ARRAY, Column, Integer, String, Float, Boolean, ForeignKey, BigInteger, JSON, Index, UniqueConstraint, Text
+    ARRAY,
+    JSON,
+    BigInteger,
+    Boolean,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
 )
-from sqlalchemy.orm import relationship, Mapped, mapped_column
-
-from .commit_github_issue_association import commit_github_issue_association_table
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from shared.db.base_class import Base
+
 # from shared.db.models.repository import Repository # Use string ref below
 # Import the association table explicitly IF needed elsewhere, but relationship handles it
 
 if TYPE_CHECKING:
-    from .repository import Repository # noqa: F401
-    from .github_issue import GitHubIssue # noqa: F401
+    from .github_issue import GitHubIssue  # noqa: F401
+    from .repository import Repository  # noqa: F401
+
 
 class CommitGuruMetric(Base):
-    __tablename__ = 'commit_guru_metrics'
+    __tablename__ = "commit_guru_metrics"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    repository_id: Mapped[int] = mapped_column(ForeignKey('repositories.id'), nullable=False, index=True)
+    repository_id: Mapped[int] = mapped_column(
+        ForeignKey("repositories.id"), nullable=False, index=True
+    )
     commit_hash: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
 
     # --- Contextual Information ---
@@ -29,17 +39,25 @@ class CommitGuruMetric(Base):
     author_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     author_email: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     author_date: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    author_date_unix_timestamp: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    author_date_unix_timestamp: Mapped[Optional[int]] = mapped_column(
+        BigInteger, nullable=True
+    )
     commit_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # --- Bug Linking & Keyword Info ---
-    is_buggy: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    is_buggy: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, index=True
+    )
     fix: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     # Renamed from fixes, holds hashes of commits *this commit* fixes (if it's a buggy commit)
-    fixing_commit_hashes: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    fixing_commit_hashes: Mapped[Optional[Dict[str, Any]]] = mapped_column(
+        JSON, nullable=True
+    )
 
     # --- Commit Information ---
-    files_changed: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), nullable=True)
+    files_changed: Mapped[Optional[List[str]]] = mapped_column(
+        ARRAY(String), nullable=True
+    )
 
     # --- Commit Guru Metrics ---
     ns: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
@@ -56,10 +74,10 @@ class CommitGuruMetric(Base):
     rexp: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     sexp: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
-
-
     # --- Relationships ---
-    repository: Mapped["Repository"] = relationship("Repository") # Add back_populates if needed on Repository
+    repository: Mapped["Repository"] = relationship(
+        "Repository"
+    )  # Add back_populates if needed on Repository
 
     # Many-to-Many relationship with GitHubIssue
     # Corrected secondary table name reference
@@ -67,11 +85,13 @@ class CommitGuruMetric(Base):
         "GitHubIssue",
         secondary="commit_github_issue_association",
         back_populates="commit_metrics",
-        lazy="selectin" # Or 'select' or 'joined' depending on query needs
+        lazy="selectin",  # Or 'select' or 'joined' depending on query needs
     )
 
     # --- Table Args ---
-    __table_args__ = (UniqueConstraint('repository_id', 'commit_hash', name='uq_commit_guru_metric'),)
+    __table_args__ = (
+        UniqueConstraint("repository_id", "commit_hash", name="uq_commit_guru_metric"),
+    )
 
     def __repr__(self):
         buggy_status = "Buggy" if self.is_buggy else "Not Buggy"
@@ -80,5 +100,7 @@ class CommitGuruMetric(Base):
         # issue_count = len(self.github_issues) if self.id else 0 # Check id avoids query before flush
         # issue_info = f" Issues linked: {issue_count}" if issue_count > 0 else ""
         # Avoid accessing lazy loaded relationship in repr
-        return (f"<CommitGuruMetric(repo={self.repository_id}, "
-                f"commit='{self.commit_hash[:7]}', {buggy_status} {fix_info})>")
+        return (
+            f"<CommitGuruMetric(repo={self.repository_id}, "
+            f"commit='{self.commit_hash[:7]}', {buggy_status} {fix_info})>"
+        )

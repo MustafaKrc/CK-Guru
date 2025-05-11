@@ -1,22 +1,26 @@
 # shared/db/models/ck_metric.py
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from shared.db.base_class import Base
+
 # Assuming Repository model is also in shared/db/models
 # from shared.db.models.repository import Repository # Not strictly needed for definition
+
 
 class CKMetric(Base):
     # NOTE: Attribute names use CamelCase to directly match CK tool output headers,
     # deviating from Python's standard snake_case convention for easier mapping.
     # Explicit Column("DbName", ...) is used to ensure DB column names also match CK headers.
     # Keywords ('class', 'type') are handled explicitly.
-    __tablename__ = 'ck_metrics'
+    __tablename__ = "ck_metrics"
 
     id = Column(Integer, primary_key=True, index=True)
-    repository_id = Column(Integer, ForeignKey('repositories.id'), nullable=False, index=True)
+    repository_id = Column(
+        Integer, ForeignKey("repositories.id"), nullable=False, index=True
+    )
     # Link back to the Repository model (optional but good practice)
-    repository = relationship("Repository") # Assumes you have a Repository model
+    repository = relationship("Repository")  # Assumes you have a Repository model
 
     commit_hash = Column(String, nullable=False, index=True)
 
@@ -85,10 +89,12 @@ class CKMetric(Base):
     logStatementsQty = Column("logStatementsQty", Integer, nullable=True)
 
     # --- Relationship (optional but useful) ---
-    repository = relationship("Repository") # Specify back_populates if needed
+    repository = relationship("Repository")  # Specify back_populates if needed
 
     __table_args__ = (
-        UniqueConstraint('repository_id', 'commit_hash', 'file', 'class', name='uq_ck_metric_key'),
+        UniqueConstraint(
+            "repository_id", "commit_hash", "file", "class", name="uq_ck_metric_key"
+        ),
         # You can add other indexes here if needed, e.g.:
         # Index('ix_ck_metric_repo_commit_file', 'repository_id', 'commit_hash', 'file'),
     )

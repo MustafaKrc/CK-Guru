@@ -1,31 +1,34 @@
 # worker/dataset/services/factories/repository_factory.py
 import logging
 from typing import Callable
+
 from sqlalchemy.orm import Session
 
 # Import interfaces and concrete implementations
 from services.interfaces import IRepositoryFactory
+from shared.core.config import settings
 from shared.repositories import (
+    BotPatternRepository,
     CKMetricRepository,
     CommitGuruMetricRepository,
-    GitHubIssueRepository,
     DatasetRepository,
+    GitHubIssueRepository,
     RepositoryRepository,
-    BotPatternRepository
 )
-from shared.core.config import settings
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
 
+
 class RepositoryFactory(IRepositoryFactory):
     """Provides instances of database repositories for the dataset worker."""
+
     def __init__(self, session_factory: Callable[[], Session]):
         self.session_factory = session_factory
         # Cache repository instances per factory instance
         self._guru_repo: CommitGuruMetricRepository | None = None
         self._ck_repo: CKMetricRepository | None = None
-        self._issue_repo: GitHubIssueRepository | None = None # Not needed?
+        self._issue_repo: GitHubIssueRepository | None = None  # Not needed?
         self._dataset_repo: DatasetRepository | None = None
         self._repository_repo: RepositoryRepository | None = None
         self._bot_pattern_repo: BotPatternRepository | None = None
