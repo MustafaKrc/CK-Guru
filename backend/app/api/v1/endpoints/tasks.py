@@ -2,6 +2,10 @@
 import logging
 from typing import Dict  # Import Any for result type hint
 
+from celery.exceptions import CeleryError
+from celery.result import AsyncResult
+from fastapi import APIRouter, HTTPException, Query, status
+
 # Import Celery app for revoke endpoint
 from app.core.celery_app import backend_celery_app as celery_app
 
@@ -9,10 +13,6 @@ from app.core.celery_app import backend_celery_app as celery_app
 from app.services.task_status_service import (  # Using Option 1 (Global Instance)
     task_status_service,
 )
-from celery.exceptions import CeleryError
-from celery.result import AsyncResult
-from fastapi import APIRouter, HTTPException, Query, status
-
 from shared import schemas
 from shared.core.config import settings
 

@@ -2,10 +2,10 @@
 import logging
 from typing import List, Optional
 
-# Import CRUD, Schemas, DB session
-from app.services.xai_service import XAIService
 from fastapi import APIRouter, Depends, Query
 
+# Import CRUD, Schemas, DB session
+from app.services.xai_service import XAIService
 from shared import schemas  # Import root schemas
 from shared.core.config import settings
 from shared.schemas.enums import XAIStatusEnum, XAITypeEnum

@@ -12,7 +12,6 @@ import s3fs
 
 # Import the new interface
 from services.interfaces import IArtifactService
-
 from shared.core.config import settings
 
 logger = logging.getLogger(__name__)

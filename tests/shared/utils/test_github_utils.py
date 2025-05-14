@@ -14,8 +14,6 @@ from requests.exceptions import ConnectionError, RequestException, Timeout
 from shared.utils import github_utils
 from shared.utils.github_utils import (
     GitHubAPIResponse,  # Import for type hinting and comparison
-)
-from shared.utils.github_utils import (
     GitHubIssueFetcher,
     extract_issue_ids,
     extract_repo_owner_name,

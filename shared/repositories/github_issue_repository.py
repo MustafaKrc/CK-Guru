@@ -30,7 +30,7 @@ class GitHubIssueRepository(BaseRepository[GitHubIssue]):
         self,
         repo_id: int,
         issue_number: int,
-        api_response: type["GitHubAPIResponse"],  # Pass the structured response
+        api_response: type["GitHubAPIResponse"],  # noqa: F821
     ) -> Optional[GitHubIssue]:
         """
         Updates or creates a GitHubIssue based on API response data.

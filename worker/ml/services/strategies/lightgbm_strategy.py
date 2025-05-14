@@ -4,10 +4,10 @@ from typing import Any, Dict, Optional, Type  # Added Optional
 
 import lightgbm as lgb  # Import LightGBM
 import pandas as pd
-from services.interfaces.i_artifact_service import IArtifactService
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 
+from services.interfaces.i_artifact_service import IArtifactService
 from shared.schemas.enums import ModelTypeEnum
 
 from .base_strategy import BaseModelStrategy, TrainResult

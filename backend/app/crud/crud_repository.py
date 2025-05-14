@@ -53,22 +53,10 @@ async def get_repository_by_git_url(
     db: AsyncSession, git_url: str
 ) -> Optional[Repository]:
     """Get a single repository by its Git URL."""
-    # Normalize URL slightly? Maybe remove trailing .git? Be careful.
-    # Let's assume exact match for now.
-    normalized_url = (
-        git_url.removesuffix(".git") if git_url.endswith(".git") else git_url
-    )
-    # Query using both original and potentially normalized versions if needed, or stick to one.
-    # Sticking to exact match based on schema for now.
+
     stmt = select(Repository).filter(Repository.git_url == git_url)
     result = await db.execute(stmt)
     repo = result.scalars().first()
-    # Optional: If not found with exact match, try normalized?
-    # if not repo and normalized_url != git_url:
-    #     stmt_norm = select(Repository).filter(Repository.git_url == normalized_url)
-    #     result_norm = await db.execute(stmt_norm)
-    #     repo = result_norm.scalars().first()
-    #     if repo: logger.debug(f"Found repo using normalized URL {normalized_url}")
 
     return repo
 

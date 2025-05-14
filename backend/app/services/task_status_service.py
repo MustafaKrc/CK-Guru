@@ -2,12 +2,14 @@
 import logging
 from typing import Any, Optional
 
+from app.core.celery_app import backend_celery_app as celery_app_instance
 from celery import Celery
 from celery.result import AsyncResult
 
 from shared import schemas  # Import your response schema
 from shared.core.config import settings
-from shared.schemas.task import (  # Ensure enum is accessible
+from shared.schemas.enums import JobStatusEnum
+from shared.schemas.task import (
     TaskStatusEnum,
 )
 
@@ -182,16 +184,4 @@ class TaskStatusService:
         )
 
 
-# --- Service Instantiation (Choose one approach) ---
-
-# Option 1: Simple Global Instance (Easiest for now)
-# Import the actual Celery app instance used by the backend to send tasks
-from app.core.celery_app import backend_celery_app as celery_app_instance
-
 task_status_service = TaskStatusService(celery_app_instance)
-
-# Option 2: FastAPI Dependency (More complex, better for testability if service needs state)
-# def get_task_status_service() -> TaskStatusService:
-#    # This might involve getting celery_app from app state or a global
-#    from app.core.celery_app import backend_celery_app as celery_app_instance
-#    return TaskStatusService(celery_app_instance)

@@ -5,7 +5,6 @@ from services.context import DatasetContext
 
 # Import interfaces and concrete services/repositories
 from services.interfaces import IDatasetGeneratorStep, IOutputWriter, IRepositoryFactory
-
 from shared.core.config import settings  # For bucket name etc.
 from shared.schemas.enums import DatasetStatusEnum
 from shared.services.interfaces import IJobStatusUpdater
@@ -31,8 +30,6 @@ class WriteOutputStep(IDatasetGeneratorStep):
         log_prefix = f"Task {context.task_instance.request.id} - Step [{self.name}]"
         step_logger = StepLogger(logger, log_prefix=log_prefix)
         step_logger.info("Finalizing and writing output...")
-
-        dataset_repo = repo_factory.get_dataset_repo()  # Get repo for update
 
         if context.final_dataframe is None or context.final_dataframe.empty:
             msg = "Final DataFrame is empty. Cannot write output."

@@ -15,8 +15,6 @@ from shared.db.models.bot_pattern import PatternTypeEnum
 # Import functions and classes to test
 from worker.dataset.services.dataset_steps import (
     CK_METRIC_COLUMNS,  # Import for checking columns
-)
-from worker.dataset.services.dataset_steps import (
     calculate_delta_metrics,
     get_bot_filter_condition,
     get_parent_ck_metrics,
@@ -47,8 +45,6 @@ def check_sql(condition, expected_substrings, disallowed_substrings=None):
 
     compiled = condition.compile(dialect=postgresql.dialect())
     sql_string = str(compiled).lower()
-    params = compiled.params
-    # print(f"\nSQL: {sql_string}\nParams: {params}\n") # For debugging
     for sub in expected_substrings:
         assert sub.lower() in sql_string
     if disallowed_substrings:
@@ -252,8 +248,8 @@ def test_get_parent_metrics_some_not_found_db(mock_db_session):
     result_df = get_parent_ck_metrics(mock_db_session, input_df)
 
     assert len(result_df) == 2
-    assert result_df.loc[input_df.index[0], "_parent_metric_found"] == True
-    assert result_df.loc[input_df.index[1], "_parent_metric_found"] == False
+    assert result_df.loc[input_df.index[0], "_parent_metric_found"]
+    assert not result_df.loc[input_df.index[1], "_parent_metric_found"]
     assert result_df.loc[input_df.index[0], "parent_loc"] == 10
     assert pd.isna(
         result_df.loc[input_df.index[1], "parent_loc"]
@@ -278,7 +274,7 @@ def test_get_parent_metrics_no_parent_hash(mock_db_session):
     result_df = get_parent_ck_metrics(mock_db_session, input_df)
 
     assert len(result_df) == 1
-    assert result_df.loc[input_df.index[0], "_parent_metric_found"] == False
+    assert not result_df.loc[input_df.index[0], "_parent_metric_found"]
     assert pd.isna(result_df.loc[input_df.index[0], "parent_loc"])
     mock_db_session.execute.assert_not_called()  # Should not query DB if no lookup keys
 

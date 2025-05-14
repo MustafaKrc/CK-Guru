@@ -115,7 +115,7 @@ def downgrade() -> None:
                     bot_patterns_table.c.pattern_type.in_(
                         pattern_types
                     ),  # Match type too
-                    bot_patterns_table.c.is_exclusion == False,  # Match exclusion flag
+                    not bot_patterns_table.c.is_exclusion,  # Match exclusion flag
                 )
             )
         )

@@ -5,9 +5,9 @@ from inspect import Parameter, signature
 from typing import Any, Dict, NamedTuple, Set, Type
 
 import pandas as pd
-from services.interfaces import IArtifactService
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
+from services.interfaces import IArtifactService
 from shared.schemas.enums import ModelTypeEnum
 
 logger = logging.getLogger(__name__)

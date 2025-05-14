@@ -3,12 +3,12 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import field_validator  # For Pydantic v2 field_validator
-from pydantic import model_validator  # For Pydantic v2 model_validator
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    field_validator,  # For Pydantic v2 field_validator
+    model_validator,  # For Pydantic v2 model_validator
 )
 
 from shared.core.config import settings

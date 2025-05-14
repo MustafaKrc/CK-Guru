@@ -6,7 +6,6 @@ import subprocess
 from typing import Dict, List, Mapping, Optional, Set
 
 from services.interfaces import IGitService
-
 from shared.core.config import settings
 
 logger = logging.getLogger(__name__)

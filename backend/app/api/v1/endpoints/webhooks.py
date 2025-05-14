@@ -4,7 +4,6 @@ import hmac
 import logging
 from typing import Any, Dict, Optional
 
-from app import crud
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -96,97 +95,7 @@ async def handle_github_webhook(
     db: AsyncSession = Depends(get_async_db_session),
 ):
     """Handles incoming GitHub webhook events."""
-    logger.info(f"Received GitHub webhook. Event: '{x_github_event}'")
 
-    # --- Handle only 'push' events for now ---
-    if x_github_event != "push":
-        logger.info(f"Ignoring non-push event: '{x_github_event}'")
-        return {"message": f"Event '{x_github_event}' ignored."}
-
-    # --- Parse Push Payload ---
-    try:
-        # Use Pydantic model for basic validation (optional but good)
-        # push_data = schemas.GitHubPushPayload.model_validate(payload)
-        # Or access dict directly
-        repo_info = payload.get("repository", {})
-        repo_url = repo_info.get("html_url")
-        commit_hash = payload.get(
-            "after"
-        )  # 'after' contains the latest commit hash in the push
-
-        if (
-            not repo_url
-            or not commit_hash
-            or commit_hash == "0000000000000000000000000000000000000000"
-        ):
-            logger.warning(
-                f"Ignoring push event: Missing repo URL or commit hash. URL='{repo_url}', Commit='{commit_hash}'"
-            )
-            return {"message": "Push event ignored (missing data or branch deletion)."}
-
-        logger.info(
-            f"Processing push event for repo: {repo_url}, commit: {commit_hash}"
-        )
-
-    except Exception as e:
-        logger.error(f"Failed to parse webhook payload: {e}", exc_info=True)
-        # Return 400 Bad Request if payload is malformed
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid webhook payload format.",
-        )
-
-    # --- Async Task Triggering ---
-    # Define the function to run in the background
-    async def run_inference_trigger(repo_url: str, commit_hash: str):
-        async with (
-            get_async_db_session() as async_db
-        ):  # Get new session for background task
-            try:
-                # 1. Lookup Repository ID
-                repo = await crud.crud_repository.get_repository_by_git_url(
-                    async_db, git_url=repo_url
-                )
-                if not repo:
-                    logger.error(
-                        f"Webhook: Repository with URL '{repo_url}' not found in database."
-                    )
-                    # Don't raise HTTPException here, just log error
-                    return  # Stop processing if repo not managed
-
-                repo_id = repo.id
-
-                # 2. Determine ML Model ID (Using default from settings for now)
-                # TODO: Implement more sophisticated model selection logic if needed
-                ml_model_id = settings.DEFAULT_WEBHOOK_MODEL_ID
-                logger.info(
-                    f"Webhook: Using default model ID {ml_model_id} for repo {repo_id}"
-                )
-                # Optionally add a DB check for the default model ID here
-
-                # 3. Trigger Pipeline
-                orchestrator = InferenceOrchestrator()
-                await orchestrator.trigger_inference_pipeline(
-                    db=async_db,
-                    repo_id=repo_id,
-                    commit_hash=commit_hash,
-                    ml_model_id=ml_model_id,
-                    trigger_source="webhook",
-                )
-                logger.info(
-                    f"Webhook: Successfully queued inference pipeline for repo {repo_id}, commit {commit_hash[:7]}"
-                )
-
-            except Exception as bg_e:
-                # Log any error during the background processing
-                logger.error(
-                    f"Webhook background task failed for repo {repo_url}, commit {commit_hash}: {bg_e}",
-                    exc_info=True,
-                )
-                # Note: We typically don't return errors to GitHub from the background task
-
-    # Add the trigger function to background tasks
-    background_tasks.add_task(run_inference_trigger, repo_url, commit_hash)
-
-    # Return 202 Accepted immediately
-    return {"message": "Webhook received and inference process initiated."}
+    return {
+        "message": "Not implemented.",
+    }

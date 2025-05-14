@@ -3,7 +3,6 @@ import logging
 
 from services.context import DatasetContext
 from services.interfaces import IDatasetGeneratorStep
-
 from shared.utils.pipeline_logging import StepLogger
 
 logger = logging.getLogger(__name__)
@@ -40,7 +39,7 @@ class DropMissingParentsStep(IDatasetGeneratorStep):
 
         try:
             # Keep rows WHERE parent WAS found (flag is True)
-            context.processed_dataframe = df[df["_parent_metric_found"] == True].copy()
+            context.processed_dataframe = df[df["_parent_metric_found"]].copy()
             # Now drop the flag column as it's served its purpose
             context.processed_dataframe.drop(
                 columns=["_parent_metric_found"], inplace=True, errors="ignore"

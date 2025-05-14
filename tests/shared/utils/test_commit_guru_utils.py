@@ -12,8 +12,6 @@ import pytest
 from shared.utils import commit_guru_utils
 from shared.utils.commit_guru_utils import (
     CommitFile,  # Import helper classes if needed for state setup
-)
-from shared.utils.commit_guru_utils import (
     DevExperienceMetrics,
     FileUpdateResult,
     GitCommitLinker,
@@ -684,7 +682,6 @@ class TestGitCommitLinker:
         """Test that blame excludes corrective commit and start commit."""
         mock_run_cmd, mock_find_commit = patch_linker_deps
         corrective_hash = "c0rrect1v3"
-        start_commit = f"{corrective_hash}^"  # Assume this hash is 'p4r3nt_h4sh'
         # Modify blame output to include corrective and start hash
         blame_output_with_self = f"""
 {corrective_hash} 10 10 1

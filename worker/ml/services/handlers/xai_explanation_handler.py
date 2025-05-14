@@ -5,10 +5,10 @@ from typing import Any, Dict, List, Optional, Tuple  # Added Tuple
 import pandas as pd
 from celery import Task
 from celery.exceptions import Ignore, Reject
+
 from services.artifact_service import ArtifactService
 from services.factories.xai_strategy_factory import XAIStrategyFactory
 from services.strategies.base_xai_strategy import BaseXAIStrategy
-
 from shared.exceptions import InternalError
 from shared.repositories import (
     DatasetRepository,

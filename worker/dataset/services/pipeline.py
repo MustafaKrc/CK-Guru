@@ -45,9 +45,6 @@ class PipelineRunner:
                 self.current_step_instance = self.step_registry.get_step(step_class)
                 step_key = self.current_step_instance.name  # Use step's name
 
-                step_log_prefix = (
-                    f"Task {context.task_instance.request.id} - Step [{step_key}]"
-                )
                 pipeline_logger.info(
                     f"Executing step {i+1}/{total_steps} [{step_key}]..."
                 )

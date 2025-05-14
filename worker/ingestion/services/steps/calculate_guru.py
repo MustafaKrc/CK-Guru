@@ -3,6 +3,7 @@ import logging
 from typing import List
 
 from pydantic import ValidationError
+
 from services.commit_state_tracker import (
     DeveloperExperienceTracker,
     DevExperienceMetrics,
@@ -16,7 +17,6 @@ from services.git_log_parser import (
 )
 from services.interfaces import IGitService
 from services.metric_calculator import CommitMetricsCalculator
-
 from shared.core.config import settings
 from shared.schemas.ingestion_data import CommitGuruMetricPayload
 

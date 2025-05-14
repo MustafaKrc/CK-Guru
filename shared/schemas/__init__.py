@@ -38,13 +38,11 @@ from .inference import (
 )
 from .inference_job import (
     InferenceJobBase,
+    InferenceJobRead,
+    InferenceJobUpdate,
 )
 from .inference_job import (
     InferenceJobCreateInternal as InferenceJobCreate,  # Use alias for creation
-)
-from .inference_job import (
-    InferenceJobRead,
-    InferenceJobUpdate,
 )
 from .ml_model import MLModelBase, MLModelCreate, MLModelRead, MLModelUpdate
 from .repo_api_client import RepoApiClientResponse, RepoApiResponseStatus
@@ -93,7 +91,8 @@ __all__ = [
     "PrunerTypeEnum",
     "ModelTypeEnum",
     "XAITypeEnum",
-    "XAIStatusEnum"
+    "XAIStatusEnum",
+    "TaskStatusEnum",
     # Schemas
     "RepositoryBase",
     "RepositoryCreate",
@@ -139,6 +138,25 @@ __all__ = [
     "ManualInferenceRequest",
     "InferenceTriggerResponse",
     "GitHubPushPayload",
-    "RepoAPIResponseStatus",
+    "RepoApiResponseStatus",
     "RepoApiClientResponse",
+    "CounterfactualExample",
+    "CounterfactualResultData",
+    "DecisionPathNode",
+    "DecisionPathEdge",
+    "DecisionPathResultData",
+    "FeatureImportanceResultData",
+    "FeatureImportanceValue",
+    "FeatureSHAPValue",
+    "FilePredictionDetail",
+    "InstanceCounterfactualResult",
+    "InstanceDecisionPath",
+    "InstanceLIMEResult",
+    "InstanceSHAPResult",
+    "LIMEResultData",
+    "SHAPResultData",
+    "XAIResultBase",
+    "XAIResultCreate",
+    "XAIResultRead",
+    "XAIResultUpdate",
 ]

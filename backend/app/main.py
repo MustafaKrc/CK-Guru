@@ -1,8 +1,9 @@
-from app.api.v1.router import api_router
 from fastapi import FastAPI, status
 from fastapi.logger import logger
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
+
+from app.api.v1.router import api_router
 
 # --- Metadata for OpenAPI Docs ---
 description = """

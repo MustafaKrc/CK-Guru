@@ -45,7 +45,6 @@ class RuleBasedCleaningService(ICleaningService):  # Inherit directly from inter
         Returns a validated Pydantic model instance or None on failure.
         """
         param_fields = {}
-        has_errors = False
         for param_def in rule_params_def:
             field_type: Type = Any  # Default type
             if param_def.type == "integer":

@@ -227,7 +227,7 @@ class Rule2RemoveRecentCleanLastChange(CleaningRuleBase):
         mask_is_last_for_class = (
             df["author_date_unix_timestamp"] == df["last_class_time"]
         )
-        mask_is_clean = df["is_buggy"] == False
+        mask_is_clean = not df["is_buggy"]
         mask_is_recent = (last_overall_time - df["author_date_unix_timestamp"]) < gap
 
         mask_to_drop = mask_is_last_for_class & mask_is_clean & mask_is_recent
@@ -535,7 +535,7 @@ class Rule12RemoveMarginalChange(CleaningRuleBase):
         if d_cols and "is_buggy" in df.columns:
             total_change = df[d_cols].fillna(0).abs().sum(axis=1)
             # Keep rows where change > threshold OR the row is buggy
-            mask = (total_change > threshold) | (df["is_buggy"] == True)
+            mask = (total_change > threshold) | (df["is_buggy"])
             df_clean = df[mask]
             dropped = initial_len - df_clean.shape[0]
             if dropped > 0:
@@ -573,7 +573,7 @@ class Rule13RemoveMinimalChange(CleaningRuleBase):
         if d_cols and "is_buggy" in df.columns:
             total_change = df[d_cols].fillna(0).abs().sum(axis=1)
             # Keep rows where change >= threshold OR the row is buggy
-            mask = (total_change >= threshold) | (df["is_buggy"] == True)
+            mask = (total_change >= threshold) | (df["is_buggy"])
             df_clean = df[mask]
             dropped = initial_len - df_clean.shape[0]
             if dropped > 0:
@@ -610,9 +610,7 @@ class Rule14FilterLargeCommits(CleaningRuleBase):
         required_cols = ["changed_file_count", "is_buggy"]
         if all(col in df.columns for col in required_cols):
             # Keep rows where file count <= threshold OR the row is buggy
-            mask = (df["changed_file_count"].fillna(0) <= threshold) | (
-                df["is_buggy"] == True
-            )
+            mask = (df["changed_file_count"].fillna(0) <= threshold) | (df["is_buggy"])
             df_clean = df[mask]
             dropped = initial_len - df_clean.shape[0]
             if dropped > 0:

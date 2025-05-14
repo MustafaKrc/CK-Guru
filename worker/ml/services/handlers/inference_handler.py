@@ -4,8 +4,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-from services.artifact_service import ArtifactService
 
+from services.artifact_service import ArtifactService
 from shared.core.config import settings
 from shared.db.models import InferenceJob
 from shared.repositories import (

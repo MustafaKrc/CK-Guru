@@ -52,7 +52,7 @@ class CommitGuruMetricRepository(BaseRepository[CommitGuruMetric]):
                 # Use None (or null()) for missing values
                 row.setdefault(col, None)
         index_elements = ["repository_id", "commit_hash"]  # Unique constraint fields
-        stmt = pg_insert(CommitGuruMetric).values(commit_metrics)
+        _ = pg_insert(CommitGuruMetric).values(commit_metrics)
 
         # Unique key for ON‑CONFLICT
         index_elements = ["repository_id", "commit_hash"]

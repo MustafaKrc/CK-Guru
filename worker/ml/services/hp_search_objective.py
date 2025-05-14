@@ -6,7 +6,6 @@ import numpy as np
 import optuna
 import pandas as pd
 from optuna.trial import Trial  # Explicit import of Trial
-from services.interfaces import IArtifactService
 from sklearn.metrics import (
     accuracy_score,
     f1_score,
@@ -17,6 +16,7 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 
+from services.interfaces import IArtifactService
 from shared.schemas.enums import ModelTypeEnum, ObjectiveMetricEnum
 from shared.schemas.hp_search_job import HPSuggestion
 

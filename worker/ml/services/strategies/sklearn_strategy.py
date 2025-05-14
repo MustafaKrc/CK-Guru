@@ -3,7 +3,6 @@ import logging
 from typing import Any, Dict, Type
 
 import pandas as pd
-from services.interfaces import IArtifactService
 from sklearn.ensemble import (
     AdaBoostClassifier,
     GradientBoostingClassifier,
@@ -15,6 +14,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 
+from services.interfaces import IArtifactService
 from shared.schemas.enums import ModelTypeEnum
 
 from .base_strategy import BaseModelStrategy, TrainResult

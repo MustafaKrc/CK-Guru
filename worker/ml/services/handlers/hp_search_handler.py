@@ -4,8 +4,8 @@ from typing import Any, Dict, Optional, Tuple  # Added Tuple
 
 import optuna
 import pandas as pd
-from services.artifact_service import ArtifactService
 
+from services.artifact_service import ArtifactService
 from shared.core.config import settings
 from shared.db.models import HyperparameterSearchJob  # DB model
 from shared.repositories import (

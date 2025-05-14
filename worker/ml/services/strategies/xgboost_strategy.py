@@ -4,10 +4,10 @@ from typing import Any, Dict, Optional, Type
 
 import pandas as pd
 import xgboost as xgb  # Import XGBoost
-from services.interfaces.i_artifact_service import IArtifactService
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder  # For handling string labels if any
 
+from services.interfaces.i_artifact_service import IArtifactService
 from shared.schemas.enums import ModelTypeEnum  # Though model_type is passed
 
 from .base_strategy import BaseModelStrategy, TrainResult
@@ -36,9 +36,7 @@ class XGBoostStrategy(BaseModelStrategy):
         if "objective" not in self.model_config:
             # Assuming binary classification for defect prediction
             self.model_config["objective"] = "binary:logistic"
-            logger.info(
-                "XGBoostStrategy: Defaulting 'objective' to 'binary:logistic'."
-            )
+            logger.info("XGBoostStrategy: Defaulting 'objective' to 'binary:logistic'.")
 
     def _get_model_class(self) -> Type:
         """Return the XGBoost classifier class."""

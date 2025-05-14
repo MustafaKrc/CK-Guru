@@ -71,7 +71,7 @@ def ingest_features_for_inference_task(
 
         # --- Execute the Pipeline ---
         logger.info(f"Task {task_id}: === Executing Feature Extraction Pipeline ===")
-        final_context = runner.run(context)
+        _ = runner.run(context)
         logger.info(f"Task {task_id}: === Feature Extraction Pipeline Finished ===")
 
         # --- Dispatch Prediction Task (on success) ---

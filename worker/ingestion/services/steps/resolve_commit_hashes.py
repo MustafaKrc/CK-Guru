@@ -2,7 +2,6 @@
 import logging
 
 from services.git_service import GitCommandError, GitRefNotFoundError, GitService
-
 from shared.core.config import settings
 
 from .base import IngestionContext, IngestionStep

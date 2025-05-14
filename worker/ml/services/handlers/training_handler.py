@@ -3,8 +3,8 @@ import logging
 from typing import Any, Dict, Optional, Tuple
 
 import pandas as pd
-from services.artifact_service import ArtifactService
 
+from services.artifact_service import ArtifactService
 from shared.core.config import settings
 from shared.db.models import TrainingJob
 from shared.repositories import (

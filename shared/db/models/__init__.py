@@ -10,3 +10,20 @@ from .ml_model import MLModel
 from .repository import Repository
 from .training_job import JobStatusEnum, TrainingJob
 from .xai_result import XAIResult
+
+__all__ = [
+    "BotPattern",
+    "PatternTypeEnum",
+    "CKMetric",
+    "CleaningRuleDefinitionDB",
+    "CommitGuruMetric",
+    "Dataset",
+    "GitHubIssue",
+    "HyperparameterSearchJob",
+    "InferenceJob",
+    "JobStatusEnum",
+    "MLModel",
+    "Repository",
+    "TrainingJob",
+    "XAIResult",
+]

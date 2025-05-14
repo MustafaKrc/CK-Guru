@@ -2,10 +2,10 @@
 import logging
 from typing import List
 
-from app import crud
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import crud
 from shared import schemas
 from shared.core.config import settings
 from shared.db_session import get_async_db_session
