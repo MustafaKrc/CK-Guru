@@ -2,8 +2,6 @@
 import logging
 from typing import Any, Callable, Dict, Type
 
-from sqlalchemy.orm import Session
-
 from services.bug_linker import GitCommitLinker
 from services.ck_runner_service import CKRunnerService
 from services.factories import RepositoryFactory
@@ -28,6 +26,8 @@ from services.steps.persist_ck import PersistCKMetricsStep
 from services.steps.persist_guru import PersistCommitGuruMetricsStep
 from services.steps.prepare_repo import PrepareRepositoryStep
 from services.steps.resolve_commit_hashes import ResolveCommitHashesStep
+from sqlalchemy.orm import Session
+
 from shared.core.config import settings
 
 # from services.gitlab_client import GitLabClient # Hypothetical future client
@@ -111,7 +111,7 @@ class DependencyProvider:
         # elif "gitlab.com" in git_url:
         #     client = GitLabClient()
         else:
-            raise ValueError(f"Unsupported provider for URL: {git_url}")
+            raise ValueError(f"Unsupported provider for URL: {context.git_url}")
 
         self._cached_services[IRepositoryApiClient] = client
         return client

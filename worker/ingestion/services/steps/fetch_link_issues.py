@@ -3,6 +3,7 @@ import logging
 from typing import Dict, List
 
 from services.interfaces import IRepositoryApiClient
+
 from shared.core.config import settings
 from shared.repositories import CommitGuruMetricRepository, GitHubIssueRepository
 

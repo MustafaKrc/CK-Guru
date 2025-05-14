@@ -3,8 +3,8 @@ import logging
 from typing import List
 
 from pydantic import ValidationError
-
 from services.interfaces import ICKRunnerService, IGitService
+
 from shared.core.config import settings
 from shared.repositories import CKMetricRepository
 from shared.schemas.ingestion_data import CKMetricPayload

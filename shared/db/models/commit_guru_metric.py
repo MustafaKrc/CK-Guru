@@ -17,8 +17,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from shared.db.base_class import Base
 
-# from shared.db.models.repository import Repository # Use string ref below
-# Import the association table explicitly IF needed elsewhere, but relationship handles it
+# stop formatters deleting this import
+# noinspection PyUnresolvedReferences
+from .commit_github_issue_association import (  # noqa: F401
+    commit_github_issue_association_table,
+)
 
 if TYPE_CHECKING:
     from .github_issue import GitHubIssue  # noqa: F401

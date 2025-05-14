@@ -4,6 +4,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from services.bug_linker import GitCommitLinker
 from services.git_service import GitService
+
 from shared.core.config import settings
 
 # Import Repositories

@@ -1,7 +1,7 @@
 # worker/ingestion/services/strategies/strategies.py
 import logging
 from abc import ABC, abstractmethod
-from typing import List, Type
+from typing import TYPE_CHECKING, List, Type
 
 from services.steps.calculate_ck import CalculateCKMetricsStep
 from services.steps.calculate_guru import CalculateCommitGuruMetricsStep
@@ -29,6 +29,9 @@ STEP_CALCULATE_CK = CalculateCKMetricsStep
 STEP_PERSIST_CK = PersistCKMetricsStep
 STEP_RESOLVE_HASHES = ResolveCommitHashesStep
 STEP_ENSURE_COMMITS = EnsureCommitsExistLocallyStep
+
+if TYPE_CHECKING:
+    from services.steps.base import IngestionStep  # Import for type hinting only
 
 
 class IngestionStrategy(ABC):

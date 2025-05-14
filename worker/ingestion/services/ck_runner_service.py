@@ -5,8 +5,8 @@ import tempfile
 from pathlib import Path
 
 import pandas as pd
-
 from services.interfaces.i_ck_runner_service import ICKRunnerService
+
 from shared.core.config import settings
 
 logger = logging.getLogger(__name__)

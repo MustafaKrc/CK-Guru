@@ -2,10 +2,10 @@
 import logging
 from typing import Callable
 
-from sqlalchemy.orm import Session
-
 # Import interfaces and concrete implementations
 from services.interfaces import IRepositoryFactory
+from sqlalchemy.orm import Session
+
 from shared.core.config import settings
 from shared.repositories import (
     BotPatternRepository,

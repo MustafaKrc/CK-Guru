@@ -1,11 +1,12 @@
 # worker/ml/services/hp_search_objective.py
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, List  # Added List
 
 import numpy as np
 import optuna
 import pandas as pd
-from optuna.trial import Trial
+from optuna.trial import Trial  # Explicit import of Trial
+from services.interfaces import IArtifactService
 from sklearn.metrics import (
     accuracy_score,
     f1_score,
@@ -16,9 +17,8 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 
-from services.interfaces import IArtifactService
-from shared.schemas.enums import ModelTypeEnum
-from shared.schemas.hp_search_job import ObjectiveMetricEnum
+from shared.schemas.enums import ModelTypeEnum, ObjectiveMetricEnum
+from shared.schemas.hp_search_job import HPSuggestion
 
 from .factories.model_strategy_factory import create_model_strategy
 
@@ -32,57 +32,67 @@ class Objective:
         self,
         X: pd.DataFrame,
         y: pd.Series,
-        hp_space_config: list,
-        base_job_config: dict,
-        artifact_service: IArtifactService,  # Add artifact_service parameter (use Interface)
+        model_type_enum: ModelTypeEnum,
+        hp_space_config: List[HPSuggestion],
+        base_job_config: Dict[str, Any],
+        artifact_service: IArtifactService,
     ):
         self.X = X
         self.y = y
+        self.model_type_enum = model_type_enum  # Store model type
         self.hp_space_config = hp_space_config
-        self.base_job_config = base_job_config
-        # Store the injected artifact service
-        self.artifact_service: IArtifactService = artifact_service
+        self.base_job_config = base_job_config  # This is HPSearchConfig from DB
+        self.artifact_service = artifact_service  # Store artifact service
+
+        # Extract Optuna-specific config from the base_job_config
         self.optuna_config = base_job_config.get("optuna_config", {})
+        if not isinstance(self.optuna_config, dict):  # Ensure it's a dict
+            logger.warning(
+                "optuna_config in base_job_config is not a dict. Using empty dict."
+            )
+            self.optuna_config = {}
 
-        # --- Model Type Enum Handling (remains the same) ---
-        model_type_value = base_job_config.get("model_type")
-        if not model_type_value:
-            raise ValueError("Objective requires 'model_type'")
-        try:
-            self.model_type_enum = ModelTypeEnum(model_type_value)
-        except ValueError:
-            raise ValueError(f"Invalid 'model_type' value '{model_type_value}'.")
-
-        self.objective_metric = self.optuna_config.get(
+        self.objective_metric_str = self.optuna_config.get(
             "objective_metric", ObjectiveMetricEnum.F1_WEIGHTED.value
         )
+        try:
+            self.objective_metric_enum = ObjectiveMetricEnum(self.objective_metric_str)
+        except ValueError:
+            logger.warning(
+                f"Invalid objective_metric '{self.objective_metric_str}'. Defaulting to F1_WEIGHTED."
+            )
+            self.objective_metric_enum = ObjectiveMetricEnum.F1_WEIGHTED
+            self.objective_metric_str = self.objective_metric_enum.value
+
         self.cv_folds = self.optuna_config.get("hp_search_cv_folds", 3)
-        self.random_seed = base_job_config.get("random_seed", 42)
+        # Random seed for CV split, not necessarily for model instantiation within trial
+        self.cv_random_seed = base_job_config.get("random_seed", 42)
         self.scorer = self._create_scorer()
 
         logger.debug(
-            f"HP Search Objective initialized. Metric: {self.objective_metric}, "
-            f"CV Folds: {self.cv_folds}, Seed: {self.random_seed}, "
+            f"HP Search Objective initialized. Metric: {self.objective_metric_str}, "
+            f"CV Folds: {self.cv_folds}, CV Seed: {self.cv_random_seed}, "
             f"Model Type: {self.model_type_enum.value}"
         )
 
     def _create_scorer(self):
-        """Creates the scikit-learn scorer."""
-        # --- Logic remains the same ---
-        metric = self.objective_metric.lower()
-        logger.debug(f"Creating scorer for metric: {metric}")
-        maximize_metrics = {m.value for m in ObjectiveMetricEnum}
-        greater_is_better = metric in maximize_metrics
+        """Creates the scikit-learn scorer based on self.objective_metric_enum."""
+        metric_enum = self.objective_metric_enum
+        logger.debug(f"Creating scorer for metric: {metric_enum.value}")
+
+        # For classification, most metrics are maximized.
+        # If you add regression metrics later, this might need adjustment.
+        greater_is_better = True
 
         try:
-            if metric == ObjectiveMetricEnum.F1_WEIGHTED.value:
+            if metric_enum == ObjectiveMetricEnum.F1_WEIGHTED:
                 return make_scorer(
                     f1_score,
                     average="weighted",
                     zero_division=0,
                     greater_is_better=greater_is_better,
                 )
-            elif metric == ObjectiveMetricEnum.AUC.value:
+            elif metric_enum == ObjectiveMetricEnum.AUC:
                 return make_scorer(
                     roc_auc_score,
                     needs_proba=True,
@@ -90,193 +100,239 @@ class Objective:
                     multi_class="ovr",
                     greater_is_better=greater_is_better,
                 )
-            elif metric == ObjectiveMetricEnum.PRECISION_WEIGHTED.value:
+            elif metric_enum == ObjectiveMetricEnum.PRECISION_WEIGHTED:
                 return make_scorer(
                     precision_score,
                     average="weighted",
                     zero_division=0,
                     greater_is_better=greater_is_better,
                 )
-            elif metric == ObjectiveMetricEnum.RECALL_WEIGHTED.value:
+            elif metric_enum == ObjectiveMetricEnum.RECALL_WEIGHTED:
                 return make_scorer(
                     recall_score,
                     average="weighted",
                     zero_division=0,
                     greater_is_better=greater_is_better,
                 )
-            elif metric == ObjectiveMetricEnum.ACCURACY.value:
+            elif metric_enum == ObjectiveMetricEnum.ACCURACY:
                 return make_scorer(accuracy_score, greater_is_better=greater_is_better)
-            else:
-                logger.warning(
-                    f"Unsupported metric '{self.objective_metric}'. Defaulting to F1 Weighted."
+            else:  # Should not happen due to enum validation
+                logger.error(
+                    f"Scorer creation: Unsupported metric enum '{metric_enum}'. This is a bug."
                 )
-                self.objective_metric = ObjectiveMetricEnum.F1_WEIGHTED.value
-                return make_scorer(
-                    f1_score,
-                    average="weighted",
-                    zero_division=0,
-                    greater_is_better=True,
-                )
+                raise ValueError(f"Unsupported objective metric: {metric_enum.value}")
         except Exception as e:
-            raise ValueError(f"Could not create scorer for metric '{metric}'") from e
+            raise ValueError(
+                f"Could not create scorer for metric '{metric_enum.value}'"
+            ) from e
 
     def _suggest_hyperparameters(self, trial: Trial) -> Dict[str, Any]:
-        """Suggests hyperparameters for the trial."""
-        # --- Logic remains the same ---
+        """
+        Suggests hyperparameters for the trial.
+        Assumes self.hp_space_config contains dicts that have already passed
+        HPSuggestion Pydantic validation.
+        """
         suggested_params = {}
-        logger.debug(f"Trial {trial.number}: Suggesting parameters...")
+        logger.debug(
+            f"Trial {trial.number}: Suggesting parameters from (pre-validated) hp_space_config..."
+        )
         try:
-            for param_conf in self.hp_space_config:
-                name = param_conf["param_name"]
-                suggest_type = param_conf["suggest_type"]
-                # ... (rest of suggestion logic) ...
+            for (
+                param_conf_data
+            ) in self.hp_space_config:  # param_conf_data is a dict here
+                name = param_conf_data["param_name"]
+                # suggest_type is already validated and normalized by HPSuggestion's field_validator
+                suggest_type = param_conf_data["suggest_type"]
+
                 if suggest_type == "categorical":
-                    choices = param_conf.get("choices")
-                    if choices is None:
-                        raise ValueError(f"'choices' required for '{name}'")
-                    suggested_params[name] = trial.suggest_categorical(name, choices)
+                    # 'choices' is guaranteed to be valid and present by Pydantic HPSuggestion validation
+                    choices_val = param_conf_data["choices"]
+                    suggested_params[name] = trial.suggest_categorical(
+                        name, choices_val
+                    )
                 elif suggest_type == "int":
-                    low, high = param_conf.get("low"), param_conf.get("high")
-                    if low is None or high is None:
-                        raise ValueError(f"'low'/'high' required for '{name}'")
-                    step = param_conf.get("step")
-                    log = param_conf.get("log", False)
-                    if step is not None:
-                        step = int(step)
+                    # 'low', 'high' are guaranteed valid; 'step' is None or positive int
+                    low_val = int(param_conf_data["low"])
+                    high_val = int(param_conf_data["high"])
+                    step_val = (
+                        int(param_conf_data["step"])
+                        if param_conf_data.get("step") is not None
+                        else 1
+                    )
+                    log_val = param_conf_data.get("log", False)
+
                     suggested_params[name] = trial.suggest_int(
-                        name, int(low), int(high), step=step or 1, log=log
+                        name, low_val, high_val, step=step_val, log=log_val
                     )
                 elif suggest_type == "float":
-                    low, high = param_conf.get("low"), param_conf.get("high")
-                    if low is None or high is None:
-                        raise ValueError(f"'low'/'high' required for '{name}'")
-                    step = param_conf.get("step")
-                    log = param_conf.get("log", False)
-                    if step is not None and not isinstance(step, (int, float)):
-                        step = None
+                    # 'low', 'high' are guaranteed valid; 'step' is None or positive float
+                    low_val = float(param_conf_data["low"])
+                    high_val = float(param_conf_data["high"])
+                    # Optuna's suggest_float takes step=None for continuous range.
+                    step_val = (
+                        float(param_conf_data["step"])
+                        if param_conf_data.get("step") is not None
+                        else None
+                    )
+                    log_val = param_conf_data.get("log", False)
+
                     suggested_params[name] = trial.suggest_float(
-                        name, float(low), float(high), step=step, log=log
+                        name, low_val, high_val, step=step_val, log=log_val
                     )
-                else:
-                    logger.warning(
-                        f"Unsupported suggest_type '{suggest_type}' for '{name}'. Skipping."
-                    )
-            logger.debug(f"Trial {trial.number}: Suggested Params = {suggested_params}")
-            return suggested_params
-        except Exception as e:
-            logger.error(
-                f"Trial {trial.number}: Error suggesting parameters: {e}", exc_info=True
+                # No 'else' needed as suggest_type should have been validated upstream by Pydantic
+
+            logger.debug(
+                f"Trial {trial.number}: Suggested Hyperparameters = {suggested_params}"
             )
-            raise optuna.TrialPruned(f"Param suggestion failed: {e}") from e
+            return suggested_params
+        except (
+            KeyError
+        ) as ke:  # Catch if a validated field is unexpectedly missing (should not happen)
+            logger.error(
+                f"Trial {trial.number}: KeyError accessing validated HPSuggestion data: {ke}. This indicates an issue with upstream data consistency.",
+                exc_info=True,
+            )
+            raise optuna.TrialPruned(
+                f"Internal error accessing hyperparameter config: {ke}"
+            ) from ke
+        except Exception as e:  # Catch any other unexpected issues during suggestion
+            logger.error(
+                f"Trial {trial.number}: Error during Optuna suggestion phase: {e}",
+                exc_info=True,
+            )
+            raise optuna.TrialPruned(f"Optuna suggestion failed: {e}") from e
 
     def __call__(self, trial: Trial) -> float:
         """Executed for each Optuna trial."""
-        logger.info(f"--- Starting Optuna Trial {trial.number} ---")
+        logger.info(
+            f"--- Starting Optuna Trial {trial.number} for model {self.model_type_enum.value} ---"
+        )
         try:
-            suggested_params = self._suggest_hyperparameters(trial)
+            suggested_hyperparams = self._suggest_hyperparameters(trial)
         except optuna.TrialPruned as prune_exc:
             logger.info(
                 f"Trial {trial.number} pruned during parameter suggestion: {prune_exc}"
             )
-            raise  # Re-raise prune exceptions
+            raise
 
-        is_maximize = getattr(self.scorer, "_sign", 1) > 0
-        failed_value = 0.0 if is_maximize else float("inf")
+        is_maximize = (
+            getattr(self.scorer, "_sign", 1) > 0
+        )  # Check scorer's optimization direction
+        failed_value = 0.0 if is_maximize else float("inf")  # Value for failed trials
         metric_value = failed_value
 
         try:
-            # --- Pass self.artifact_service to the factory ---
+            # Create a temporary model strategy for this trial
+            # Pass the full base_job_config as job_config to the strategy
+            # The strategy's _get_model_instance will use random_seed from this job_config
             temp_strategy = create_model_strategy(
-                self.model_type_enum,
-                suggested_params,
-                self.base_job_config,
-                self.artifact_service,  # Pass the stored artifact service
+                model_type=self.model_type_enum,
+                model_config=suggested_hyperparams,  # Trial-specific HPs
+                job_config=self.base_job_config,  # Overall job config for seeds, etc.
+                artifact_service=self.artifact_service,
             )
-            model_instance = temp_strategy._get_model_instance()
 
-            # --- CV Logic (remains the same) ---
-            logger.debug(f"Trial {trial.number}: Performing {self.cv_folds}-fold CV...")
+            model_instance_for_cv = (
+                temp_strategy._get_model_instance()
+            )  # Get a fresh model with trial HPs
+
+            logger.debug(
+                f"Trial {trial.number}: Performing {self.cv_folds}-fold CV with {model_instance_for_cv.__class__.__name__}..."
+            )
+
+            # Cross-validation logic
             is_classification = (
-                pd.api.types.is_integer_dtype(self.y) and self.y.nunique() < 20
+                pd.api.types.is_integer_dtype(self.y) and self.y.nunique() >= 2
             )
             cv_splitter = None
-            if is_classification and self.y.nunique() > 1:
-                try:
-                    min_class_count = self.y.value_counts().min()
-                    n_splits = min(self.cv_folds, min_class_count)
-                    if n_splits < self.cv_folds:
-                        logger.warning(
-                            f"Trial {trial.number}: Reducing CV folds to {n_splits}."
-                        )
-                    if n_splits >= 2:
-                        cv_splitter = StratifiedKFold(
-                            n_splits=n_splits,
-                            shuffle=True,
-                            random_state=self.random_seed,
-                        )
-                    else:
-                        logger.warning(
-                            f"Trial {trial.number}: Cannot use StratifiedKFold (splits < 2)."
-                        )
-                except Exception as skf_err:
+            if is_classification:
+                min_class_count = self.y.value_counts().min()
+                actual_cv_folds = min(self.cv_folds, min_class_count)
+                if actual_cv_folds < 2:
                     logger.warning(
-                        f"Trial {trial.number}: Error setting up StratifiedKFold ({skf_err})."
+                        f"Trial {trial.number}: Not enough samples in minority class for {self.cv_folds}-fold CV. Skipping CV for this trial."
                     )
-            elif is_classification:
-                logger.warning(
-                    f"Trial {trial.number}: Single class target. Skipping CV."
+                    trial.set_user_attr("cv_error", "Not enough samples for CV.")
+                    return float(
+                        failed_value
+                    )  # Return failed_value if CV cannot be performed
+
+                if actual_cv_folds < self.cv_folds:
+                    logger.warning(
+                        f"Trial {trial.number}: Reducing CV folds from {self.cv_folds} to {actual_cv_folds} due to class imbalance."
+                    )
+
+                cv_splitter = StratifiedKFold(
+                    n_splits=actual_cv_folds,
+                    shuffle=True,
+                    random_state=self.cv_random_seed,
                 )
-            # ... (Handle single class case - return failed_value) ...
-            if is_classification and self.y.nunique() <= 1:
-                trial.set_user_attr("warning", "Single class target, CV skipped.")
-                logger.info(f"--- Finished Trial {trial.number} (Skipped CV) ---")
+            elif not is_classification:  # Regression or other task types
+                logger.warning(
+                    f"Trial {trial.number}: Target is not suitable for StratifiedKFold (not integer or single class). Using standard KFold or adapt as needed."
+                )
+                # For non-classification, or if stratification isn't appropriate, use KFold or other suitable CV.
+                # from sklearn.model_selection import KFold
+                # cv_splitter = KFold(n_splits=self.cv_folds, shuffle=True, random_state=self.cv_random_seed)
+                # For now, let's raise if not classification, as defect prediction is typically classification
+                trial.set_user_attr(
+                    "cv_error",
+                    "CV not performed for non-classification or problematic target.",
+                )
                 return float(failed_value)
 
             scores = cross_val_score(
-                model_instance,
-                self.X,
-                self.y,
+                estimator=model_instance_for_cv,  # Use the model instance
+                X=self.X,
+                y=self.y,
                 cv=cv_splitter,
                 scoring=self.scorer,
-                n_jobs=1,
-                error_score="raise",
+                n_jobs=-1,  # Use all available cores for CV
+                error_score="raise",  # Raise error if a fold fails
             )
             metric_value = np.mean(scores)
             trial.set_user_attr("cv_scores", scores.tolist())
-            trial.set_user_attr(f"mean_cv_{self.objective_metric}", metric_value)
+            trial.set_user_attr(f"mean_cv_{self.objective_metric_str}", metric_value)
             logger.info(
-                f"Trial {trial.number}: CV Scores ({self.objective_metric}) = {scores.tolist()}, Mean = {metric_value:.4f}"
+                f"Trial {trial.number}: CV Scores ({self.objective_metric_str}) = {scores.tolist()}, Mean = {metric_value:.4f}"
             )
 
-            # Pruning check
-            trial.report(metric_value, step=0)
+            trial.report(metric_value, step=0)  # Report after each trial for pruning
             if trial.should_prune():
-                logger.info(
-                    f"Trial {trial.number}: Pruned by {self.optuna_config.get('pruner_type', 'pruner')}."
-                )
+                logger.info(f"Trial {trial.number}: Pruned by Optuna pruner.")
                 raise optuna.TrialPruned()
 
         except optuna.TrialPruned:
-            raise  # Re-raise
-        except ValueError as ve:
-            if "pos_label=1 is not a valid label" in str(ve):
+            raise  # Re-raise to let Optuna handle it
+        except ValueError as ve:  # Catch specific errors like single class in fold
+            if "pos_label=1 is not a valid label" in str(
+                ve
+            ) or "Only one class present in y_true." in str(ve):
                 logger.warning(
-                    f"Trial {trial.number}: CV failed (fold had only class 0). Details: {ve}"
+                    f"Trial {trial.number}: CV fold error (likely single class in a fold). Details: {ve}"
                 )
-                trial.set_user_attr("cv_error", "Fold contained only negative class.")
+                trial.set_user_attr(
+                    "cv_error", "Fold contained only one class or invalid labels."
+                )
             else:
-                logger.error(f"Trial {trial.number}: ValueError: {ve}", exc_info=True)
+                logger.error(
+                    f"Trial {trial.number}: ValueError during evaluation: {ve}",
+                    exc_info=True,
+                )
                 trial.set_user_attr("error", f"ValueError: {str(ve)}")
-            metric_value = failed_value
+            metric_value = failed_value  # Ensure failed_value is assigned
         except Exception as e:
-            logger.error(f"Trial {trial.number}: Failed eval: {e}", exc_info=True)
+            logger.error(
+                f"Trial {trial.number}: Failed during evaluation: {type(e).__name__}: {e}",
+                exc_info=True,
+            )
             trial.set_user_attr("error", f"{type(e).__name__}: {str(e)}")
-            metric_value = failed_value
+            metric_value = failed_value  # Ensure failed_value is assigned
 
         logger.info(f"--- Finished Optuna Trial {trial.number} ---")
         if np.isnan(metric_value) or np.isinf(metric_value):
             logger.warning(
-                f"Trial {trial.number}: Metric is NaN/Inf. Returning failed value: {failed_value}"
+                f"Trial {trial.number}: Resulting metric is NaN/Inf. Returning failed value: {failed_value}"
             )
             return float(failed_value)
         return float(metric_value)

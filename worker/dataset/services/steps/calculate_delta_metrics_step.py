@@ -3,9 +3,9 @@ import logging
 
 import numpy as np
 import pandas as pd
-
 from services.context import DatasetContext
 from services.interfaces import IDatasetGeneratorStep
+
 from shared.db import CK_METRIC_COLUMNS  # Get list of metric columns
 from shared.utils.pipeline_logging import StepLogger
 

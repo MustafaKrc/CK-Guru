@@ -1,9 +1,17 @@
 # shared/schemas/hp_search_job.py
+import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import field_validator  # For Pydantic v2 field_validator
+from pydantic import model_validator  # For Pydantic v2 model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+)
 
+from shared.core.config import settings
 from shared.schemas.enums import (
     JobStatusEnum,
     ModelTypeEnum,
@@ -12,6 +20,9 @@ from shared.schemas.enums import (
     SamplerTypeEnum,
 )
 from shared.schemas.ml_model import MLModelRead
+
+logger = logging.getLogger(__name__)
+logger.setLevel(settings.LOG_LEVEL.upper())
 
 
 class OptunaConfig(BaseModel):
@@ -37,24 +48,105 @@ class OptunaConfig(BaseModel):
         description="Attempt to continue study if name exists (requires matching dataset/model).",
     )
     hp_search_cv_folds: Optional[int] = Field(
-        3,
+        3,  # Changed from 5 to 3 as per your input
         ge=2,
         description="Number of cross-validation folds within the objective function.",
     )
-    # Direction is now inferred from objective_metric
 
 
 # --- Hyperparameter Space Definition ---
 class HPSuggestion(BaseModel):
     param_name: str
     suggest_type: str = Field(..., description="e.g., 'float', 'int', 'categorical'")
-    low: Optional[float | int] = None
-    high: Optional[float | int] = None
-    step: Optional[float | int] = None
+    low: Optional[float | int] = None  # Made generic for float or int
+    high: Optional[float | int] = None  # Made generic for float or int
+    step: Optional[float | int] = (
+        None  # Made generic for float or int, will validate specific type below
+    )
     log: bool = Field(
         default=False, description="Use logarithmic scale (for float/int)."
     )
     choices: Optional[List[Any]] = None
+
+    @field_validator("suggest_type")
+    @classmethod
+    def suggest_type_must_be_valid(cls, value: str) -> str:
+        valid_types = ["float", "int", "categorical"]
+        if value.lower() not in valid_types:
+            raise ValueError(
+                f"suggest_type must be one of {valid_types}, got '{value}'"
+            )
+        return value.lower()  # Normalize
+
+    @model_validator(mode="after")  # Pydantic V2 model_validator
+    def check_fields_based_on_type(self) -> "HPSuggestion":
+        st = self.suggest_type  # Already normalized by field_validator
+
+        if st == "categorical":
+            if (
+                self.choices is None
+                or not isinstance(self.choices, list)
+                or not self.choices
+            ):
+                raise ValueError(
+                    f"For suggest_type 'categorical', 'choices' must be a non-empty list (param_name: {self.param_name})."
+                )
+            if self.low is not None or self.high is not None or self.step is not None:
+                logger.warning(
+                    f"For suggest_type 'categorical', 'low', 'high', and 'step' are ignored (param_name: {self.param_name})."
+                )
+        elif st in ["int", "float"]:
+            if self.low is None or self.high is None:
+                raise ValueError(
+                    f"For suggest_type '{st}', 'low' and 'high' are required (param_name: {self.param_name})."
+                )
+            if not isinstance(self.low, (int, float)) or not isinstance(
+                self.high, (int, float)
+            ):
+                raise ValueError(
+                    f"'low' and 'high' must be numbers for suggest_type '{st}' (param_name: {self.param_name})."
+                )
+            if self.low >= self.high:
+                raise ValueError(
+                    f"'low' must be less than 'high' for suggest_type '{st}' (param_name: {self.param_name})."
+                )
+            if self.choices is not None:
+                logger.warning(
+                    f"For suggest_type '{st}', 'choices' is ignored (param_name: {self.param_name})."
+                )
+
+            # Step validation
+            if self.step is not None:
+                if not isinstance(self.step, (int, float)):
+                    raise ValueError(
+                        f"'step' must be a number if provided for suggest_type '{st}' (param_name: {self.param_name})."
+                    )
+                if self.step <= 0:
+                    raise ValueError(
+                        f"'step' must be a positive non-zero value if provided for suggest_type '{st}' (param_name: {self.param_name})."
+                    )
+                if st == "int" and not isinstance(self.step, int):
+                    raise ValueError(
+                        f"For suggest_type 'int', 'step' must be an integer if provided (param_name: {self.param_name})."
+                    )
+
+            # Log validation
+            if (
+                self.log and self.low <= 0 and st == "float"
+            ):  # log scale for float needs positive low
+                raise ValueError(
+                    f"For log scale with suggest_type 'float', 'low' must be positive (param_name: {self.param_name})."
+                )
+            if (
+                self.log and self.low <= 0 and st == "int"
+            ):  # log scale for int needs positive low
+                raise ValueError(
+                    f"For log scale with suggest_type 'int', 'low' must be positive (param_name: {self.param_name})."
+                )
+
+        return self
+
+    model_config = ConfigDict(extra="ignore")
 
 
 # --- HP Search Job Config ---
@@ -109,7 +201,7 @@ class HPSearchJobUpdate(BaseModel):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
 
-    model_config = ConfigDict(extra="ignore")  # Allow extra fields if needed
+    model_config = ConfigDict(extra="forbid")  # Forbid extra fields to catch typos
 
 
 class HPSearchJobRead(HPSearchJobBase):
@@ -122,16 +214,14 @@ class HPSearchJobRead(HPSearchJobBase):
     best_value: Optional[float] = None
     best_ml_model_id: Optional[int] = None
     best_ml_model: Optional[MLModelRead] = Field(
-        None, description="Details of the best model created (if any)."
+        None, description="Details of the best model created by this search (if any)."
     )
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 
-    model_config = ConfigDict(
-        from_attributes=True, use_enum_values=True  # Serialize Enum member to its value
-    )
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
 
 
 # --- API Response for Job Submission ---

@@ -3,3 +3,9 @@ from .strategies import (
     IngestionStrategy,
     SingleCommitFeatureExtractionStrategy,
 )
+
+__all__ = [
+    "IngestionStrategy",
+    "FullHistoryIngestionStrategy",
+    "SingleCommitFeatureExtractionStrategy",
+]

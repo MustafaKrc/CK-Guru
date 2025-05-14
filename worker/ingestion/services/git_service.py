@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Optional
 
 import git
-
 from services.interfaces.i_git_service import IGitService
 
 # Import settings for logger configuration

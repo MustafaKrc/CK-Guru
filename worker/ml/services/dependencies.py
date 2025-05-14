@@ -2,13 +2,13 @@
 import logging
 from typing import Any, Callable, Dict, Type
 
-from sqlalchemy.orm import Session
-
 # --- Import Concrete Implementations ---
 from services.artifact_service import ArtifactService
 
 # --- Import Interfaces ---
 from services.interfaces import IArtifactService  # Local interface
+from sqlalchemy.orm import Session
+
 from shared.db_session import SyncSessionLocal  # Assuming sync for worker
 from shared.repositories import (
     DatasetRepository,

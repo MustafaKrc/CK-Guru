@@ -4,6 +4,7 @@ import hmac
 import logging
 from typing import Any, Dict, Optional
 
+from app import crud
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -14,8 +15,6 @@ from fastapi import (
     status,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app import crud
 
 # Import Schemas, Config, DB Session, CRUD, Services
 from shared.core.config import settings

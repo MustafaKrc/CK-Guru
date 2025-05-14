@@ -1,5 +1,3 @@
-from fastapi import APIRouter
-
 from app.api.v1.endpoints import (
     bot_patterns,
     datasets,
@@ -9,6 +7,7 @@ from app.api.v1.endpoints import (
     webhooks,
     xai,
 )
+from fastapi import APIRouter
 
 api_router = APIRouter()
 

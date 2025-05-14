@@ -24,6 +24,9 @@ s3fs>=2023.0.0
 # --- ML ---
 optuna>=3.0 
 scikit-learn>=1.5 
+cmaes
+xgboost>=3.0 # Or a newer version
+lightgbm>=4.5 # Or a newer version
 
 # --- XAI ---
 shap>=0.41.0

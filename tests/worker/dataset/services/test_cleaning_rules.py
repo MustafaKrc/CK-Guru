@@ -7,6 +7,8 @@ import pytest
 # Import rule classes
 from worker.dataset.services.cleaning_rules import (
     DEFAULT_X_COLUMNS,  # Import if needed for cluster test setup
+)
+from worker.dataset.services.cleaning_rules import (
     DEFAULT_Y_COLUMN,
     Rule0DropDuplicates,
     Rule2RemoveRecentCleanLastChange,

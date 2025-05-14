@@ -426,7 +426,10 @@ def orchestrate_xai_task(self: Task, inference_job_id: int):
             )
             self.update_state(
                 state=JobStatusEnum.FAILED,
-                meta=build_failure_meta(e, final_task_result),
+                meta=build_failure_meta(
+                    f"Task {task_id}: XAI Orchestration reported unexpected status by handler: {final_task_result}",
+                    final_task_result,
+                ),
             )
 
         return final_task_result
@@ -497,7 +500,12 @@ def generate_explanation_task(self: Task, xai_result_id: int):
             )
             self.update_state(
                 state=JobStatusEnum.FAILED,
-                meta=build_failure_meta(e, final_task_result),
+                meta=build_failure_meta(
+                    InternalError(
+                        f"Task {task_id}: XAI Explanation generation failed (handler returned None or error occurred before return)."
+                    ),
+                    final_task_result,
+                ),
             )
 
         return final_task_result  # Return explanation data or None

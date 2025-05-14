@@ -1,14 +1,10 @@
 # worker/ml/services/strategies/shap_strategy.py
 import logging
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import numpy as np
 import pandas as pd
-
-try:
-    import shap
-except ImportError:
-    shap = None  # Handle optional dependency
+import shap
 
 from shared.schemas.xai import FeatureSHAPValue, InstanceSHAPResult, SHAPResultData
 
@@ -18,16 +14,9 @@ logger = logging.getLogger(__name__)
 
 
 class SHAPStrategy(BaseXAIStrategy):
-    """Generates SHAP explanations."""
-
     def explain(
         self, X_inference: pd.DataFrame, identifiers_df: pd.DataFrame
     ) -> Optional[SHAPResultData]:
-        if shap is None:
-            logger.error(
-                "SHAP library is not installed. Cannot generate SHAP explanations."
-            )
-            return None
         if X_inference.empty:
             logger.warning(
                 "SHAPStrategy: Input DataFrame is empty. No explanations generated."
@@ -35,62 +24,129 @@ class SHAPStrategy(BaseXAIStrategy):
             return None
 
         logger.info(f"Generating SHAP explanations for {len(X_inference)} instances...")
+        feature_names = X_inference.columns.tolist()
+
         try:
-            # TODO: Make explainer selection more dynamic based on model type
-            # Assuming TreeExplainer for now, suitable for tree-based models
-            if not hasattr(self.model, "predict"):  # Basic check
-                raise TypeError(
-                    "Model does not have a predict method suitable for SHAP."
-                )
-            # TreeExplainer is often efficient for tree models
+            explainer_type_used = "Unknown"
+            shap_values_pos_class: Optional[np.ndarray] = None
+            explainer_expected_value: Optional[Any] = None
+
             try:
-                explainer = shap.TreeExplainer(self.model)
-                # SHAP values often returned as list (for multi-class) or single array
+                explainer = shap.TreeExplainer(
+                    self.model,
+                    self.background_data,
+                    feature_perturbation="tree_path_dependent",
+                )
+                explainer_type_used = "TreeExplainer"
+                explainer_expected_value = explainer.expected_value
+
                 shap_values_raw = explainer.shap_values(X_inference)
 
-                shap_values_pos_class = shap_values_raw[:, :, 1]
+                if isinstance(shap_values_raw, list) and len(shap_values_raw) == 2:
+                    shap_values_pos_class = shap_values_raw[1]
+                    logger.info(
+                        f"SHAPStrategy ({explainer_type_used}): Extracted SHAP values for positive class from list output. Shape: {shap_values_pos_class.shape if shap_values_pos_class is not None else 'None'}"
+                    )
+                elif (
+                    isinstance(shap_values_raw, np.ndarray)
+                    and shap_values_raw.ndim == 2
+                    and shap_values_raw.shape == X_inference.shape
+                ):
+                    shap_values_pos_class = shap_values_raw
+                    logger.info(
+                        f"SHAPStrategy ({explainer_type_used}): Used 2D SHAP values array directly. Shape: {shap_values_pos_class.shape}"
+                    )
+                else:
+                    logger.warning(
+                        f"SHAPStrategy ({explainer_type_used}): Unexpected SHAP values structure. Type: {type(shap_values_raw)}, Shape: {getattr(shap_values_raw, 'shape', 'N/A')}."
+                    )
+                    raise ValueError(
+                        f"Unexpected SHAP values structure from {explainer_type_used}."
+                    )
 
             except Exception as tree_explainer_err:
                 logger.warning(
-                    f"TreeExplainer failed ({tree_explainer_err}). Trying KernelExplainer (slower)."
+                    f"SHAPStrategy: {explainer_type_used} failed ('{tree_explainer_err}'). Trying KernelExplainer (slower)."
                 )
-                if self.background_data is None or self.background_data.empty:
+                explainer_type_used = "KernelExplainer"
+
+                current_background_data = self.background_data
+                if current_background_data is None or current_background_data.empty:
                     logger.warning(
-                        "KernelExplainer needs background data. Sampling from inference data."
+                        "SHAPStrategy: KernelExplainer needs background data. Sampling from inference data."
                     )
-                    # Use shap.sample to select representative background samples
-                    background_sample = shap.sample(
+                    current_background_data = shap.sample(
                         X_inference, min(100, X_inference.shape[0])
                     )
-                else:
-                    background_sample = self.background_data
-                    if (
-                        len(background_sample) > 100
-                    ):  # Limit background size for KernelExplainer
-                        background_sample = shap.sample(background_sample, 100)
+                elif len(current_background_data) > 100:
+                    current_background_data = shap.sample(current_background_data, 100)
 
-                # KernelExplainer needs predict_proba
                 if not hasattr(self.model, "predict_proba"):
-                    raise TypeError("Model needs predict_proba for KernelExplainer.")
+                    logger.error(
+                        f"Model {type(self.model).__name__} needs predict_proba for KernelExplainer."
+                    )
+                    return None
+
+                def predict_proba_wrapper(X_np_array):
+                    X_df_wrapped = pd.DataFrame(X_np_array, columns=feature_names)
+                    return self.model.predict_proba(X_df_wrapped)
+
                 explainer = shap.KernelExplainer(
-                    self.model.predict_proba, background_sample
+                    predict_proba_wrapper, current_background_data
                 )
-                # Need to specify link='logit' usually for probabilities
-                shap_values_raw = explainer.shap_values(X_inference, nsamples="auto")[
-                    1
-                ]  # Explain class 1 prob
-                shap_values_pos_class = shap_values_raw
+                explainer_expected_value = explainer.expected_value
+
+                shap_values_raw_kernel = explainer.shap_values(
+                    X_inference, nsamples="auto", l1_reg="auto"
+                )
+
+                if (
+                    isinstance(shap_values_raw_kernel, list)
+                    and len(shap_values_raw_kernel) == 2
+                ):
+                    shap_values_pos_class = shap_values_raw_kernel[1]
+                    logger.info(
+                        f"SHAPStrategy ({explainer_type_used}): Extracted SHAP values for positive class (P(1|x)) from list output. Shape: {shap_values_pos_class.shape if shap_values_pos_class is not None else 'None'}"
+                    )
+                elif (
+                    isinstance(shap_values_raw_kernel, np.ndarray)
+                    and shap_values_raw_kernel.ndim == 3
+                    and shap_values_raw_kernel.shape[0] == X_inference.shape[0]
+                    and shap_values_raw_kernel.shape[1] == X_inference.shape[1]
+                    and shap_values_raw_kernel.shape[2] == 2
+                ):
+                    shap_values_pos_class = shap_values_raw_kernel[:, :, 1]
+                    logger.info(
+                        f"SHAPStrategy ({explainer_type_used}): Extracted SHAP values for positive class from 3D array output. Shape: {shap_values_pos_class.shape if shap_values_pos_class is not None else 'None'}"
+                    )
+                else:
+                    logger.error(
+                        f"SHAPStrategy ({explainer_type_used}): Unexpected SHAP values structure. Type: {type(shap_values_raw_kernel)}, Shape: {getattr(shap_values_raw_kernel, 'shape', 'N/A')}"
+                    )
+                    return None
+
+            if shap_values_pos_class is None:
+                logger.error(
+                    f"SHAPStrategy ({explainer_type_used}): Failed to obtain SHAP values for the positive class."
+                )
+                return None
+            if (
+                shap_values_pos_class.shape[0] != X_inference.shape[0]
+                or shap_values_pos_class.shape[1] != X_inference.shape[1]
+            ):
+                logger.error(
+                    f"SHAPStrategy ({explainer_type_used}): Shape mismatch. SHAP values shape {shap_values_pos_class.shape}, X_inference shape {X_inference.shape}"
+                )
+                return None
 
             instance_results: List[InstanceSHAPResult] = []
-            feature_names = X_inference.columns.tolist()
-
             for i in range(len(identifiers_df)):
                 instance_id_row = identifiers_df.iloc[i]
                 shap_values_for_instance = shap_values_pos_class[i]
-                # Ensure correct number of SHAP values matches features
+
                 if len(shap_values_for_instance) != len(feature_names):
                     logger.error(
-                        f"SHAP value count mismatch for instance {i}. Expected {len(feature_names)}, got {len(shap_values_for_instance)}. Skipping instance."
+                        f"SHAP value count mismatch for instance {i} (Explainer: {explainer_type_used}). Expected {len(feature_names)}, got {len(shap_values_for_instance)}. Skipping instance."
                     )
                     continue
 
@@ -98,41 +154,89 @@ class SHAPStrategy(BaseXAIStrategy):
                 for idx, (fn, sv) in enumerate(
                     zip(feature_names, shap_values_for_instance)
                 ):
+                    # --- Convert numpy types to Python native types ---
+                    original_feature_value = X_inference.iloc[i, idx]
+                    if isinstance(
+                        original_feature_value, np.generic
+                    ):  # Covers np.int64, np.float64, etc.
+                        py_feature_value = original_feature_value.item()
+                    else:
+                        py_feature_value = original_feature_value
+
+                    shap_value_float = float(
+                        sv
+                    )  # SHAP values are usually float already
 
                     instance_list.append(
                         FeatureSHAPValue(
                             feature=fn,
-                            value=round(float(sv), 4),
-                            feature_value=float(X_inference.iloc[i, idx]),
+                            value=round(shap_value_float, 4),  # Use converted float
+                            feature_value=py_feature_value,  # Use converted Python native type
                         )
                     )
-                # Base value might be available depending on explainer type
-                base_value = getattr(explainer, "expected_value", None)
-                # Adjust base value format if needed (e.g., index [1] for binary class 1)
-                if isinstance(base_value, (list, np.ndarray)) and len(base_value) > 1:
-                    base_value_float = (
-                        float(base_value[1])
-                        if len(base_value) > 1
-                        else float(base_value[0])
-                    )
-                elif isinstance(base_value, (float, np.float_)):
-                    base_value_float = float(base_value)
-                else:
-                    base_value_float = None
+
+                base_value_float: Optional[float] = None
+                if explainer_expected_value is not None:
+                    # Convert explainer_expected_value to float, handling different structures
+                    if isinstance(explainer_expected_value, (list, np.ndarray)):
+                        target_ev_value = None
+                        if len(explainer_expected_value) == 2:
+                            target_ev_value = explainer_expected_value[1]
+                        elif len(explainer_expected_value) == 1:
+                            target_ev_value = explainer_expected_value[0]
+                        elif (
+                            explainer_type_used == "TreeExplainer"
+                            and isinstance(explainer_expected_value, np.ndarray)
+                            and explainer_expected_value.ndim == 2
+                            and explainer_expected_value.shape[0]
+                            == X_inference.shape[0]
+                            and explainer_expected_value.shape[1] == 2
+                        ):  # (n_samples, n_outputs) from some TreeExplainers
+                            target_ev_value = explainer_expected_value[i, 1]
+                        elif (
+                            explainer_type_used == "TreeExplainer"
+                            and isinstance(explainer_expected_value, np.ndarray)
+                            and explainer_expected_value.ndim == 1
+                            and len(explainer_expected_value) == X_inference.shape[0]
+                        ):  # (n_samples,)
+                            target_ev_value = explainer_expected_value[i]
+
+                        if target_ev_value is not None:
+                            base_value_float = float(
+                                target_ev_value
+                            )  # Ensure it's Python float
+                        else:
+                            logger.warning(
+                                f"SHAPStrategy: Could not determine specific expected_value for positive class from structure: {explainer_expected_value}"
+                            )
+                    elif isinstance(
+                        explainer_expected_value, (float, np.float_, int, np.integer)
+                    ):  # Added np.integer
+                        base_value_float = float(
+                            explainer_expected_value
+                        )  # Ensure it's Python float
+                    else:
+                        logger.warning(
+                            f"SHAPStrategy: explainer.expected_value type ({type(explainer_expected_value)}) for {explainer_type_used} not directly convertible to single float. Value: {explainer_expected_value}"
+                        )
 
                 instance_results.append(
                     InstanceSHAPResult(
                         file=instance_id_row.get("file"),
-                        class_name=instance_id_row.get(
-                            "class_name"
-                        ),  # Use actual column name
+                        class_name=instance_id_row.get("class_name"),
                         shap_values=instance_list,
-                        base_value=base_value_float,
+                        base_value=(
+                            round(base_value_float, 4)
+                            if base_value_float is not None
+                            else None
+                        ),
                     )
                 )
 
             if not instance_results:
-                logger.warning("SHAP explanation generated no valid instance results.")
+                logger.warning(
+                    f"SHAP explanation ({explainer_type_used}) generated no valid instance results."
+                )
                 return None
 
             return SHAPResultData(instance_shap_values=instance_results)

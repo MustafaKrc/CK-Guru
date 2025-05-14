@@ -12,6 +12,8 @@ import pytest
 from shared.utils import commit_guru_utils
 from shared.utils.commit_guru_utils import (
     CommitFile,  # Import helper classes if needed for state setup
+)
+from shared.utils.commit_guru_utils import (
     DevExperienceMetrics,
     FileUpdateResult,
     GitCommitLinker,

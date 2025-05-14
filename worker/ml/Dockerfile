@@ -28,19 +28,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Use python3.10 explicitly to ensure we're using the correct pip
 RUN python3.10 -m pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# Copy requirements BEFORE application code to leverage Docker caching better
 COPY ./worker/ml/requirements.txt /app/worker/ml/requirements.txt
-# Copy shared requirements if they exist and are needed for install (unlikely now)
-# COPY ./shared/requirements.txt /app/shared/requirements.txt
-# RUN python3.10 -m pip install --no-cache-dir -r /app/shared/requirements.txt
 
-# Install Python dependencies directly into the system Python site-packages
-# This ensures celery command is installed relative to the python3.10 we execute
 RUN python3.10 -m pip install --no-cache-dir -r /app/worker/ml/requirements.txt
 
-# Example: How to install GPU PyTorch (Uncomment and adjust when needed in Phase 2)
 # RUN python3.10 -m pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-
 
 # Copy shared code and ML worker specific code AFTER pip install
 COPY ./shared /app/shared

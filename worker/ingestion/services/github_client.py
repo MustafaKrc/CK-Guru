@@ -8,8 +8,8 @@ from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 import requests
 from requests.exceptions import ConnectionError, RequestException, Timeout
 from requests.structures import CaseInsensitiveDict
-
 from services.interfaces import IRepositoryApiClient
+
 from shared.core.config import settings
 from shared.schemas.repo_api_client import RepoApiClientResponse, RepoApiResponseStatus
 

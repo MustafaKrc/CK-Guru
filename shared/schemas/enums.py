@@ -44,9 +44,21 @@ class ModelTypeEnum(str, enum.Enum):
     """Enum defining the supported model types."""
 
     SKLEARN_RANDOMFOREST = "sklearn_randomforest"
-    # Add other models here as they are supported
-    # EXAMPLE: SKLEARN_LOGISTICREGRESSION = "sklearn_logisticregression"
-    # EXAMPLE: PYTORCH_CNN = "pytorch_cnn"
+    SKLEARN_LOGISTICREGRESSION = "sklearn_logisticregression"
+    SKLEARN_SVC = "sklearn_svc"
+    SKLEARN_GRADIENTBOOSTINGCLASSIFIER = "sklearn_gradientboostingclassifier"
+    SKLEARN_ADABOOSTCLASSIFIER = "sklearn_adaboostclassifier"
+    SKLEARN_DECISIONTREECLASSIFIER = "sklearn_decisiontreeclassifier"
+    SKLEARN_KNNCLASSIFIER = "sklearn_knnclassifier"  # k-Nearest Neighbors
+
+    # gradient boosting libraries
+    XGBOOST_CLASSIFIER = "xgboost_classifier"
+    LIGHTGBM_CLASSIFIER = "lightgbm_classifier"
+    # CATBOOST_CLASSIFIER = "catboost_classifier" # Example for later
+
+    # Placeholder for future types (Deep Learning, etc.)
+    # PYTORCH_LSTM = "pytorch_lstm"
+    # TENSORFLOW_CNN = "tensorflow_cnn"
 
 
 class XAITypeEnum(str, enum.Enum):

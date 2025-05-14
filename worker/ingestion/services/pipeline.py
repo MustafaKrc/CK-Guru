@@ -5,6 +5,7 @@ from typing import List, Type
 from services.dependencies import DependencyProvider, StepRegistry
 from services.steps.base import IngestionContext, IngestionStep
 from services.strategies import IngestionStrategy
+
 from shared.core.config import settings
 
 logger = logging.getLogger(__name__)
