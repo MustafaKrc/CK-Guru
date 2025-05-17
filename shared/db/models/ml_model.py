@@ -57,7 +57,7 @@ class MLModel(Base):
     # Link to the source data/jobs
     dataset_id: Mapped[int | None] = mapped_column(
         ForeignKey(
-            "datasets.id", ondelete="SET NULL"
+            "datasets.id", ondelete="CASCADE"
         ),  # Link to the dataset used for training
         nullable=True,  # Allow null if model wasn't trained from a managed dataset
         index=True,

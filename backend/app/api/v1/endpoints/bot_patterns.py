@@ -37,7 +37,6 @@ async def create_global_bot_pattern_endpoint(
     # Ensure repository_id is explicitly None for creation
     pattern_in.repository_id = None
     # Check for duplicates (optional, handled by DB constraint mostly)
-    # ... duplicate check logic if needed ...
     db_pattern = await crud.crud_bot_pattern.create_bot_pattern(
         db=db, obj_in=pattern_in
     )

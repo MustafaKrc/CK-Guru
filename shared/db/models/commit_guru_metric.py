@@ -33,7 +33,7 @@ class CommitGuruMetric(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     repository_id: Mapped[int] = mapped_column(
-        ForeignKey("repositories.id"), nullable=False, index=True
+        ForeignKey("repositories.id", ondelete="CASCADE"), nullable=False, index=True
     )
     commit_hash: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
 
