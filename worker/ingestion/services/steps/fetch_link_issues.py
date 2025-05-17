@@ -1,5 +1,6 @@
 # worker/ingestion/services/steps/fetch_link_issues.py
 import logging
+import asyncio
 from typing import Dict, List
 
 from services.interfaces import IRepositoryApiClient
@@ -15,7 +16,7 @@ logger.setLevel(settings.LOG_LEVEL.upper())
 class FetchAndLinkIssuesStep(IngestionStep):
     name = "Fetch/Link GitHub Issues"
 
-    def execute(
+    async def execute(
         self,
         context: IngestionContext,
         *,
@@ -59,7 +60,7 @@ class FetchAndLinkIssuesStep(IngestionStep):
             context,
             f"Linking issues for {len(commit_hash_to_issue_numbers)} commits...",
         )
-        self._update_progress(context, "Linking GitHub issues...", 0)
+        await self._update_progress(context, "Linking GitHub issues...", 0)
         processed_link_count = 0
         total_links_to_process = len(commit_hash_to_issue_numbers)
 
@@ -81,15 +82,16 @@ class FetchAndLinkIssuesStep(IngestionStep):
                     continue
 
                 # Fetch issue data from GitHub API
-                api_response = repository_api_client.get_issue(
-                    owner, repo_name, number_str
+                api_response = await asyncio.to_thread(
+                    repository_api_client.get_issue, owner, repo_name, number_str
                 )
 
                 # Update or Create Issue in DB using the repository
-                issue_obj = github_repo.update_or_create_from_api(
-                    repo_id=context.repository_id,
-                    issue_number=issue_number,
-                    api_response=api_response,
+                issue_obj = await asyncio.to_thread(
+                    github_repo.update_or_create_from_api,
+                    context.repository_id,
+                    issue_number,
+                    api_response,
                 )
 
                 if issue_obj and issue_obj.id:
@@ -107,8 +109,10 @@ class FetchAndLinkIssuesStep(IngestionStep):
             if linked_issue_db_ids_for_commit:
                 try:
                     # Use the CommitGuruMetricRepository to handle the linking
-                    guru_repo.link_issues_to_commit(
-                        commit_db_id, linked_issue_db_ids_for_commit
+                    await asyncio.to_thread(
+                        guru_repo.link_issues_to_commit,
+                        commit_db_id,
+                        linked_issue_db_ids_for_commit,
                     )
                     self._log_debug(
                         context,
@@ -127,12 +131,12 @@ class FetchAndLinkIssuesStep(IngestionStep):
                 step_progress = int(
                     100 * (processed_link_count / total_links_to_process)
                 )
-                self._update_progress(
+                await self._update_progress(
                     context,
                     f"Linking issues ({processed_link_count}/{total_links_to_process})...",
                     step_progress,
                 )
 
         self._log_info(context, "Finished linking GitHub issues.")
-        self._update_progress(context, "Issue linking complete.", 100)
+        await self._update_progress(context, "Issue linking complete.", 100)
         return context

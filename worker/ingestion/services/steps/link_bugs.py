@@ -1,5 +1,6 @@
 # worker/ingestion/services/steps/link_bugs.py
 import logging
+import asyncio
 from typing import Dict, List, Optional, Set, Tuple
 
 from services.bug_linker import GitCommitLinker
@@ -19,8 +20,7 @@ logger.setLevel(log_level.upper())
 class LinkBugsStep(IngestionStep):
     name = "Link Bugs"
 
-    # Inject dependencies via execute method kwargs
-    def execute(
+    async def execute(
         self,
         context: IngestionContext,
         *,
@@ -41,7 +41,7 @@ class LinkBugsStep(IngestionStep):
             context,
             "Preparing data for bug linking (checking keywords and issue timestamps)...",
         )
-        self._update_progress(context, "Checking fix keywords and issue links...", 0)
+        await self._update_progress(context, "Checking fix keywords and issue links...", 0)
 
         # Query timestamps using the GitHubIssueRepository
         processed_corrective_count = 0
@@ -62,17 +62,15 @@ class LinkBugsStep(IngestionStep):
         # Fetch timestamps (Consider if this needs optimization or batching within the repo)
         for commit_hash, db_id in commits_for_ts_query:
             processed_corrective_count += 1
-            earliest_ts = guru_repo.get_earliest_linked_issue_timestamp(
-                db_id
-            )  # Assuming method exists in guru_repo
-            corrective_info[commit_hash] = earliest_ts
+            ts = await asyncio.to_thread(guru_repo.get_earliest_linked_issue_timestamp, db_id)
+            corrective_info[commit_hash] = ts
             if processed_corrective_count % 50 == 0:
                 progress = (
                     int(20 * (processed_corrective_count / total_potential_corrective))
                     if total_potential_corrective
                     else 0
                 )
-                self._update_progress(
+                await self._update_progress(
                     context,
                     f"Checking timestamps ({processed_corrective_count}/{total_potential_corrective})...",
                     progress,
@@ -82,7 +80,7 @@ class LinkBugsStep(IngestionStep):
             context,
             f"Prepared {len(corrective_info)} corrective commits with timestamps for linking.",
         )
-        self._update_progress(context, "Running GitCommitLinker...", 20)
+        await self._update_progress(context, "Running GitCommitLinker...", 20)
 
         if not corrective_info:
             self._log_info(
@@ -98,12 +96,13 @@ class LinkBugsStep(IngestionStep):
 
         try:
             linker = GitCommitLinker(git_service)
-            context.bug_link_map_hash = linker.link_corrective_commits(corrective_info)
+            map_hash = await asyncio.to_thread(linker.link_corrective_commits, corrective_info)
+            context.bug_link_map_hash = map_hash
             self._log_info(
                 context,
                 f"Bug linking analysis identified {len(context.bug_link_map_hash)} potential bug-introducing commits (by hash).",
             )
-            self._update_progress(
+            await self._update_progress(
                 context, "Bug linking analysis complete. Updating database...", 80
             )
         except Exception as e:
@@ -134,9 +133,10 @@ class LinkBugsStep(IngestionStep):
 
             if bug_introducing_commit_ids or fixing_commit_map_for_update:
                 try:
-                    # Call repository method to handle the updates
-                    guru_repo.update_bug_links(
-                        bug_introducing_commit_ids, fixing_commit_map_for_update
+                    await asyncio.to_thread(
+                        guru_repo.update_bug_links,
+                        bug_introducing_commit_ids,
+                        fixing_commit_map_for_update,
                     )
                     self._log_info(
                         context,
@@ -156,5 +156,5 @@ class LinkBugsStep(IngestionStep):
                     context, "No bug links found requiring database updates."
                 )
 
-        self._update_progress(context, "Bug linking step complete.", 100)
+        await self._update_progress(context, "Bug linking step complete.", 100)
         return context

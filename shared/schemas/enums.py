@@ -3,6 +3,7 @@ import enum
 
 
 class JobStatusEnum(str, enum.Enum):
+    STARTED = "started"
     PENDING = "pending"
     RUNNING = "running"
     SUCCESS = "success"

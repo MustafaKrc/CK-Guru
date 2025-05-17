@@ -12,9 +12,9 @@ services:
     command: npm run dev # Explicitly set the command for development
     environment:
       # This environment variable is read by Next.js for client-side API calls.
-      # It should point to where your backend is accessible from your browser.
-      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
       - NODE_ENV=development
       # For some systems (especially Windows or macOS with Docker Desktop),
       # file watching for hot-reloading might need polling. Uncomment if HMR is slow/not working.
       - CHOKIDAR_USEPOLLING=true
+    env_file:
+      - .env

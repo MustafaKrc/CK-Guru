@@ -1,6 +1,7 @@
 # worker/ingestion/services/steps/prepare_repo.py
 import logging
 import shutil
+import asyncio
 from pathlib import Path
 
 # Use GitPython directly for this step's core function
@@ -94,32 +95,16 @@ def _ensure_repository_prepared(git_url: str, repo_local_path: Path) -> Repo:
 class PrepareRepositoryStep(IngestionStep):
     name = "Prepare Repository"
 
-    # Remove git_service from signature
-    def execute(self, context: IngestionContext) -> IngestionContext:
-        self._log_info(
-            context,
-            f"Ensuring repository clone exists and is up-to-date at {context.repo_local_path}...",
-        )
+    async def execute(self, context: IngestionContext, **kwargs) -> IngestionContext:
+        self._log_info(context, f"Ensuring clone at {context.repo_local_path}")
         try:
-            # Use the helper function directly
-            context.repo_object = _ensure_repository_prepared(
-                context.git_url, context.repo_local_path
-            )
-
-            if not context.repo_object:  # Sanity check
-                raise ValueError(
-                    "GitPython Repo object could not be initialized after clone/fetch."
-                )
-
-            self._log_info(
-                context, "Repository preparation complete. Repo object created."
-            )
-
-        except (GitCommandError, FileNotFoundError, ValueError, Exception) as e:
-            self._log_error(
-                context, f"Repository preparation failed: {e}", exc_info=True
-            )
-            context.repo_object = None  # Ensure repo_object is None on failure
-            raise  # Re-raise critical error
-
+            repo = await asyncio.to_thread(_ensure_repository_prepared, context.git_url, context.repo_local_path)
+            context.repo_object = repo or None
+            if not repo:
+                raise ValueError("Repo object missing")
+            self._log_info(context, "Repository prepared")
+        except Exception as e:
+            self._log_error(context, f"Preparation failed: {e}", exc_info=True)
+            context.repo_object = None
+            raise
         return context

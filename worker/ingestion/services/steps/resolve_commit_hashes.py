@@ -1,5 +1,6 @@
 # worker/ingestion/services/steps/resolve_commit_hashes.py
 import logging
+import asyncio
 
 from services.git_service import GitCommandError, GitRefNotFoundError, GitService
 from shared.core.config import settings
@@ -13,9 +14,9 @@ logger.setLevel(settings.LOG_LEVEL.upper())
 class ResolveCommitHashesStep(IngestionStep):
     name = "Resolve Commit Hashes"
 
-    def execute(
+    async def execute(
         self, context: IngestionContext, *, git_service: GitService
-    ) -> IngestionContext:  # Inject service
+    ) -> IngestionContext:
         if not context.is_single_commit_mode:
             self._log_info(
                 context, "Skipping hash resolution (not single commit mode)."
@@ -35,7 +36,9 @@ class ResolveCommitHashesStep(IngestionStep):
 
         try:
             # Resolve target hash using GitService
-            resolved_target_hash = git_service.resolve_ref_to_hash(original_target_ref)
+            resolved_target_hash = await asyncio.to_thread(
+                git_service.resolve_ref_to_hash, original_target_ref
+            )
             context.target_commit_hash = (
                 resolved_target_hash  # Update context with full hash
             )
@@ -44,7 +47,9 @@ class ResolveCommitHashesStep(IngestionStep):
             )
 
             # Find parent hash using GitService
-            parent_hash = git_service.get_first_parent_hash(context.target_commit_hash)
+            parent_hash = await asyncio.to_thread(
+                git_service.get_first_parent_hash, context.target_commit_hash
+            )
             if parent_hash:
                 context.parent_commit_hash = parent_hash
                 self._log_info(

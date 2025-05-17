@@ -1,5 +1,6 @@
 # worker/ingestion/services/steps/calculate_ck.py
 import logging
+import asyncio
 from typing import List
 
 from pydantic import ValidationError
@@ -19,7 +20,7 @@ logger.setLevel(log_level.upper())
 class CalculateCKMetricsStep(IngestionStep):
     name = "Calculate CK Metrics"
 
-    def execute(
+    async def execute(
         self,
         context: IngestionContext,
         *,
@@ -88,7 +89,7 @@ class CalculateCKMetricsStep(IngestionStep):
                 )
 
             total_commits_for_ck = len(commits_to_process_hashes)
-            self._update_progress(
+            await self._update_progress(
                 context,
                 f"Starting CK analysis for {total_commits_for_ck} commits...",
                 0,
@@ -101,14 +102,17 @@ class CalculateCKMetricsStep(IngestionStep):
                     if total_commits_for_ck
                     else 0
                 )
-                self._update_progress(
+                await self._update_progress(
                     context,
                     f"Calculating CK ({i+1}/{total_commits_for_ck} - {commit_hash[:7]})...",
                     step_progress,
                 )
                 self._log_info(context, f"Running CK for commit {commit_hash[:7]}...")
 
-                if not git_service.checkout_commit(commit_hash, force=True):
+                checked_out = await asyncio.to_thread(
+                    git_service.checkout_commit, commit_hash, True
+                )
+                if not checked_out:
                     self._log_warning(
                         context,
                         f"Failed checkout for commit {commit_hash[:7]}, skipping CK.",
@@ -123,8 +127,10 @@ class CalculateCKMetricsStep(IngestionStep):
                     context.is_single_commit_mode
                 ):  # Only check DB in inference mode for now
                     try:
-                        metrics_exist = ck_repo.check_metrics_exist_for_commit(
-                            context.repository_id, commit_hash
+                        metrics_exist = await asyncio.to_thread(
+                            ck_repo.check_metrics_exist_for_commit,
+                            context.repository_id,
+                            commit_hash,
                         )
                     except Exception as db_check_err:
                         self._log_warning(
@@ -148,7 +154,10 @@ class CalculateCKMetricsStep(IngestionStep):
                     context, f"Running CK calculation for commit {commit_hash[:7]}..."
                 )
 
-                if not git_service.checkout_commit(commit_hash, force=True):
+                checked_out = await asyncio.to_thread(
+                    git_service.checkout_commit, commit_hash, True
+                )
+                if not checked_out:
                     self._log_warning(
                         context,
                         f"Failed checkout for commit {commit_hash[:7]}, skipping CK.",
@@ -156,7 +165,9 @@ class CalculateCKMetricsStep(IngestionStep):
                     continue
 
                 # Use injected ck_runner
-                metrics_df = ck_runner.run(context.repo_local_path, commit_hash)
+                metrics_df = await asyncio.to_thread(
+                    ck_runner.run, context.repo_local_path, commit_hash
+                )
 
                 if not metrics_df.empty:
                     ck_payload_list: List[CKMetricPayload] = []
@@ -227,7 +238,7 @@ class CalculateCKMetricsStep(IngestionStep):
             context,
             f"Finished CK processing step. Generated/Found metrics for {num_commits_with_metrics} commits.",
         )
-        self._update_progress(
+        await self._update_progress(
             context, "CK processing finished.", 90
         )  # Update progress description
         return context

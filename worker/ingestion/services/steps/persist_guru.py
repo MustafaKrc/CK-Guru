@@ -1,5 +1,6 @@
 # worker/ingestion/services/steps/persist_guru.py
 import logging
+import asyncio
 from typing import Any, Dict, List
 
 from shared.repositories import CommitGuruMetricRepository
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 class PersistCommitGuruMetricsStep(IngestionStep):
     name = "Persist Commit Guru Metrics"
 
-    def execute(
+    async def execute(
         self, context: IngestionContext, *, guru_repo: CommitGuruMetricRepository
     ) -> IngestionContext:
         """Persists calculated CommitGuru metrics using the repository."""
@@ -36,7 +37,7 @@ class PersistCommitGuruMetricsStep(IngestionStep):
             context,
             f"Preparing {total_commits} Commit Guru metric Payloads for persistence...",
         )
-        self._update_progress(context, f"Preparing {total_commits} commits...", 0)
+        await self._update_progress(context, f"Preparing {total_commits} commits...", 0)
 
         # Convert Pydantic models back to dictionaries for the repository's bulk operation
         for i, payload in enumerate(commit_payloads):
@@ -70,7 +71,7 @@ class PersistCommitGuruMetricsStep(IngestionStep):
 
             if total_commits > 0 and processed_count % 100 == 0:
                 step_progress = int(95 * (processed_count / total_commits))
-                self._update_progress(
+                await self._update_progress(
                     context,
                     f"Preparing Guru ({processed_count}/{total_commits})...",
                     step_progress,
@@ -83,7 +84,7 @@ class PersistCommitGuruMetricsStep(IngestionStep):
                 f"Performing bulk UPSERT for {len(commits_to_upsert)} CommitGuruMetrics...",
             )
             try:
-                db_ids_map = guru_repo.bulk_upsert(commits_to_upsert)
+                db_ids_map = await asyncio.to_thread(guru_repo.bulk_upsert, commits_to_upsert)
                 context.commit_hash_to_db_id_map.update(db_ids_map)
                 context.inserted_guru_metrics_count = len(db_ids_map)
                 self._log_info(
@@ -96,5 +97,5 @@ class PersistCommitGuruMetricsStep(IngestionStep):
                 )
                 raise
 
-        self._update_progress(context, "Commit Guru persistence complete.", 100)
+        await self._update_progress(context, "Commit Guru persistence complete.", 100)
         return context

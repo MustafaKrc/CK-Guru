@@ -10,6 +10,7 @@ from pydantic import (
     PostgresDsn,
     SecretStr,
     computed_field,
+    RedisDsn,
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -22,6 +23,12 @@ class Settings(BaseSettings):
     Application Configuration Settings. Loads variables from environment variables
     and potentially a .env file.
     """
+
+    REDIS_URL: RedisDsn = Field("redis://ckguru_redis:6379/1", validation_alias="REDIS_URL")
+    REDIS_MAX_CONNECTIONS: int = 20
+    REDIS_TASK_EVENTS_CHANNEL: str = "task_events_channel"
+
+    SSE_HEARTBEAT_INTERVAL: int = 3 # seconds
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", case_sensitive=True, extra="ignore"

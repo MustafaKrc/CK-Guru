@@ -1,5 +1,6 @@
 # worker/ingestion/services/steps/persist_ck.py
 import logging
+import asyncio
 from typing import Any, Dict, List  # Add List, Any
 
 from shared.repositories import CKMetricRepository
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 class PersistCKMetricsStep(IngestionStep):
     name = "Persist CK Metrics"
 
-    def execute(
+    async def execute(
         self, context: IngestionContext, *, ck_repo: CKMetricRepository
     ) -> IngestionContext:
         # Check the context attribute which now contains Pydantic models
@@ -32,7 +33,7 @@ class PersistCKMetricsStep(IngestionStep):
         )
 
         self._log_info(context, log_msg_prefix)
-        self._update_progress(context, log_msg_prefix, 0)
+        await self._update_progress(context, log_msg_prefix, 0)
 
         all_instances_to_upsert: List[Dict[str, Any]] = []
         # Iterate through the dictionary {commit_hash: List[CKMetricPayload]}
@@ -91,7 +92,7 @@ class PersistCKMetricsStep(IngestionStep):
                 step_progress = int(
                     95 * (processed_commit_count / total_commits_to_process)
                 )
-                self._update_progress(
+                await self._update_progress(
                     context,
                     f"Preparing CK ({processed_commit_count}/{total_commits_to_process})...",
                     step_progress,
@@ -104,7 +105,7 @@ class PersistCKMetricsStep(IngestionStep):
                 f"Attempting bulk UPSERT for {len(all_instances_to_upsert)} CK records...",
             )
             try:
-                processed_count = ck_repo.bulk_upsert(all_instances_to_upsert)
+                processed_count = await asyncio.to_thread(ck_repo.bulk_upsert, all_instances_to_upsert)
                 inserted_count = processed_count  # UPSERT count is treated as processed
             except Exception as e:
                 self._log_error(
@@ -117,5 +118,5 @@ class PersistCKMetricsStep(IngestionStep):
             context,
             f"Persisted {inserted_count} CK metric records for {processed_commit_count} commits.",
         )
-        self._update_progress(context, "CK persistence complete.", 100)
+        await self._update_progress(context, "CK persistence complete.", 100)
         return context

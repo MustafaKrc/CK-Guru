@@ -1,5 +1,6 @@
 # worker/ingestion/services/steps/ensure_commits_exist.py
 import logging
+import asyncio
 
 from services.interfaces import IGitService
 
@@ -11,7 +12,7 @@ logger = logging.getLogger(__name__)
 class EnsureCommitsExistLocallyStep(IngestionStep):
     name = "Ensure Commits Exist Locally"
 
-    def execute(
+    async def execute(
         self, context: IngestionContext, *, git_service: IGitService
     ) -> IngestionContext:
         if not context.is_single_commit_mode:
@@ -26,7 +27,6 @@ class EnsureCommitsExistLocallyStep(IngestionStep):
             raise ValueError("Target commit hash missing.")
 
         commits_to_check = [context.target_commit_hash]
-        # Parent hash is now Optional, only check if it exists
         if context.parent_commit_hash:
             commits_to_check.append(context.parent_commit_hash)
 
@@ -37,16 +37,15 @@ class EnsureCommitsExistLocallyStep(IngestionStep):
 
         for commit_hash in commits_to_check:
             try:
-                exists = git_service.does_commit_exist(commit_hash)
+                exists = await asyncio.to_thread(git_service.does_commit_exist, commit_hash)
                 if exists:
                     self._log_info(
                         context, f"Commit {commit_hash[:7]} verified locally."
                     )
                 else:
-                    # Commit definitively doesn't exist locally
                     msg = f"Required commit {commit_hash[:7]} not found in local repository clone."
                     self._log_error(context, msg, exc_info=False)
-                    raise ValueError(msg)  # Raise error to stop pipeline
+                    raise ValueError(msg)
             except Exception as e:
                 msg = f"Unexpected error checking commit {commit_hash[:7]}: {e}"
                 self._log_error(context, msg, exc_info=True)

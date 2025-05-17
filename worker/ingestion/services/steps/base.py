@@ -7,9 +7,10 @@ from typing import Any, Dict, List, Optional
 import git
 from celery import Task
 
+from shared.celery_config.base_task import EventPublishingTask
 from shared.core.config import settings
+from shared.schemas.enums import JobStatusEnum
 from shared.schemas.ingestion_data import CKMetricPayload, CommitGuruMetricPayload
-from shared.utils.task_utils import update_task_state
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
@@ -24,7 +25,7 @@ class IngestionContext:
     repo_local_path: Path
 
     # Task Management
-    task_instance: Optional[Task] = None
+    task_instance: Optional[EventPublishingTask] = None
     warnings: List[str]
 
     # Processing State & Data
@@ -56,11 +57,17 @@ class IngestionContext:
         None  # Changed from Dict to List[Dict]
     )
 
+    # Event Context
+    event_job_type: Optional[str]
+    event_entity_id: Optional[Any]
+    event_entity_type: Optional[str]
+    event_user_id: Optional[Any]
+
     def __init__(
         self,
         repository_id: int,
         repo_local_path: Path,
-        task_instance: Task,
+        task_instance: EventPublishingTask,
         git_url: Optional[str] = None,
         is_single_commit_mode: bool = False,
         target_commit_hash: Optional[str] = None,
@@ -69,6 +76,10 @@ class IngestionContext:
         final_combined_features: Optional[
             List[Dict[str, Any]]
         ] = None,  # Keep this as dict for now
+        event_job_type: Optional[str] = None,
+        event_entity_id: Optional[Any] = None,
+        event_entity_type: Optional[str] = None,
+        event_user_id: Optional[Any] = None,
     ):
         self.repository_id = repository_id
         self.git_url = git_url
@@ -90,6 +101,10 @@ class IngestionContext:
         self.inserted_guru_metrics_count = 0
         self.inserted_ck_metrics_count = 0
         self.parent_metrics_processed = False
+        self.event_job_type = event_job_type
+        self.event_entity_id = event_entity_id
+        self.event_entity_type = event_entity_type
+        self.event_user_id = event_user_id
 
 
 class IngestionStep(ABC):
@@ -102,7 +117,7 @@ class IngestionStep(ABC):
         pass
 
     @abstractmethod
-    def execute(self, context: IngestionContext, **kwargs: Any) -> IngestionContext:
+    async def execute(self, context: IngestionContext, **kwargs: Any) -> IngestionContext:
         """
         Executes the logic for this step.
 
@@ -119,7 +134,7 @@ class IngestionStep(ABC):
         """
         pass
 
-    def _update_progress(
+    async def _update_progress(
         self,
         context: IngestionContext,
         message: str,
@@ -127,30 +142,35 @@ class IngestionStep(ABC):
         warning: Optional[str] = None,
     ):
         """Helper to update Celery task progress via the context."""
-        if context.task_instance:
-            update_task_state(
-                context.task_instance, "STARTED", message, progress, warning
-            )
+        if warning:
+            self._log_warning(context, warning)
+
+        await context.task_instance.update_task_state(
+            state=JobStatusEnum.RUNNING.value,  # Assuming RUNNING for progress updates
+            status_message=message,
+            progress=progress,
+            job_type=context.event_job_type,
+            entity_id=context.event_entity_id,
+            entity_type=context.event_entity_type,
+            user_id=context.event_user_id,
+        )
+
+    def _get_task_id_str(self, context: IngestionContext) -> str:
+        if context.task_instance and getattr(context.task_instance, "request", None):
+            return str(context.task_instance.request.id)
+        return "N/A"
 
     def _log_info(self, context: IngestionContext, message: str):
-        """Helper for consistent logging prefix."""
-        task_id = context.task_instance.request.id if context.task_instance else "N/A"
-        logger.info(f"Task {task_id} - Step [{self.name}]: {message}")
+        logger.info(f"Task {self._get_task_id_str(context)} - Step [{self.name}]: {message}")
 
     def _log_warning(self, context: IngestionContext, message: str):
-        """Helper for consistent logging prefix and adding to context warnings."""
-        task_id = context.task_instance.request.id if context.task_instance else "N/A"
-        logger.warning(f"Task {task_id} - Step [{self.name}]: {message}")
+        logger.warning(f"Task {self._get_task_id_str(context)} - Step [{self.name}]: {message}")
         context.warnings.append(f"[{self.name}] {message}")
 
     def _log_error(self, context: IngestionContext, message: str, exc_info=True):
-        """Helper for consistent error logging prefix."""
-        task_id = context.task_instance.request.id if context.task_instance else "N/A"
         logger.error(
-            f"Task {task_id} - Step [{self.name}]: {message}", exc_info=exc_info
+            f"Task {self._get_task_id_str(context)} - Step [{self.name}]: {message}", exc_info=exc_info
         )
 
     def _log_debug(self, context: IngestionContext, message: str):
-        """Helper for consistent debug logging prefix."""
-        task_id = context.task_instance.request.id if context.task_instance else "N/A"
-        logger.debug(f"Task {task_id} - Step [{self.name}]: {message}")
+        logger.debug(f"Task {self._get_task_id_str(context)} - Step [{self.name}]: {message}")

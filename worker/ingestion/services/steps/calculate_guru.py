@@ -1,5 +1,6 @@
 # worker/ingestion/services/steps/calculate_guru.py
 import logging
+import asyncio
 from typing import List
 
 from pydantic import ValidationError
@@ -29,7 +30,7 @@ logger.setLevel(settings.LOG_LEVEL.upper())
 class CalculateCommitGuruMetricsStep(IngestionStep):
     name = "Calculate Commit Guru Metrics"
 
-    def execute(
+    async def execute(
         self, context: IngestionContext, *, git_service: IGitService
     ) -> IngestionContext:
         if not context.repo_local_path or not context.repo_local_path.is_dir():
@@ -66,7 +67,9 @@ class CalculateCommitGuruMetricsStep(IngestionStep):
             self._log_info(context, "Running git log for full history.")
 
         try:
-            log_output = git_service.run_git_command(log_cmd_args, check=True)
+            log_output = await asyncio.to_thread(
+                git_service.run_git_command, log_cmd_args, True
+            )
         except Exception as e:
             self._log_error(
                 context, f"Failed to run git log command: {e}", exc_info=True
@@ -81,7 +84,7 @@ class CalculateCommitGuruMetricsStep(IngestionStep):
 
         final_results_list: List[CommitGuruMetricPayload] = []
         total_parsed = len(parsed_commits)
-        self._update_progress(
+        await self._update_progress(
             context, f"Processing {total_parsed} parsed commits...", 0
         )
 
@@ -157,7 +160,7 @@ class CalculateCommitGuruMetricsStep(IngestionStep):
 
             if (i + 1) % 100 == 0:
                 progress = int(95 * ((i + 1) / total_parsed))
-                self._update_progress(
+                await self._update_progress(
                     context, f"Processed {i+1}/{total_parsed} commits...", progress
                 )
 
@@ -176,5 +179,5 @@ class CalculateCommitGuruMetricsStep(IngestionStep):
             context,
             f"Calculated Commit Guru metrics for {len(context.raw_commit_guru_data)} commits (as Pydantic Payloads).",
         )
-        self._update_progress(context, "Commit Guru calculation complete.", 100)
+        await self._update_progress(context, "Commit Guru calculation complete.", 100)
         return context
