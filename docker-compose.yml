@@ -169,8 +169,6 @@ services:
     environment:
       # Ensure Next.js listens on all interfaces inside the container
       HOSTNAME: "0.0.0.0"
-    depends_on:
-      - backend # Usually depends on backend being available
 
   #################
   # Database

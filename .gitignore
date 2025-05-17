@@ -469,9 +469,6 @@ $RECYCLE.BIN/
 # End of https://www.toptal.com/developers/gitignore/api/node,visualstudiocode,windows,macos,linux,test
 
 
-# Docker Compose override file
-docker-compose.override.yml
-
 
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
@@ -500,3 +497,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+
+# My scripts
+scripts/
