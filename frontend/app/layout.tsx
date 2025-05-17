@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 import "@/app/globals.css"
 import { Inter } from "next/font/google"
 import type { Metadata } from "next"
+import { GlobalAppEffects } from "@/components/GlobalAppEffects";
 
 // Load Inter font with explicit configuration
 const inter = Inter({
@@ -31,6 +32,7 @@ export default function RootLayout({
       <body className={cn("min-h-screen bg-background font-sans antialiased", inter.className, inter.variable)}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <AuthProvider>
+            <GlobalAppEffects />
             {children}
             <Toaster />
           </AuthProvider>

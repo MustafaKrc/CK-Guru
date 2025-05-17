@@ -31,6 +31,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { apiService, handleApiError, ApiError } from "@/lib/apiService"
 import { Repository, RepositoryCreatePayload, TaskResponse } from "@/types/api/repository"
 
+import { useTaskStore, TaskStatusUpdatePayload } from "@/store/taskStore";
+
 export default function RepositoriesPage() {
   const [repositories, setRepositories] = useState<Repository[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -46,6 +48,13 @@ export default function RepositoriesPage() {
   const [isDeletingRepository, setIsDeletingRepository] = useState(false)
 
   const [isIngesting, setIsIngesting] = useState<Record<number, boolean>>({}); // Track ingestion status per repo
+
+  // Zustand store integration
+  const taskStatuses = useTaskStore((state) => state.taskStatuses);
+  // No need to call connectSSE here if GlobalAppEffects is handling it.
+
+  // Local state for immediate button click feedback for ingest
+  const [localIngestButtonLoading, setLocalIngestButtonLoading] = useState<Record<number, boolean>>({});
 
   const { toast } = useToast()
 
@@ -143,28 +152,61 @@ export default function RepositoriesPage() {
   };
 
   const handleIngestRepository = async (repoId: number, repoName: string) => {
-    setIsIngesting(prev => ({ ...prev, [repoId]: true }));
+    setLocalIngestButtonLoading(prev => ({ ...prev, [repoId]: true }));
     try {
       const response = await apiService.post<TaskResponse>(`/repositories/${repoId}/ingest`);
       toast({
-        title: "Ingestion Started",
-        description: `${repoName}: ${response.message} (Task ID: ${response.task_id})`,
+        title: "Ingestion Initiated",
+        description: `${repoName}: Task ${response.task_id} submitted. Status will update via SSE.`,
         action: (
           <Button variant="outline" size="sm" asChild>
             <Link href={`/tasks?taskId=${response.task_id}`}>View Task</Link>
           </Button>
         ),
       });
+      // SSE will handle further status updates reflected through useTaskStore
     } catch (err) {
       handleApiError(err, `Ingest Repository ${repoName} Failed`);
     } finally {
-      setIsIngesting(prev => ({ ...prev, [repoId]: false }));
+      // Keep local loading true for a short moment to allow SSE to potentially catch up,
+      // or remove if SSE is fast enough. For now, let's clear it.
+      // A better approach: button shows API call loading, then switches to "Processing (SSE)"
+      setLocalIngestButtonLoading(prev => ({ ...prev, [repoId]: false }));
     }
+  };
+
+  // Selector function to get the latest ingestion task status for a repository
+  const getRepoIngestionStatus = (repoId: number): TaskStatusUpdatePayload | undefined => {
+    // This uses the selector from the store directly if we expose it, or implement logic here
+    // For now, direct implementation:
+    const relevantTasks = Object.values(taskStatuses).filter(
+      task => task.job_type === "repository_ingestion" && task.entity_id === repoId
+    );
+    
+    if (relevantTasks.length === 0) return undefined;
+    
+    console.log("Relevant tasks for repoId", repoId, relevantTasks);
+    console.log(relevantTasks.sort((a, b) => {
+        const dateA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const dateB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        if (dateB !== dateA) return dateB - dateA;
+        // Fallback to task_id if timestamps are missing or identical
+        return parseInt(b.task_id.split('-').pop() || "0") - parseInt(a.task_id.split('-').pop() || "0");
+    })[0]);
+    
+    // Sort by timestamp if available, otherwise by task_id as a proxy for recency
+    return relevantTasks.sort((a, b) => {
+        const dateA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const dateB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        if (dateB !== dateA) return dateB - dateA;
+        // Fallback to task_id if timestamps are missing or identical
+        return parseInt(b.task_id.split('-').pop() || "0") - parseInt(a.task_id.split('-').pop() || "0");
+    })[0];
   };
 
 
   const renderContent = () => {
-    if (isLoading) {
+    if (isLoading && repositories.length === 0) { // Show skeletons only on initial load or if explicitly fetching
       return (
         Array.from({ length: 3 }).map((_, index) => (
           <TableRow key={`skeleton-${index}`}>
@@ -172,7 +214,7 @@ export default function RepositoriesPage() {
             <TableCell><Skeleton className="h-5 w-48" /></TableCell>
             <TableCell><Skeleton className="h-5 w-24" /></TableCell>
             <TableCell><Skeleton className="h-5 w-40" /></TableCell>
-            <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+            <TableCell className="text-right"><Skeleton className="h-8 w-8 rounded-full" /></TableCell>
           </TableRow>
         ))
       )
@@ -194,12 +236,12 @@ export default function RepositoriesPage() {
       )
     }
 
-    if (repositories.length === 0) {
+    if (!isLoading && repositories.length === 0) {
       return (
         <TableRow>
           <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
             <p>No repositories added yet.</p>
-            <Button size="sm" className="mt-2" onClick={() => setAddDialogOpen(true)}>
+            <Button size="sm" className="mt-2" onClick={() => { setAddRepoError(null); setNewRepoUrl(""); setAddDialogOpen(true);}}>
                 <Plus className="mr-2 h-4 w-4" />
                 Add Your First Repository
             </Button>
@@ -208,79 +250,97 @@ export default function RepositoriesPage() {
       )
     }
 
-    return repositories.map((repo) => (
-      <TableRow key={repo.id}>
-        <TableCell className="font-medium">{repo.name}</TableCell>
-        <TableCell className="font-mono text-sm max-w-xs truncate" title={repo.git_url}>{repo.git_url}</TableCell>
-        <TableCell>{formatDate(repo.created_at)}</TableCell>
-        <TableCell>
-          <div className="flex flex-col text-xs text-muted-foreground">
-            <span>{repo.datasets_count} datasets</span>
-            <span>{repo.bot_patterns_count} bot patterns</span>
-            <span>{repo.github_issues_count} GitHub issues</span>
-          </div>
-        </TableCell>
-        <TableCell className="text-right">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                // Disable if this specific repo is ingesting OR if any repo is being globally deleted
-                disabled={isIngesting[repo.id] || (isDeletingRepository && selectedRepoForDelete?.id === repo.id) }
-              >
-                {isIngesting[repo.id] ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <MoreHorizontal className="h-4 w-4" />
-                )}
-                <span className="sr-only">Open menu for {repo.name}</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Actions for {repo.name}</DropdownMenuLabel>
-              <DropdownMenuItem asChild>
-                <Link href={`/repositories/${repo.id}`}>
-                  <Eye className="mr-2 h-4 w-4" />
-                  View Details
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => handleIngestRepository(repo.id, repo.name)}
-                disabled={isIngesting[repo.id]} // Disable only if this specific repo is ingesting
-              >
-                {isIngesting[repo.id] ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Ingesting...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    Ingest / Re-Ingest
-                  </>
-                )}
-              </DropdownMenuItem>
-              <DropdownMenuItem disabled> {/* Edit to be implemented */}
-                <Edit className="mr-2 h-4 w-4" />
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onClick={() => handleDeleteConfirmation(repo)}
-                // Disable if any repo is being globally deleted, or if this specific repo is ingesting
-                disabled={isDeletingRepository || isIngesting[repo.id]} 
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </TableCell>
-      </TableRow>
-    ))
-  }
+    return repositories.map((repo) => {
+      const ingestionTaskStatus = getRepoIngestionStatus(repo.id);
+      // Determine if the repo is actively being processed (RUNNING or PENDING from SSE)
+      const isRepoCurrentlyProcessingViaSSE = ingestionTaskStatus && 
+                               (ingestionTaskStatus.status.toUpperCase() === "RUNNING" || ingestionTaskStatus.status.toUpperCase() === "PENDING");
+      
+      // For the main dropdown trigger, also consider the local button loading state for immediate feedback
+      const isActionTriggerDisabled = localIngestButtonLoading[repo.id] || 
+                                    isRepoCurrentlyProcessingViaSSE || 
+                                    (isDeletingRepository && selectedRepoForDelete?.id === repo.id);
+      
+      const showSpinnerOnTrigger = localIngestButtonLoading[repo.id] || isRepoCurrentlyProcessingViaSSE;
+
+      return (
+        <TableRow key={repo.id} className={isRepoCurrentlyProcessingViaSSE ? "opacity-60" : ""}>
+          <TableCell className="font-medium">{repo.name}</TableCell>
+          <TableCell className="font-mono text-sm max-w-[200px] md:max-w-xs truncate" title={repo.git_url}>{repo.git_url}</TableCell>
+          <TableCell>{formatDate(repo.created_at)}</TableCell>
+          <TableCell>
+            <div className="flex flex-col text-xs text-muted-foreground">
+              <span>{repo.datasets_count} datasets</span>
+              <span>{repo.bot_patterns_count} bot patterns</span>
+              <span>{repo.github_issues_count} GitHub issues</span>
+              {isRepoCurrentlyProcessingViaSSE && ingestionTaskStatus && (
+                <span className="text-blue-600 dark:text-blue-400 mt-1 font-medium">
+                  {ingestionTaskStatus.status_message || ingestionTaskStatus.status.toUpperCase()} 
+                  {ingestionTaskStatus.progress != null ? ` (${ingestionTaskStatus.progress}%)` : ''}
+                </span>
+              )}
+            </div>
+          </TableCell>
+          <TableCell className="text-right">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  disabled={isActionTriggerDisabled}
+                >
+                  {showSpinnerOnTrigger ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <MoreHorizontal className="h-4 w-4" />
+                  )}
+                  <span className="sr-only">Open menu for {repo.name}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Actions for {repo.name}</DropdownMenuLabel>
+                <DropdownMenuItem asChild disabled={isActionTriggerDisabled}>
+                  <Link href={`/repositories/${repo.id}`}>
+                    <Eye className="mr-2 h-4 w-4" />
+                    View Details
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => handleIngestRepository(repo.id, repo.name)}
+                  disabled={isActionTriggerDisabled} // Disables if any processing related to this repo
+                >
+                  {showSpinnerOnTrigger ? ( // Use the same spinner logic as the trigger
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      {ingestionTaskStatus?.status_message ? ingestionTaskStatus.status_message.substring(0,15)+'...' : (localIngestButtonLoading[repo.id] ? "Initiating..." : "Processing...")}
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Ingest / Re-Ingest
+                    </>
+                  )}
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled> 
+                  <Edit className="mr-2 h-4 w-4" />
+                  Edit
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={() => handleDeleteConfirmation(repo)}
+                  disabled={isDeletingRepository || showSpinnerOnTrigger} // Disable delete if ingesting or another delete is in progress
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </TableCell>
+        </TableRow>
+      );
+    });
+  };
 
   return (
     <MainLayout>
@@ -338,7 +398,7 @@ export default function RepositoriesPage() {
                 <TableHead>Name</TableHead>
                 <TableHead>Git URL</TableHead>
                 <TableHead>Date Added</TableHead>
-                <TableHead>Summary</TableHead>
+                <TableHead>Summary & Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
