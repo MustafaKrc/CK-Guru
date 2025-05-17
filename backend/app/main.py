@@ -1,6 +1,7 @@
 from fastapi import FastAPI, status
 from fastapi.logger import logger
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.v1.router import api_router
@@ -35,6 +36,25 @@ app = FastAPI(
     docs_url="/api/docs",  # Standard location for Swagger UI
     redoc_url="/api/redoc",  # Standard location for ReDoc
 )
+
+# --- Configure CORS ---
+# Adjust origins based on your actual frontend URL in different environments
+# For development, localhost:3000 is common.
+# For production, use your actual frontend domain.
+# Use environment variables for origins in production.
+origins = [
+    "http://localhost:3000", # Frontend development server
+    # "https://your-production-frontend.com", # Example production frontend
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"], # Allows all methods
+    allow_headers=["*"], # Allows all headers
+)
+
 
 # Include the API router
 app.include_router(api_router, prefix="/api/v1")  # Add the /api/v1 prefix here
