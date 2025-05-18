@@ -1,4 +1,5 @@
 # worker/ml/app/tasks.py
+import asyncio
 import logging
 
 from celery import Task, shared_task
@@ -14,6 +15,7 @@ from services.handlers.training_handler import TrainingJobHandler
 from services.handlers.xai_explanation_handler import XAIExplanationHandler
 from services.handlers.xai_orchestration_handler import XAIOrchestrationHandler
 
+from shared.celery_config.base_task import EventPublishingTask
 from shared.core.config import settings
 
 # --- Import DB Models and Enums ---
@@ -30,10 +32,8 @@ logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
 
 
-# === Training Task ===
-@shared_task(bind=True, name="tasks.train_model", acks_late=True)
-def train_model_task(self: Task, training_job_id: int):
-    """Celery task facade for training jobs, using Dependency Injection."""
+async def _train_model_task_async(self: EventPublishingTask, training_job_id: int):
+    """Async implementation of training task."""
     task_id = self.request.id
     logger.info(
         f"Task {task_id}: Received training request for Job ID {training_job_id}"
@@ -64,14 +64,22 @@ def train_model_task(self: Task, training_job_id: int):
         # --- Execute Handler ---
         # Handler manages DB status updates internally via status_updater
         # It returns a result dict for the Celery task
-        final_task_result = handler.process_job()  # This blocks until handler finishes
+        final_task_result = await handler.process_job()  # This blocks until handler finishes
 
         # --- Update Celery Task State (based on handler result) ---
         handler_status = final_task_result.get("status")
         handler_message = final_task_result.get("message", "Handler finished.")
 
         if handler_status == JobStatusEnum.SUCCESS:
-            self.update_state(state=JobStatusEnum.SUCCESS, meta=final_task_result)
+            await self.update_task_state(
+                state=JobStatusEnum.SUCCESS, 
+                status_message=handler_message,
+                progress=100,
+                result_summary=final_task_result,
+                job_type="training",
+                entity_id=training_job_id,
+                entity_type="TrainingJob"
+            )
             logger.info(
                 f"Task {task_id}: Training Job {training_job_id} reported SUCCESS by handler."
             )
@@ -79,18 +87,26 @@ def train_model_task(self: Task, training_job_id: int):
             logger.info(
                 f"Task {task_id}: Training Job {training_job_id} was skipped by handler: {handler_message}"
             )
-            self.update_state(
-                state=JobStatusEnum.SUCCESS, meta=final_task_result
+            await self.update_task_state(
+                state=JobStatusEnum.SUCCESS,
+                status_message=handler_message,
+                progress=100,
+                result_summary=final_task_result,
+                job_type="training",
+                entity_id=training_job_id,
+                entity_type="TrainingJob"
             )  # Treat skip as celery success
         else:  # Handler indicated failure
             logger.error(
                 f"Task {task_id}: Training Job {training_job_id} reported FAILURE by handler: {final_task_result.get('error', handler_message)}"
             )
-            self.update_state(
+            await self.update_task_state(
                 state=JobStatusEnum.FAILED,
-                meta=build_failure_meta(
-                    InternalError(handler_message), final_task_result
-                ),
+                status_message=handler_message,
+                error_details=final_task_result.get('error', 'Unknown error'),
+                job_type="training",
+                entity_id=training_job_id,
+                entity_type="TrainingJob"
             )
 
         return final_task_result  # Return result dict for Celery
@@ -99,21 +115,35 @@ def train_model_task(self: Task, training_job_id: int):
     except Terminated as e:
         logger.warning(f"Task {task_id}: Terminated.")
         # Handler's finally should have tried to update DB status to FAILED
-        self.update_state(
-            state="REVOKED", meta=build_failure_meta(e, final_task_result)
+        await self.update_task_state(
+            state="REVOKED", 
+            status_message="Task terminated",
+            error_details=str(e),
+            job_type="training",
+            entity_id=training_job_id,
+            entity_type="TrainingJob"
         )
         raise  # Re-raise for Celery
     except Ignore as e:
         logger.info(f"Task {task_id}: Ignored. Reason: {e}")
-        self.update_state(
-            state=JobStatusEnum.SUCCESS, meta={"status": "IGNORED", "message": str(e)}
+        await self.update_task_state(
+            state=JobStatusEnum.SUCCESS, 
+            status_message=f"Task ignored: {str(e)}",
+            job_type="training",
+            entity_id=training_job_id,
+            entity_type="TrainingJob"
         )
         return {"status": "IGNORED", "message": str(e)}  # Return ignore info
     except Reject as e:
         logger.error(f"Task {task_id}: Rejected. Reason: {e}")
         # DB status likely handled where Reject was raised
-        self.update_state(
-            state=JobStatusEnum.FAILED, meta=build_failure_meta(e, final_task_result)
+        await self.update_task_state(
+            state=JobStatusEnum.FAILED, 
+            status_message="Task rejected",
+            error_details=str(e),
+            job_type="training",
+            entity_id=training_job_id,
+            entity_type="TrainingJob"
         )
         raise  # Re-raise reject
     except Exception as e:
@@ -134,16 +164,31 @@ def train_model_task(self: Task, training_job_id: int):
                 f"Task {task_id}: Failed last resort DB update: {final_db_err}"
             )
         # Ensure Celery knows
-        self.update_state(
-            state=JobStatusEnum.FAILED, meta=build_failure_meta(e, final_task_result)
+        await self.update_task_state(
+            state=JobStatusEnum.FAILED, 
+            status_message="Unhandled exception",
+            error_details=error_msg[:1000],
+            job_type="training",
+            entity_id=training_job_id,
+            entity_type="TrainingJob"
         )
         raise Reject(error_msg, requeue=False) from e  # Reject unhandled errors
 
 
-# === HP Search Task ===
-@shared_task(bind=True, name="tasks.hyperparameter_search", acks_late=True)
-def hyperparameter_search_task(self: Task, hp_search_job_id: int):
-    """Celery task facade for hyperparameter search jobs, using DI."""
+# === Training Task ===
+@shared_task(
+    bind=True, 
+    name="tasks.train_model", 
+    acks_late=True,
+    base=EventPublishingTask
+)
+def train_model_task(self: EventPublishingTask, training_job_id: int):
+    """Celery task facade for training jobs, using Dependency Injection."""
+    return asyncio.run(_train_model_task_async(self, training_job_id))
+
+
+async def _hyperparameter_search_task_async(self: EventPublishingTask, hp_search_job_id: int):
+    """Async implementation of hyperparameter search task."""
     task_id = self.request.id
     logger.info(
         f"Task {task_id}: Received HP search request for Job ID {hp_search_job_id}"
@@ -171,12 +216,22 @@ def hyperparameter_search_task(self: Task, hp_search_job_id: int):
         )
 
         # --- Execute Handler ---
-        final_task_result = handler.process_job()
+        final_task_result = await handler.process_job()
 
         # --- Update Celery Task State (based on handler result) ---
         handler_status = final_task_result.get("status")
+        handler_message = final_task_result.get("message", "Handler finished.")
+        
         if handler_status == JobStatusEnum.SUCCESS:
-            self.update_state(state=JobStatusEnum.SUCCESS, meta=final_task_result)
+            await self.update_task_state(
+                state=JobStatusEnum.SUCCESS, 
+                status_message=handler_message,
+                progress=100,
+                result_summary=final_task_result,
+                job_type="hp_search",
+                entity_id=hp_search_job_id,
+                entity_type="HyperparameterSearchJob"
+            )
             logger.info(
                 f"Task {task_id}: HP Search Job {hp_search_job_id} reported SUCCESS by handler."
             )
@@ -184,17 +239,26 @@ def hyperparameter_search_task(self: Task, hp_search_job_id: int):
             logger.info(
                 f"Task {task_id}: HP Search Job {hp_search_job_id} was skipped by handler."
             )
-            self.update_state(state=JobStatusEnum.SUCCESS, meta=final_task_result)
+            await self.update_task_state(
+                state=JobStatusEnum.SUCCESS, 
+                status_message="Job skipped",
+                progress=100,
+                result_summary=final_task_result,
+                job_type="hp_search",
+                entity_id=hp_search_job_id,
+                entity_type="HyperparameterSearchJob"
+            )
         else:  # Handler indicated failure
             logger.error(
                 f"Task {task_id}: HP Search Job {hp_search_job_id} reported FAILURE by handler: {final_task_result.get('error', 'Unknown handler error')}"
             )
-            self.update_state(
+            await self.update_task_state(
                 state=JobStatusEnum.FAILED,
-                meta=build_failure_meta(
-                    InternalError(final_task_result.get("error", "handler failure")),
-                    final_task_result,
-                ),
+                status_message="Handler reported failure",
+                error_details=final_task_result.get('error', 'Unknown handler error'),
+                job_type="hp_search",
+                entity_id=hp_search_job_id,
+                entity_type="HyperparameterSearchJob"
             )
 
         return final_task_result
@@ -202,21 +266,34 @@ def hyperparameter_search_task(self: Task, hp_search_job_id: int):
     # --- Exception Handling (Similar to train_model_task) ---
     except Terminated as e:
         logger.warning(f"Task {task_id}: Terminated.")
-        self.update_state(
+        await self.update_task_state(
             state="REVOKED",
-            meta={"exc_type": "Terminated", "exc_message": "Task terminated."},
+            status_message="Task terminated",
+            error_details=str(e),
+            job_type="hp_search",
+            entity_id=hp_search_job_id,
+            entity_type="HyperparameterSearchJob"
         )
         raise e
     except Ignore as e:
         logger.info(f"Task {task_id}: Ignored. Reason: {e}")
-        self.update_state(
-            state=JobStatusEnum.SUCCESS, meta={"status": "IGNORED", "message": str(e)}
+        await self.update_task_state(
+            state=JobStatusEnum.SUCCESS, 
+            status_message=f"Task ignored: {str(e)}",
+            job_type="hp_search",
+            entity_id=hp_search_job_id,
+            entity_type="HyperparameterSearchJob"
         )
         return {"status": "IGNORED", "message": str(e)}
     except Reject as e:
         logger.error(f"Task {task_id}: Rejected. Reason: {e}")
-        self.update_state(
-            state=JobStatusEnum.FAILED, meta=build_failure_meta(e, final_task_result)
+        await self.update_task_state(
+            state=JobStatusEnum.FAILED, 
+            status_message="Task rejected",
+            error_details=str(e),
+            job_type="hp_search",
+            entity_id=hp_search_job_id,
+            entity_type="HyperparameterSearchJob"
         )
         raise e
     except Exception as e:
@@ -237,16 +314,31 @@ def hyperparameter_search_task(self: Task, hp_search_job_id: int):
             logger.error(
                 f"Task {task_id}: Failed last resort DB update: {final_db_err}"
             )
-        self.update_state(
-            state=JobStatusEnum.FAILED, meta=build_failure_meta(e, final_task_result)
+        await self.update_task_state(
+            state=JobStatusEnum.FAILED, 
+            status_message="Unhandled exception",
+            error_details=error_msg[:1000],
+            job_type="hp_search",
+            entity_id=hp_search_job_id,
+            entity_type="HyperparameterSearchJob"
         )
         raise Reject(error_msg, requeue=False) from e
 
 
-# === Inference Prediction Task ===
-@shared_task(bind=True, name="tasks.inference_predict", acks_late=True)
-def inference_predict_task(self: Task, inference_job_id: int):
-    """Performs prediction using the DI handler and triggers XAI orchestration."""
+# === HP Search Task ===
+@shared_task(
+    bind=True, 
+    name="tasks.hyperparameter_search", 
+    acks_late=True,
+    base=EventPublishingTask
+)
+def hyperparameter_search_task(self: EventPublishingTask, hp_search_job_id: int):
+    """Celery task facade for hyperparameter search jobs, using DI."""
+    return asyncio.run(_hyperparameter_search_task_async(self, hp_search_job_id))
+
+
+async def _inference_predict_task_async(self: EventPublishingTask, inference_job_id: int):
+    """Async implementation of inference prediction task."""
     task_id = self.request.id
     logger.info(
         f"Task {task_id}: Starting prediction task for InferenceJob ID {inference_job_id}"
@@ -275,9 +367,7 @@ def inference_predict_task(self: Task, inference_job_id: int):
 
         # --- Execute Handler ---
         # Handler returns prediction result package dict on success/handled failure
-        final_task_result = (
-            handler.process_job()
-        )  # This runs prediction AND updates DB status
+        final_task_result = await handler.process_job()  # This runs prediction AND updates DB status
 
         handler_status = final_task_result.get("status")
         if handler_status == JobStatusEnum.SUCCESS:
@@ -331,14 +421,23 @@ def inference_predict_task(self: Task, inference_job_id: int):
         # Final Celery state depends ONLY on whether the prediction itself succeeded or failed
         # We don't fail this task if XAI dispatch fails.
         if prediction_successful:
-            self.update_state(state=JobStatusEnum.SUCCESS, meta=final_task_result)
+            await self.update_task_state(
+                state=JobStatusEnum.SUCCESS, 
+                status_message="Prediction successful",
+                progress=100,
+                result_summary=final_task_result,
+                job_type="inference",
+                entity_id=inference_job_id,
+                entity_type="InferenceJob"
+            )
         else:
-            self.update_state(
+            await self.update_task_state(
                 state=JobStatusEnum.FAILED,
-                meta=build_failure_meta(
-                    InternalError(final_task_result.get("error", "prediction failed")),
-                    final_task_result,
-                ),
+                status_message="Prediction failed",
+                error_details=final_task_result.get('error', 'Unknown prediction error'),
+                job_type="inference",
+                entity_id=inference_job_id,
+                entity_type="InferenceJob"
             )
 
         return final_task_result  # Return prediction result and any dispatch info/error
@@ -346,22 +445,34 @@ def inference_predict_task(self: Task, inference_job_id: int):
     # --- Exception Handling ---
     except Terminated as e:
         logger.warning(f"Task {task_id}: Terminated.")
-        self.update_state(
+        await self.update_task_state(
             state="REVOKED",
-            meta={"exc_type": "Terminated", "exc_message": "Task terminated."},
+            status_message="Task terminated",
+            error_details=str(e),
+            job_type="inference",
+            entity_id=inference_job_id,
+            entity_type="InferenceJob"
         )
         raise e
     except Ignore as e:
         logger.info(f"Task {task_id}: Ignored. Reason: {e}")
-        self.update_state(
-            state=JobStatusEnum.SUCCESS, meta={"status": "IGNORED", "message": str(e)}
+        await self.update_task_state(
+            state=JobStatusEnum.SUCCESS, 
+            status_message=f"Task ignored: {str(e)}",
+            job_type="inference",
+            entity_id=inference_job_id,
+            entity_type="InferenceJob"
         )
         return {"status": "IGNORED", "message": str(e)}
     except Reject as e:
         logger.error(f"Task {task_id}: Rejected. Reason: {e}")
-        self.update_state(
-            state=JobStatusEnum.FAILED,
-            meta={"exc_type": "Reject", "exc_message": str(e)},
+        await self.update_task_state(
+            state=JobStatusEnum.FAILED, 
+            status_message="Task rejected",
+            error_details=str(e),
+            job_type="inference",
+            entity_id=inference_job_id,
+            entity_type="InferenceJob"
         )
         raise e
     except Exception as e:
@@ -379,16 +490,31 @@ def inference_predict_task(self: Task, inference_job_id: int):
             logger.error(
                 f"Task {task_id}: Failed last resort DB update: {final_db_err}"
             )
-        self.update_state(
-            state=JobStatusEnum.FAILED, meta=build_failure_meta(e, final_task_result)
+        await self.update_task_state(
+            state=JobStatusEnum.FAILED, 
+            status_message="Unhandled exception",
+            error_details=error_msg[:1000],
+            job_type="inference",
+            entity_id=inference_job_id,
+            entity_type="InferenceJob"
         )
         raise Reject(error_msg, requeue=False) from e
 
 
-# === XAI Orchestration Task ===
-@shared_task(bind=True, name="tasks.orchestrate_xai", acks_late=True)
-def orchestrate_xai_task(self: Task, inference_job_id: int):
-    """Celery task facade for XAI orchestration using a dedicated handler."""
+# === Inference Prediction Task ===
+@shared_task(
+    bind=True, 
+    name="tasks.inference_predict", 
+    acks_late=True,
+    base=EventPublishingTask
+)
+def inference_predict_task(self: EventPublishingTask, inference_job_id: int):
+    """Performs prediction using the DI handler and triggers XAI orchestration."""
+    return asyncio.run(_inference_predict_task_async(self, inference_job_id))
+
+
+async def _orchestrate_xai_task_async(self: EventPublishingTask, inference_job_id: int):
+    """Async implementation of XAI orchestration task."""
     task_id = self.request.id
     logger.info(
         f"Task {task_id}: Received XAI orchestration request for InferenceJob ID {inference_job_id}"
@@ -412,11 +538,19 @@ def orchestrate_xai_task(self: Task, inference_job_id: int):
         )
 
         # --- Execute Handler ---
-        final_task_result = handler.process_orchestration()  # Returns summary dict
+        final_task_result = await handler.process_orchestration()  # Returns summary dict
 
         # --- Update Celery Task State ---
         if final_task_result.get("status") == JobStatusEnum.SUCCESS:
-            self.update_state(state=JobStatusEnum.SUCCESS, meta=final_task_result)
+            await self.update_task_state(
+                state=JobStatusEnum.SUCCESS, 
+                status_message="XAI orchestration completed successfully",
+                progress=100,
+                result_summary=final_task_result,
+                job_type="xai_orchestration",
+                entity_id=inference_job_id,
+                entity_type="InferenceJob"
+            )
             logger.info(
                 f"Task {task_id}: XAI Orchestration reported SUCCESS by handler."
             )
@@ -424,12 +558,13 @@ def orchestrate_xai_task(self: Task, inference_job_id: int):
             logger.error(
                 f"Task {task_id}: XAI Orchestration reported unexpected status by handler: {final_task_result}"
             )
-            self.update_state(
+            await self.update_task_state(
                 state=JobStatusEnum.FAILED,
-                meta=build_failure_meta(
-                    f"Task {task_id}: XAI Orchestration reported unexpected status by handler: {final_task_result}",
-                    final_task_result,
-                ),
+                status_message="XAI Orchestration reported unexpected status",
+                error_details=str(final_task_result),
+                job_type="xai_orchestration",
+                entity_id=inference_job_id,
+                entity_type="InferenceJob"
             )
 
         return final_task_result
@@ -437,29 +572,53 @@ def orchestrate_xai_task(self: Task, inference_job_id: int):
     # --- Exception Handling ---
     except Ignore as e:  # Handler raises Ignore if job not found/ready
         logger.info(f"Task {task_id}: Orchestration ignored. Reason: {e}")
-        self.update_state(
-            state=JobStatusEnum.SUCCESS, meta={"status": "IGNORED", "message": str(e)}
+        await self.update_task_state(
+            state=JobStatusEnum.SUCCESS, 
+            status_message=f"Orchestration ignored: {str(e)}",
+            job_type="xai_orchestration",
+            entity_id=inference_job_id,
+            entity_type="InferenceJob"
         )
         return {"status": "IGNORED", "message": str(e)}
     except Reject as e:  # Handler raises Reject on critical internal errors
         logger.error(f"Task {task_id}: Orchestration rejected. Reason: {e}")
-        self.update_state(
-            state=JobStatusEnum.FAILED, meta=build_failure_meta(e, final_task_result)
+        await self.update_task_state(
+            state=JobStatusEnum.FAILED, 
+            status_message="Orchestration rejected",
+            error_details=str(e),
+            job_type="xai_orchestration",
+            entity_id=inference_job_id,
+            entity_type="InferenceJob"
         )
         raise e  # Re-raise reject
     except Exception as e:  # Catch unexpected errors outside handler
         error_msg = f"Unhandled exception in XAI orchestration task {task_id}: {type(e).__name__}: {e}"
         logger.critical(error_msg, exc_info=True)
-        self.update_state(
-            state=JobStatusEnum.FAILED, meta=build_failure_meta(e, final_task_result)
+        await self.update_task_state(
+            state=JobStatusEnum.FAILED, 
+            status_message="Unhandled exception in XAI orchestration",
+            error_details=error_msg[:1000],
+            job_type="xai_orchestration",
+            entity_id=inference_job_id,
+            entity_type="InferenceJob"
         )
         raise Reject(error_msg, requeue=False) from e
 
 
-# === Explanation Generation Task ===
-@shared_task(bind=True, name="tasks.generate_explanation", acks_late=True)
-def generate_explanation_task(self: Task, xai_result_id: int):
-    """Celery task facade for generating specific XAI explanation using a handler."""
+# === XAI Orchestration Task ===
+@shared_task(
+    bind=True, 
+    name="tasks.orchestrate_xai", 
+    acks_late=True,
+    base=EventPublishingTask
+)
+def orchestrate_xai_task(self: EventPublishingTask, inference_job_id: int):
+    """Celery task facade for XAI orchestration using a dedicated handler."""
+    return asyncio.run(_orchestrate_xai_task_async(self, inference_job_id))
+
+
+async def _generate_explanation_task_async(self: EventPublishingTask, xai_result_id: int):
+    """Async implementation of explanation generation task."""
     task_id = self.request.id
     logger.info(
         f"Task {task_id}: Received explanation generation request for XAIResult ID {xai_result_id}"
@@ -483,14 +642,19 @@ def generate_explanation_task(self: Task, xai_result_id: int):
 
         # --- Execute Handler ---
         # Handler manages DB status updates and returns result data (or None on failure)
-        final_task_result = handler.process_explanation()
+        final_task_result = await handler.process_explanation()
 
         # --- Update Celery Task State ---
         if final_task_result is not None:  # Assume success if handler returned data
-            self.update_state(
+            await self.update_task_state(
                 state=JobStatusEnum.SUCCESS,
-                meta={"result_preview": str(final_task_result)[:200]},
-            )  # Return preview
+                status_message="Explanation generated successfully",
+                progress=100,
+                result_summary={"result_preview": str(final_task_result)[:200]},
+                job_type="xai_explanation",
+                entity_id=xai_result_id,
+                entity_type="XAIResult"
+            )
             logger.info(
                 f"Task {task_id}: XAI Explanation generation reported SUCCESS by handler."
             )
@@ -498,14 +662,13 @@ def generate_explanation_task(self: Task, xai_result_id: int):
             logger.error(
                 f"Task {task_id}: XAI Explanation generation failed (handler returned None or error occurred before return)."
             )
-            self.update_state(
+            await self.update_task_state(
                 state=JobStatusEnum.FAILED,
-                meta=build_failure_meta(
-                    InternalError(
-                        f"Task {task_id}: XAI Explanation generation failed (handler returned None or error occurred before return)."
-                    ),
-                    final_task_result,
-                ),
+                status_message="XAI Explanation generation failed",
+                error_details="Handler returned None or error occurred before return",
+                job_type="xai_explanation",
+                entity_id=xai_result_id,
+                entity_type="XAIResult"
             )
 
         return final_task_result  # Return explanation data or None
@@ -514,21 +677,34 @@ def generate_explanation_task(self: Task, xai_result_id: int):
     except Terminated as e:
         logger.warning(f"Task {task_id}: Terminated.")
         # Handler's finally should have tried to update DB status to FAILED
-        self.update_state(
+        await self.update_task_state(
             state="REVOKED",
-            meta={"exc_type": "Terminated", "exc_message": "Task terminated."},
+            status_message="Task terminated",
+            error_details=str(e),
+            job_type="xai_explanation",
+            entity_id=xai_result_id,
+            entity_type="XAIResult"
         )
         raise e
     except Ignore as e:
         logger.info(f"Task {task_id}: Ignored. Reason: {e}")
-        self.update_state(
-            state=JobStatusEnum.SUCCESS, meta={"status": "IGNORED", "message": str(e)}
+        await self.update_task_state(
+            state=JobStatusEnum.SUCCESS, 
+            status_message=f"Task ignored: {str(e)}",
+            job_type="xai_explanation",
+            entity_id=xai_result_id,
+            entity_type="XAIResult"
         )
         return {"status": "IGNORED", "message": str(e)}
     except Reject as e:
         logger.error(f"Task {task_id}: Rejected. Reason: {e}")
-        self.update_state(
-            state=JobStatusEnum.FAILED, meta=build_failure_meta(e, final_task_result)
+        await self.update_task_state(
+            state=JobStatusEnum.FAILED, 
+            status_message="Task rejected",
+            error_details=str(e),
+            job_type="xai_explanation",
+            entity_id=xai_result_id,
+            entity_type="XAIResult"
         )
         raise e
     except Exception as e:
@@ -547,7 +723,24 @@ def generate_explanation_task(self: Task, xai_result_id: int):
             logger.error(
                 f"Task {task_id}: Failed last resort DB update: {final_db_err}"
             )
-        self.update_state(
-            state=JobStatusEnum.FAILED, meta=build_failure_meta(e, final_task_result)
+        await self.update_task_state(
+            state=JobStatusEnum.FAILED, 
+            status_message="Unhandled exception",
+            error_details=error_msg[:1000],
+            job_type="xai_explanation",
+            entity_id=xai_result_id,
+            entity_type="XAIResult"
         )
         raise Reject(error_msg, requeue=False) from e
+
+
+# === Explanation Generation Task ===
+@shared_task(
+    bind=True, 
+    name="tasks.generate_explanation", 
+    acks_late=True,
+    base=EventPublishingTask
+)
+def generate_explanation_task(self: EventPublishingTask, xai_result_id: int):
+    """Celery task facade for generating specific XAI explanation using a handler."""
+    return asyncio.run(_generate_explanation_task_async(self, xai_result_id))

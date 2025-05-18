@@ -1,6 +1,7 @@
 # worker/ml/services/handlers/xai_explanation_handler.py
 import logging
 from typing import Any, Dict, List, Optional, Tuple  # Added Tuple
+import asyncio
 
 import pandas as pd
 from celery import Task
@@ -309,7 +310,7 @@ class XAIExplanationHandler:
                 else None
             )
 
-    def process_explanation(self) -> Optional[Dict[str, Any]]:
+    async def process_explanation(self) -> Optional[Dict[str, Any]]:
         task_id_str = self.task.request.id if self.task else "N/A"
         logger.info(
             f"Handler: Starting XAI explanation generation for XAIResult ID {self.xai_result_id} (Task: {task_id_str})"
@@ -320,7 +321,7 @@ class XAIExplanationHandler:
         explanation_result_data_json: Optional[Dict[str, Any]] = None
 
         try:
-            xai_record = self.xai_repo.get_xai_result_sync(self.xai_result_id)
+            xai_record = await asyncio.to_thread(self.xai_repo.get_xai_result_sync, self.xai_result_id)
             if not xai_record:
                 raise Ignore(f"XAIResult record {self.xai_result_id} not found in DB.")
             if (
@@ -339,7 +340,8 @@ class XAIExplanationHandler:
                     f"XAIResult {self.xai_result_id} is already in a terminal state ({xai_record.status.value})."
                 )
 
-            self.xai_repo.update_xai_result_sync(
+            await asyncio.to_thread(
+                self.xai_repo.update_xai_result_sync,
                 self.xai_result_id,
                 XAIStatusEnum.RUNNING,
                 "Loading model and data...",
@@ -347,7 +349,7 @@ class XAIExplanationHandler:
                 is_start=True,
             )
 
-            inference_job = self.inference_job_repo.get_by_id(
+            inference_job = await asyncio.to_thread(self.inference_job_repo.get_by_id,
                 xai_record.inference_job_id
             )
             if not inference_job:
@@ -355,7 +357,7 @@ class XAIExplanationHandler:
                     f"Parent InferenceJob ID {xai_record.inference_job_id} not found."
                 )
 
-            ml_model_db_record = self.model_repo.get_by_id(inference_job.ml_model_id)
+            ml_model_db_record = await asyncio.to_thread(self.model_repo.get_by_id, inference_job.ml_model_id)
             if not ml_model_db_record or not ml_model_db_record.s3_artifact_path:
                 raise ValueError(
                     f"MLModel {inference_job.ml_model_id} or its S3 artifact path not found."
@@ -378,7 +380,7 @@ class XAIExplanationHandler:
                 )
 
             # Load features first to help determine feature names if model doesn't store them
-            raw_features_df = self.feature_repo.get_features_for_commit(
+            raw_features_df = await asyncio.to_thread(self.feature_repo.get_features_for_commit,
                 repo_id, commit_hash
             )
             if raw_features_df is None or raw_features_df.empty:
@@ -401,7 +403,8 @@ class XAIExplanationHandler:
                 ml_model_db_record.dataset_id, X_inference_features_only
             )
 
-            self.xai_repo.update_xai_result_sync(
+            await asyncio.to_thread(
+                self.xai_repo.update_xai_result_sync,
                 self.xai_result_id, XAIStatusEnum.RUNNING, "Generating explanation..."
             )
 
@@ -453,7 +456,8 @@ class XAIExplanationHandler:
                 f"Handler: Attempting final DB update for XAIResult {self.xai_result_id} to status {final_xai_status.value}"
             )
             try:
-                self.xai_repo.update_xai_result_sync(
+                await asyncio.to_thread(
+                    self.xai_repo.update_xai_result_sync,
                     xai_result_id=self.xai_result_id,
                     status=final_xai_status,
                     message=status_update_message,

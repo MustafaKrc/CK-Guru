@@ -21,18 +21,15 @@ from shared.exceptions import build_failure_meta
 from shared.schemas.enums import DatasetStatusEnum, JobStatusEnum
 from shared.services.interfaces import IJobStatusUpdater  # For type hint if needed
 
-# --- Remove old generator import ---
-# from services.dataset_generator import DatasetGenerator
+import asyncio 
+from shared.celery_config.base_task import EventPublishingTask
 
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
 
 
-@shared_task(
-    bind=True, name="tasks.generate_dataset", acks_late=True
-)  # Enable acks_late
-def generate_dataset_task(self: Task, dataset_id: int):
+async def _generate_dataset_task_async(self: EventPublishingTask, dataset_id: int):
     """
     Celery task to generate a dataset using the PipelineRunner.
     """
@@ -152,6 +149,14 @@ def generate_dataset_task(self: Task, dataset_id: int):
         # Clean up resources if necessary (though session scope handles DB)
         logger.debug(f"Task {task_id}: Finalizing dataset generation task.")
         # dependency_provider might have resources to release if it managed them directly
+
+@shared_task(
+    bind=True, name="tasks.generate_dataset", acks_late=True
+)  # Enable acks_late
+def generate_dataset_task(self: Task, dataset_id: int):
+    return asyncio.run(
+        _generate_dataset_task_async(self, dataset_id)
+    )  # Run the async function in the event loop
 
 
 @shared_task(

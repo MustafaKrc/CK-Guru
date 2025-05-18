@@ -15,7 +15,7 @@ class IDatasetGeneratorStep(ABC):
         pass
 
     @abstractmethod
-    def execute(self, context: "DatasetContext", **kwargs: Any) -> "DatasetContext":
+    async def execute(self, context: "DatasetContext", **kwargs: Any) -> "DatasetContext":
         """
         Executes the logic for this step.
 

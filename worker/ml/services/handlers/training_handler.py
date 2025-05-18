@@ -1,6 +1,7 @@
 # worker/ml/services/handlers/training_handler.py
 import logging
 from typing import Any, Dict, Optional, Tuple
+import asyncio
 
 import pandas as pd
 
@@ -379,7 +380,7 @@ class TrainingJobHandler(BaseMLJobHandler):
 
         return new_model_id
 
-    def process_job(self) -> Dict:
+    async def process_job(self) -> Dict:
         """Orchestrates the training job execution."""
         final_status = JobStatusEnum.FAILED
         status_message = "Processing failed during initialization."
@@ -412,7 +413,7 @@ class TrainingJobHandler(BaseMLJobHandler):
 
             raw_data = self._load_data()
 
-            self._update_progress("Preparing data...", 35)
+            await self._update_progress("Preparing data...", 35)
             X, y = self._prepare_data(raw_data)
 
             train_result, strategy_instance = self._create_and_train_strategy(X, y)
@@ -450,7 +451,8 @@ class TrainingJobHandler(BaseMLJobHandler):
                 completion_results_for_db["ml_model_id"] = new_model_id
 
             try:
-                self.status_updater.update_job_completion(
+                await asyncio.to_thread(
+                    self.status_updater.update_job_completion,
                     job_id=self.job_id,
                     job_type=self.job_model_class,
                     status=final_status,

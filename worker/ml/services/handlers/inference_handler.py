@@ -1,6 +1,7 @@
 # worker/ml/services/handlers/inference_handler.py
 import logging
 from typing import Any, Dict, List, Optional, Tuple
+import asyncio
 
 import numpy as np
 import pandas as pd
@@ -413,7 +414,7 @@ class InferenceJobHandler(BaseMLJobHandler):
         logger.info("Inference result packaged successfully.")
         return prediction_package.model_dump(exclude_none=True), error_msg
 
-    def process_job(self) -> Dict:
+    async def process_job(self) -> Dict:
         """Orchestrates the inference job execution."""
         final_status = JobStatusEnum.FAILED
         status_message = "Inference processing failed during initialization."
@@ -451,12 +452,12 @@ class InferenceJobHandler(BaseMLJobHandler):
 
             features_df = self._get_features()
 
-            self._update_progress("Preparing data for inference...", 35)
+            await self._update_progress("Preparing data for inference...", 35)
             X_inference, identifiers_df = self._prepare_data(features_df)
 
             ml_output_dict = self._execute_prediction(X_inference)
 
-            self._update_progress("Packaging prediction results...", 90)
+            await self._update_progress("Packaging prediction results...", 90)
             packaged_results_dict, packaging_error_msg = self._package_results(
                 ml_output_dict, identifiers_df
             )
@@ -504,7 +505,8 @@ class InferenceJobHandler(BaseMLJobHandler):
                 "prediction_result": results_payload.get("prediction_result")
             }
             try:
-                self.status_updater.update_job_completion(
+                await asyncio.to_thread(
+                    self.status_updater.update_job_completion,
                     job_id=self.job_id,
                     job_type=self.job_model_class,
                     status=final_status,

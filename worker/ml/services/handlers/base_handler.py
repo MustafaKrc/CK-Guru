@@ -1,7 +1,10 @@
 # worker/ml/services/handlers/base_handler.py
+import asyncio 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Callable
+from shared.celery_config.base_task import EventPublishingTask
+from shared.schemas.enums import JobStatusEnum
 
 from celery import Task
 
@@ -33,9 +36,7 @@ class BaseMLJobHandler(ABC):
     def __init__(
         self,
         job_id: int,
-        task_instance: Task,
-        # --- Inject Concrete Implementations ---
-        # (Type hint with interfaces where they exist, but note provider gives concrete)
+        task_instance: EventPublishingTask,
         status_updater: JobStatusUpdater,
         model_repo: ModelRepository,
         xai_repo: XaiResultRepository,
@@ -74,24 +75,47 @@ class BaseMLJobHandler(ABC):
         """Returns the SQLAlchemy model class for the specific job type."""
         pass
 
-    def _update_progress(self, message: str, progress: int, state: str = "STARTED"):
         """Helper to update Celery task state."""
+    async def _update_progress(self, message: str, progress: int, state: str = "STARTED"):
         if self.task:
             logger.debug(
-                f"Updating task {self.task.request.id} progress: {progress}%, State: {state}, Msg: {message}"
+                f"Task {self.task.request.id} (Job {self.job_id}): Progress {progress}%, State: {state}, Msg: {message}"
             )
             try:
-                update_task_state(self.task, state, message, progress)
+                # Determine event context. These should ideally be set on self or passed if dynamic per job.
+                # For ML jobs, entity_id is self.job_id, entity_type is self.job_type_name
+                # job_type for SSE could be more specific than just self.job_type_name
+                # e.g., "model_training", "hp_search", "model_inference", "xai_generation"
+                
+                # Simplified example: job_type for SSE event can be determined based on handler class
+                # or a more specific attribute on the handler.
+                sse_job_type = self.job_type_name # Default, can be refined
+                # if "TrainingJobHandler" in self.__class__.__name__: sse_job_type = "model_training"
+                # elif "HPSearchJobHandler" in self.__class__.__name__: sse_job_type = "hp_search"
+                # elif "InferenceJobHandler" in self.__class__.__name__: sse_job_type = "model_inference"
+                # elif "XAIExplanationHandler" in self.__class__.__name__: sse_job_type = "xai_generation"
+                # elif "XAIOrchestrationHandler" in self.__class__.__name__: sse_job_type = "xai_orchestration"
+
+                await self.task.update_task_state( # CHANGED to await
+                    state=state,
+                    status_message=message,
+                    progress=progress,
+                    job_type=sse_job_type,
+                    entity_id=self.job_id,
+                    entity_type=self.job_type_name, # e.g., "TrainingJob", "HPSearchJob"
+                    # user_id if available
+                    meta={'progress': progress, 'status_message': message} # For Celery backend
+                )
             except Exception as e:
-                logger.error(f"Failed to update Celery task state: {e}", exc_info=True)
+                logger.error(f"Failed to update Celery task state for job {self.job_id}: {e}", exc_info=True)
         else:
-            logger.warning("Task instance not available for progress update.")
+            logger.warning(f"Task instance not available for progress update on job {self.job_id}.")
 
     # --- Removed _update_db_status - use self.status_updater directly ---
 
     # Define the main execution method for subclasses to implement
     @abstractmethod
-    def process_job(self) -> Dict:
+    async def process_job(self) -> Dict:
         """
         Main method to orchestrate the specific job processing logic.
         Must be implemented by subclasses.

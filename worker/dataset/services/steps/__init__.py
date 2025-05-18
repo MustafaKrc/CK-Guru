@@ -14,8 +14,10 @@ from .process_globally_step import ProcessGloballyStep
 from .select_final_columns_step import SelectFinalColumnsStep
 from .stream_and_process_batches_step import StreamAndProcessBatchesStep
 from .write_output_step import WriteOutputStep
+from .base_dataset_step import BaseDatasetStep
 
 __all__ = [
+    "BaseDatasetStep",
     "LoadConfigurationStep",
     "StreamAndProcessBatchesStep",
     "ProcessGloballyStep",

@@ -1,5 +1,5 @@
 # worker/dataset/services/context.py
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import pandas as pd
 from celery import Task
@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 # Import models needed for context typing
 from shared.db.models import BotPattern, Dataset, Repository
 from shared.schemas.dataset import DatasetConfig  # Use the schema for config
+from shared.celery_config.base_task import EventPublishingTask 
 
 
 class DatasetContext(BaseModel):
@@ -33,7 +34,7 @@ class DatasetContext(BaseModel):
     )
 
     # --- Task Management ---
-    task_instance: Optional[Task] = Field(
+    task_instance: Optional[EventPublishingTask] = Field(
         None, description="Celery Task instance for status updates."
     )
     warnings: List[str] = Field(
@@ -66,3 +67,21 @@ class DatasetContext(BaseModel):
     rows_written: int = Field(
         0, description="Number of rows written to the final dataset file."
     )
+
+    event_job_type: Optional[str] = None
+    event_entity_id: Optional[Any] = None
+    event_entity_type: Optional[str] = None
+    event_user_id: Optional[Any] = None
+
+    # Pydantic V2 uses model_validator or default_factory for this
+    # If you are passing all args to __init__, this is fine:
+    def __init__(self, **data: Any):
+        super().__init__(**data)
+        # Ensure lists are initialized if they are part of **data but could be None
+        self.warnings = data.get('warnings', [])
+        self.processed_batches_data = data.get('processed_batches_data', []) 
+        # Ensure event context fields are set if passed, or remain None
+        self.event_job_type = data.get('event_job_type')
+        self.event_entity_id = data.get('event_entity_id')
+        self.event_entity_type = data.get('event_entity_type')
+        self.event_user_id = data.get('event_user_id')

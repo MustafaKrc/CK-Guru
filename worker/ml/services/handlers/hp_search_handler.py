@@ -1,6 +1,7 @@
 # worker/ml/services/handlers/hp_search_handler.py
 import logging
 from typing import Any, Dict, Optional, Tuple  # Added Tuple
+import asyncio
 
 import optuna
 import pandas as pd
@@ -355,13 +356,13 @@ class HPSearchJobHandler(BaseMLJobHandler):
         n_trials = optuna_specific_config.get("n_trials", 10)
         timeout_seconds = optuna_specific_config.get("timeout_seconds")  # Can be None
 
-        def progress_callback(study: optuna.Study, trial: optuna.trial.FrozenTrial):
+        async def progress_callback(study: optuna.Study, trial: optuna.trial.FrozenTrial):
             # Calculate progress based on completed trials relative to n_trials
             # This doesn't account for timeout well, but is a simple progress indicator.
             progress_percent = (
                 35 + int(60 * (len(study.trials) / n_trials)) if n_trials > 0 else 35
             )
-            self._update_progress(
+            await self._update_progress(
                 f"Optuna trial {trial.number + 1}/{n_trials} ({trial.state.name}). Current best: {study.best_value:.4f}",
                 min(progress_percent, 95),  # Cap at 95% during search
             )
@@ -484,7 +485,7 @@ class HPSearchJobHandler(BaseMLJobHandler):
 
         return new_model_id
 
-    def process_job(self) -> Dict:
+    async def process_job(self) -> Dict:
         """Orchestrates the HP search job execution."""
         final_status = JobStatusEnum.FAILED
         status_message = "HP Search processing failed during initialization."
@@ -514,7 +515,7 @@ class HPSearchJobHandler(BaseMLJobHandler):
                 return results_payload
 
             raw_data = self._load_data()
-            self._update_progress("Preparing data for HP search...", 35)
+            await self._update_progress("Preparing data for HP search...", 35)
             X, y = self._prepare_data(raw_data)
 
             optuna_study = self._execute_hp_search(X, y)
@@ -564,7 +565,8 @@ class HPSearchJobHandler(BaseMLJobHandler):
             )
             # Pass optuna_study_results which contains best_trial_id, params, value, and best_ml_model_id
             try:
-                self.status_updater.update_job_completion(
+                await asyncio.to_thread(
+                    self.status_updater.update_job_completion,
                     job_id=self.job_id,
                     job_type=self.job_model_class,
                     status=final_status,

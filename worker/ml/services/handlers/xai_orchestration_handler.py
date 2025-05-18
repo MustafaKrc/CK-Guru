@@ -1,6 +1,7 @@
 # worker/ml/services/handlers/xai_orchestration_handler.py
 import logging
 from typing import Any, Dict, List
+import asyncio  # Add asyncio import
 
 from app.main import celery_app  # Celery app for dispatching
 from celery import Task
@@ -41,7 +42,7 @@ class XAIOrchestrationHandler:
             f"Initialized XAIOrchestrationHandler for Inference Job ID {inference_job_id}"
         )
 
-    def process_orchestration(self) -> Dict[str, Any]:
+    async def process_orchestration(self) -> Dict[str, Any]:
         task_id_str = self.task.request.id if self.task else "N/A"
         logger.info(
             f"Handler: Starting XAI orchestration for InferenceJob ID {self.inference_job_id} (Task: {task_id_str})"
@@ -55,7 +56,7 @@ class XAIOrchestrationHandler:
         summary_message = "XAI orchestration failed during initialization."
 
         try:
-            inference_job = self.inference_job_repo.get_by_id(self.inference_job_id)
+            inference_job = await asyncio.to_thread(self.inference_job_repo.get_by_id, self.inference_job_id)
             if not inference_job:
                 raise Ignore(f"InferenceJob ID {self.inference_job_id} not found.")
             if inference_job.status != JobStatusEnum.SUCCESS:
@@ -63,7 +64,7 @@ class XAIOrchestrationHandler:
                     f"InferenceJob ID {self.inference_job_id} is not in SUCCESS state (current: {inference_job.status.value}). Cannot orchestrate XAI."
                 )
 
-            ml_model_db_record = self.model_repo.get_by_id(inference_job.ml_model_id)
+            ml_model_db_record = await asyncio.to_thread(self.model_repo.get_by_id, inference_job.ml_model_id)
             if not ml_model_db_record:
                 raise Reject(
                     f"Associated MLModel ID {inference_job.ml_model_id} for successful InferenceJob {self.inference_job_id} not found.",
@@ -116,12 +117,13 @@ class XAIOrchestrationHandler:
             xai_task_queue = "xai_queue"
 
             for xai_type_to_run in supported_xai_types_for_this_model:
-                existing_xai_record_id = self.xai_repo.find_existing_xai_result_id_sync(
+                existing_xai_record_id = await asyncio.to_thread(
+                    self.xai_repo.find_existing_xai_result_id_sync,
                     self.inference_job_id, xai_type_to_run
                 )
                 should_create_new = True
                 if existing_xai_record_id:
-                    existing_xai_record = self.xai_repo.get_xai_result_sync(
+                    existing_xai_record = await asyncio.to_thread(self.xai_repo.get_xai_result_sync,
                         existing_xai_record_id
                     )
                     if existing_xai_record and existing_xai_record.status not in [
@@ -138,7 +140,8 @@ class XAIOrchestrationHandler:
                         )
 
                 if should_create_new:
-                    xai_result_db_id = self.xai_repo.create_pending_xai_result_sync(
+                    xai_result_db_id = await asyncio.to_thread(
+                        self.xai_repo.create_pending_xai_result_sync,
                         self.inference_job_id, xai_type_to_run
                     )
                     if xai_result_db_id:
@@ -149,7 +152,8 @@ class XAIOrchestrationHandler:
                                 queue=xai_task_queue,
                             )
                             if celery_task and celery_task.id:
-                                self.xai_repo.update_xai_task_id_sync(
+                                await asyncio.to_thread(
+                                    self.xai_repo.update_xai_task_id_sync,
                                     xai_result_db_id, celery_task.id
                                 )
                                 dispatched_tasks_count += 1
@@ -172,7 +176,8 @@ class XAIOrchestrationHandler:
                                     "error": str(dispatch_err),
                                 }
                             )
-                            self.xai_repo.update_xai_result_sync(
+                            await asyncio.to_thread(
+                                self.xai_repo.update_xai_result_sync,
                                 xai_result_db_id,
                                 XAIStatusEnum.FAILED,
                                 f"Task dispatch failed: {dispatch_err}",
