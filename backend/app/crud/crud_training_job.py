@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from shared.db.models.dataset import Dataset
 from shared.db.models.training_job import JobStatusEnum, TrainingJob
 from shared.schemas.training_job import TrainingJobCreate, TrainingJobUpdate
 
@@ -107,3 +108,16 @@ async def delete_training_job(
         await db.commit()
         logger.info(f"Deleted Training Job ID {job_id}")
     return db_obj
+
+async def get_training_jobs_by_repository(db: AsyncSession, *, repository_id: int, skip: int = 0, limit: int = 100) -> Sequence[TrainingJob]:
+    dataset_ids_stmt = select(Dataset.id).where(Dataset.repository_id == repository_id)
+    stmt = (
+        select(TrainingJob)
+        .options(selectinload(TrainingJob.ml_model)) # Eager load associated model
+        .where(TrainingJob.dataset_id.in_(dataset_ids_stmt))
+        .order_by(TrainingJob.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    return result.scalars().all()

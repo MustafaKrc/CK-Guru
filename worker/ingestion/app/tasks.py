@@ -140,7 +140,7 @@ async def _ingest_features_for_inference_async(
         raise
     except Exception as e:
         # Catch all other exceptions from the PipelineRunner
-        pipeline_failed_step = getattr(runner.current_step_instance, "name", "Unknown")
+        pipeline_failed_step = getattr(runner.step_registry, "name", "Unknown")
         error_msg_detail = f"Feature extraction failed at step [{pipeline_failed_step}]: {type(e).__name__}: {str(e)[:200]}"
         logger.critical(
             f"Task {task_id}: Pipeline Error for job {inference_job_id}. {error_msg_detail}: {e}",

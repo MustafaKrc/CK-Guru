@@ -164,11 +164,13 @@ services:
       dockerfile: frontend/Dockerfile
     container_name: ckguru_frontend
     ports:
-      - "3000:3000" # Map host 3000 to container 3000 (Next.js default)
+      # - "3000:3000" # Map host 3000 to container 3000 (Next.js default)
       - "80:80" # Map host 80 to container 80 (Nginx default)
     environment:
       # Ensure Next.js listens on all interfaces inside the container
       HOSTNAME: "0.0.0.0"
+    env_file:
+      - .env
 
   #################
   # Database

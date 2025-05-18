@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from shared.db.models.dataset import Dataset
 from shared.db.models.hp_search_job import HyperparameterSearchJob
 from shared.db.models.training_job import JobStatusEnum  # Reuse enum
 from shared.schemas.hp_search_job import HPSearchJobCreate, HPSearchJobUpdate
@@ -120,3 +121,17 @@ async def delete_hp_search_job(
         await db.commit()
         logger.info(f"Deleted HP Search Job ID {job_id}")
     return db_obj
+
+
+async def get_hp_search_jobs_by_repository(db: AsyncSession, *, repository_id: int, skip: int = 0, limit: int = 100) -> Sequence[HyperparameterSearchJob]:
+    dataset_ids_stmt = select(Dataset.id).where(Dataset.repository_id == repository_id)
+    stmt = (
+        select(HyperparameterSearchJob)
+        .options(selectinload(HyperparameterSearchJob.best_ml_model)) # Eager load
+        .where(HyperparameterSearchJob.dataset_id.in_(dataset_ids_stmt))
+        .order_by(HyperparameterSearchJob.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    return result.scalars().all()

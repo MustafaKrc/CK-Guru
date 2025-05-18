@@ -6,7 +6,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from shared.db.models.dataset import Dataset
 from shared.db.models.inference_job import InferenceJob
+from shared.db.models.ml_model import MLModel
 from shared.schemas import InferenceJobCreate
 from shared.schemas.enums import JobStatusEnum  # Reuse enum
 from shared.schemas.inference_job import InferenceJobUpdate
@@ -110,3 +112,18 @@ async def delete_inference_job(
         await db.commit()
         logger.info(f"Deleted Inference Job ID {job_id}")
     return db_obj
+
+async def get_inference_jobs_by_repository(db: AsyncSession, *, repository_id: int, skip: int = 0, limit: int = 100) -> Sequence[InferenceJob]:
+    dataset_ids_stmt = select(Dataset.id).where(Dataset.repository_id == repository_id)
+    model_ids_stmt = select(MLModel.id).where(MLModel.dataset_id.in_(dataset_ids_stmt))
+    
+    stmt = (
+        select(InferenceJob)
+        .options(selectinload(InferenceJob.ml_model)) # Eager load
+        .where(InferenceJob.ml_model_id.in_(model_ids_stmt))
+        .order_by(InferenceJob.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    return result.scalars().all()

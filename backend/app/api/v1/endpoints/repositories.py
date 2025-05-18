@@ -193,3 +193,97 @@ async def trigger_ingest_task(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to submit background task. Please try again later.",
         )
+    
+
+
+@router.get(
+    "/{repo_id}/models",
+    #response_model=List[schemas.MLModelRead],
+    summary="List ML Models for a Specific Repository",
+    tags=["Repositories", "ML & Inference Jobs"], # Add "Repositories" tag for grouping
+    responses={404: {"description": "Repository not found"}}
+)
+async def list_repository_ml_models(
+    repo_id: int,
+    db: AsyncSession = Depends(get_async_db_session),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=200),
+):
+    """
+    Retrieve all ML Models associated with datasets belonging to a specific repository.
+    """
+    # First, check if repository exists to return a proper 404 if it doesn't
+    repo = await crud.crud_repository.get_repository(db, repo_id=repo_id)
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
+    
+    models = await crud.crud_ml_model.get_ml_models_by_repository(
+        db, repository_id=repo_id, skip=skip, limit=limit
+    )
+    return models
+
+@router.get(
+    "/{repo_id}/training-jobs",
+    #response_model=List[schemas.TrainingJobRead],
+    summary="List Training Jobs for a Specific Repository",
+    tags=["Repositories", "ML & Inference Jobs"],
+    responses={404: {"description": "Repository not found"}}
+)
+async def list_repository_training_jobs(
+    repo_id: int,
+    db: AsyncSession = Depends(get_async_db_session),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=200),
+):
+    repo = await crud.crud_repository.get_repository(db, repo_id=repo_id)
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
+    
+    jobs = await crud.crud_training_job.get_training_jobs_by_repository(
+        db, repository_id=repo_id, skip=skip, limit=limit
+    )
+    return jobs
+
+@router.get(
+    "/{repo_id}/hp-search-jobs",
+    #response_model=List[schemas.HPSearchJobRead],
+    summary="List Hyperparameter Search Jobs for a Specific Repository",
+    tags=["Repositories", "ML & Inference Jobs"],
+    responses={404: {"description": "Repository not found"}}
+)
+async def list_repository_hp_search_jobs(
+    repo_id: int,
+    db: AsyncSession = Depends(get_async_db_session),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=200),
+):
+    repo = await crud.crud_repository.get_repository(db, repo_id=repo_id)
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
+
+    jobs = await crud.crud_hp_search_job.get_hp_search_jobs_by_repository(
+        db, repository_id=repo_id, skip=skip, limit=limit
+    )
+    return jobs
+
+@router.get(
+    "/{repo_id}/inference-jobs",
+    #response_model=List[schemas.InferenceJobRead],
+    summary="List Inference Jobs for a Specific Repository",
+    tags=["Repositories", "ML & Inference Jobs"],
+    responses={404: {"description": "Repository not found"}}
+)
+async def list_repository_inference_jobs(
+    repo_id: int,
+    db: AsyncSession = Depends(get_async_db_session),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=200),
+):
+    repo = await crud.crud_repository.get_repository(db, repo_id=repo_id)
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
+
+    jobs = await crud.crud_inference_job.get_inference_jobs_by_repository(
+        db, repository_id=repo_id, skip=skip, limit=limit
+    )
+    return jobs

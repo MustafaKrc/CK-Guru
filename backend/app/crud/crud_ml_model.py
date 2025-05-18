@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional, Sequence
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from shared.db.models.dataset import Dataset
 from shared.db.models.ml_model import MLModel
 from shared.schemas.ml_model import MLModelCreate, MLModelUpdate
 
@@ -93,3 +94,17 @@ async def delete_ml_model(db: AsyncSession, *, model_id: int) -> Optional[MLMode
         )
         # TODO: Queue artifact deletion task here?
     return db_obj
+
+async def get_ml_models_by_repository(db: AsyncSession, *, repository_id: int, skip: int = 0, limit: int = 100) -> Sequence[MLModel]:
+    # Subquery to get dataset IDs for the given repository
+    dataset_ids_stmt = select(Dataset.id).where(Dataset.repository_id == repository_id)
+    
+    stmt = (
+        select(MLModel)
+        .where(MLModel.dataset_id.in_(dataset_ids_stmt))
+        .order_by(MLModel.name, MLModel.version.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    return result.scalars().all()

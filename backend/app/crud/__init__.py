@@ -20,6 +20,7 @@ from .crud_hp_search_job import (
     get_hp_search_job_by_task_id,
     get_hp_search_jobs,
     update_hp_search_job,
+    get_hp_search_jobs_by_repository,
 )
 from .crud_inference_job import (
     create_inference_job,
@@ -28,6 +29,7 @@ from .crud_inference_job import (
     get_inference_job_by_task_id,
     get_inference_jobs,
     update_inference_job,
+    get_inference_jobs_by_repository,
 )
 from .crud_ml_model import (
     create_ml_model,
@@ -36,6 +38,7 @@ from .crud_ml_model import (
     get_ml_model,
     get_ml_models,
     update_ml_model,
+    get_ml_models_by_repository,
 )
 from .crud_repository import create_repository, get_repositories, get_repository
 from .crud_training_job import (
@@ -45,6 +48,7 @@ from .crud_training_job import (
     get_training_job_by_task_id,
     get_training_jobs,
     update_training_job,
+    get_training_jobs_by_repository,
 )
 from .crud_xai_result import (
     create_xai_result,
@@ -98,4 +102,8 @@ __all__ = [
     "get_xai_result",
     "get_xai_results_by_job_id",
     "update_xai_result",
+    "get_training_jobs_by_repository",
+    "get_hp_search_jobs_by_repository",
+    "get_inference_jobs_by_repository",
+    "get_ml_models_by_repository",
 ]

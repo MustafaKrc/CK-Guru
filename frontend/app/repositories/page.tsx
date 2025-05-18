@@ -32,6 +32,7 @@ import { apiService, handleApiError, ApiError } from "@/lib/apiService"
 import { Repository, RepositoryCreatePayload, TaskResponse } from "@/types/api/repository"
 
 import { useTaskStore, TaskStatusUpdatePayload } from "@/store/taskStore";
+import { getLatestTaskForEntity } from "@/lib/taskUtils";
 
 export default function RepositoriesPage() {
   const [repositories, setRepositories] = useState<Repository[]>([])
@@ -175,35 +176,6 @@ export default function RepositoriesPage() {
     }
   };
 
-  // Selector function to get the latest ingestion task status for a repository
-  const getRepoIngestionStatus = (repoId: number): TaskStatusUpdatePayload | undefined => {
-    // This uses the selector from the store directly if we expose it, or implement logic here
-    // For now, direct implementation:
-    const relevantTasks = Object.values(taskStatuses).filter(
-      task => task.job_type === "repository_ingestion" && task.entity_id === repoId
-    );
-    
-    if (relevantTasks.length === 0) return undefined;
-    
-    console.log("Relevant tasks for repoId", repoId, relevantTasks);
-    console.log(relevantTasks.sort((a, b) => {
-        const dateA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-        const dateB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-        if (dateB !== dateA) return dateB - dateA;
-        // Fallback to task_id if timestamps are missing or identical
-        return parseInt(b.task_id.split('-').pop() || "0") - parseInt(a.task_id.split('-').pop() || "0");
-    })[0]);
-    
-    // Sort by timestamp if available, otherwise by task_id as a proxy for recency
-    return relevantTasks.sort((a, b) => {
-        const dateA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-        const dateB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-        if (dateB !== dateA) return dateB - dateA;
-        // Fallback to task_id if timestamps are missing or identical
-        return parseInt(b.task_id.split('-').pop() || "0") - parseInt(a.task_id.split('-').pop() || "0");
-    })[0];
-  };
-
 
   const renderContent = () => {
     if (isLoading && repositories.length === 0) { // Show skeletons only on initial load or if explicitly fetching
@@ -251,7 +223,13 @@ export default function RepositoriesPage() {
     }
 
     return repositories.map((repo) => {
-      const ingestionTaskStatus = getRepoIngestionStatus(repo.id);
+      // TODO: Fix this old working
+      const ingestionTaskStatus = getLatestTaskForEntity(
+        taskStatuses, 
+        "Repository", // entityType
+        repo.id,        // entityId
+        "repository_ingestion" // jobType
+      );
       // Determine if the repo is actively being processed (RUNNING or PENDING from SSE)
       const isRepoCurrentlyProcessingViaSSE = ingestionTaskStatus && 
                                (ingestionTaskStatus.status.toUpperCase() === "RUNNING" || ingestionTaskStatus.status.toUpperCase() === "PENDING");

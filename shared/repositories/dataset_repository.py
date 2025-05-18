@@ -209,3 +209,8 @@ class DatasetRepository(BaseRepository[Dataset]):
                     exc_info=True,
                 )
                 raise
+
+    def get_by_id(self, dataset_id: int) -> Optional[Dataset]:
+        """Get a dataset by ID."""
+        with self._session_scope() as session:
+            return session.get(Dataset, dataset_id)

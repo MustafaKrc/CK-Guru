@@ -4,7 +4,7 @@ import { devtools, persist } from 'zustand/middleware'; // Optional: for Redux D
 
 // Ensure API_BASE_URL is correctly defined. It should NOT include /api/v1 if that's already part of the endpoint path.
 // The EventSource URL should be the full path to the SSE endpoint.
-const SSE_ENDPOINT_URL = `${process.env.NEXT_PUBLIC_API_BASE_URL || ''}/api/v1/tasks/stream-updates`;
+const SSE_ENDPOINT_URL = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/api/v1/tasks/stream-updates`;
 
 
 export interface TaskStatusUpdatePayload {
