@@ -110,7 +110,8 @@ class WriteOutputStep(IDatasetGeneratorStep):
                 status=DatasetStatusEnum.READY,
                 message=final_message,
                 storage_path=context.output_storage_uri,
-                background_data_path=context.background_sample_uri,  # Pass URI (or None)
+                background_data_path=context.background_sample_uri,
+                num_rows=context.rows_written
             )
             if not updated:
                 # This is serious, the file is written but DB state is inconsistent

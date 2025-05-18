@@ -1,14 +1,14 @@
 # backend/app/crud/crud_inference_job.py
 import logging
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict, Optional, Sequence, Tuple  # Add Tuple
 
-from sqlalchemy import select
+from sqlalchemy import select, func  # Add func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from shared.db.models.dataset import Dataset
+from shared.db.models.dataset import Dataset  # Required for linking
 from shared.db.models.inference_job import InferenceJob
-from shared.db.models.ml_model import MLModel
+from shared.db.models.ml_model import MLModel  # Required for linking
 from shared.schemas import InferenceJobCreate
 from shared.schemas.enums import JobStatusEnum  # Reuse enum
 from shared.schemas.inference_job import InferenceJobUpdate
@@ -113,17 +113,35 @@ async def delete_inference_job(
         logger.info(f"Deleted Inference Job ID {job_id}")
     return db_obj
 
-async def get_inference_jobs_by_repository(db: AsyncSession, *, repository_id: int, skip: int = 0, limit: int = 100) -> Sequence[InferenceJob]:
+
+async def get_inference_jobs_by_repository(
+    db: AsyncSession, *, repository_id: int, skip: int = 0, limit: int = 100
+) -> Tuple[Sequence[InferenceJob], int]:  # Updated return type
+    """Get inference jobs for a repository with pagination and total count."""
+
+    # Subquery to get ML Model IDs associated with the repository
+    # MLModel -> Dataset -> Repository
     dataset_ids_stmt = select(Dataset.id).where(Dataset.repository_id == repository_id)
-    model_ids_stmt = select(MLModel.id).where(MLModel.dataset_id.in_(dataset_ids_stmt))
-    
-    stmt = (
+    ml_model_ids_stmt = select(MLModel.id).where(MLModel.dataset_id.in_(dataset_ids_stmt))
+
+    # Query for items
+    stmt_items = (
         select(InferenceJob)
-        .options(selectinload(InferenceJob.ml_model)) # Eager load
-        .where(InferenceJob.ml_model_id.in_(model_ids_stmt))
+        .options(selectinload(InferenceJob.ml_model))  # Eager load ml_model
+        .where(InferenceJob.ml_model_id.in_(ml_model_ids_stmt))
         .order_by(InferenceJob.created_at.desc())
         .offset(skip)
         .limit(limit)
     )
-    result = await db.execute(stmt)
-    return result.scalars().all()
+    result_items = await db.execute(stmt_items)
+    items = result_items.scalars().all()
+
+    # Query for total count
+    stmt_total = (
+        select(func.count(InferenceJob.id))
+        .where(InferenceJob.ml_model_id.in_(ml_model_ids_stmt))
+    )
+    result_total = await db.execute(stmt_total)
+    total = result_total.scalar_one_or_none() or 0
+
+    return items, total

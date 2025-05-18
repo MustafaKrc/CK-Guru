@@ -4,6 +4,7 @@ from .bot_pattern import (
     BotPatternCreate,
     BotPatternRead,
     BotPatternUpdate,
+    PaginatedBotPatternRead,  # Ensure this is imported
 )
 from .dataset import (
     DatasetBase,
@@ -12,6 +13,7 @@ from .dataset import (
     DatasetRead,
     DatasetStatusUpdate,
     DatasetTaskResponse,
+    PaginatedDatasetRead,
 )
 from .enums import (
     DatasetStatusEnum,
@@ -30,6 +32,7 @@ from .hp_search_job import (
     HPSearchJobUpdate,
     HPSuggestion,
     OptunaConfig,
+    PaginatedHPSearchJobRead, 
 )
 from .inference import (
     GitHubPushPayload,
@@ -40,11 +43,18 @@ from .inference_job import (
     InferenceJobBase,
     InferenceJobRead,
     InferenceJobUpdate,
+    PaginatedInferenceJobRead, 
 )
 from .inference_job import (
     InferenceJobCreateInternal as InferenceJobCreate,  # Use alias for creation
 )
-from .ml_model import MLModelBase, MLModelCreate, MLModelRead, MLModelUpdate
+from .ml_model import (
+    MLModelBase,
+    MLModelCreate,
+    MLModelRead,
+    MLModelUpdate,
+    PaginatedMLModelRead, 
+)
 from .repo_api_client import RepoApiClientResponse, RepoApiResponseStatus
 from .repository import (
     RepositoryBase,
@@ -62,6 +72,7 @@ from .training_job import (
     TrainingJobRead,
     TrainingJobSubmitResponse,
     TrainingJobUpdate,
+    PaginatedTrainingJobRead, 
 )
 from .xai import (
     CounterfactualExample,
@@ -105,6 +116,7 @@ __all__ = [
     "BotPatternCreate",
     "BotPatternRead",
     "BotPatternUpdate",
+    "PaginatedBotPatternRead", 
     "DatasetBase",
     "DatasetCreate",
     "DatasetRead",
@@ -117,12 +129,14 @@ __all__ = [
     "MLModelCreate",
     "MLModelRead",
     "MLModelUpdate",
+    "PaginatedMLModelRead", 
     "TrainingJobBase",
     "TrainingJobCreate",
     "TrainingJobRead",
     "TrainingJobUpdate",
     "TrainingConfig",
     "TrainingJobSubmitResponse",
+    "PaginatedTrainingJobRead",  
     "HPSearchJobBase",
     "HPSearchJobCreate",
     "HPSearchJobUpdate",
@@ -131,12 +145,14 @@ __all__ = [
     "OptunaConfig",
     "HPSuggestion",
     "HPSearchJobSubmitResponse",
+    "PaginatedHPSearchJobRead",  
     "InferenceJobBase",
     "InferenceJobCreate",
     "InferenceJobUpdate",
     "InferenceJobRead",
     "ManualInferenceRequest",
     "InferenceTriggerResponse",
+    "PaginatedInferenceJobRead", 
     "GitHubPushPayload",
     "RepoApiResponseStatus",
     "RepoApiClientResponse",
@@ -159,4 +175,5 @@ __all__ = [
     "XAIResultCreate",
     "XAIResultRead",
     "XAIResultUpdate",
+    "PaginatedDatasetRead",
 ]

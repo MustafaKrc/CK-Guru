@@ -1,6 +1,6 @@
-// frontend/types/api/training_job.ts
+// frontend/types/api/training-job.ts
 import { JobStatusEnum, ModelTypeEnum } from "./enums"; // Assuming enums.ts
-import { MLModelRead } from "./ml_model";
+import { MLModelRead } from "./ml-model";
 
 export interface TrainingConfig {
   model_name: string;
@@ -38,4 +38,9 @@ export interface TrainingJobSubmitResponse {
     job_id: number;
     celery_task_id: string;
     message: string;
+}
+
+export interface PaginatedTrainingJobRead {
+  items: TrainingJobRead[];
+  total: number;
 }

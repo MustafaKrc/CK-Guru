@@ -229,3 +229,9 @@ class HPSearchJobSubmitResponse(BaseModel):
     job_id: int
     celery_task_id: str
     message: str = "Hyperparameter search job submitted successfully."
+
+class PaginatedHPSearchJobRead(BaseModel):
+    items: List[HPSearchJobRead]
+    total: int
+    skip: Optional[int] = None
+    limit: Optional[int] = None

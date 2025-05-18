@@ -1,8 +1,8 @@
 # backend/app/crud/crud_hp_search_job.py
 import logging
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict, Optional, Sequence, Tuple
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -123,9 +123,14 @@ async def delete_hp_search_job(
     return db_obj
 
 
-async def get_hp_search_jobs_by_repository(db: AsyncSession, *, repository_id: int, skip: int = 0, limit: int = 100) -> Sequence[HyperparameterSearchJob]:
+async def get_hp_search_jobs_by_repository(
+    db: AsyncSession, *, repository_id: int, skip: int = 0, limit: int = 100
+) -> Tuple[Sequence[HyperparameterSearchJob], int]:
+    """Get HP search jobs for a repository with pagination and total count."""
     dataset_ids_stmt = select(Dataset.id).where(Dataset.repository_id == repository_id)
-    stmt = (
+    
+    # Query for items
+    stmt_items = (
         select(HyperparameterSearchJob)
         .options(selectinload(HyperparameterSearchJob.best_ml_model)) # Eager load
         .where(HyperparameterSearchJob.dataset_id.in_(dataset_ids_stmt))
@@ -133,5 +138,15 @@ async def get_hp_search_jobs_by_repository(db: AsyncSession, *, repository_id: i
         .offset(skip)
         .limit(limit)
     )
-    result = await db.execute(stmt)
-    return result.scalars().all()
+    result_items = await db.execute(stmt_items)
+    items = result_items.scalars().all()
+
+    # Query for total count
+    stmt_total = (
+        select(func.count(HyperparameterSearchJob.id))
+        .where(HyperparameterSearchJob.dataset_id.in_(dataset_ids_stmt))
+    )
+    result_total = await db.execute(stmt_total)
+    total = result_total.scalar_one_or_none() or 0
+    
+    return items, total

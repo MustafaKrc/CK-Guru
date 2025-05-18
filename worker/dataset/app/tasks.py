@@ -62,7 +62,7 @@ async def _generate_dataset_task_async(self: EventPublishingTask, dataset_id: in
 
         # --- Execute Pipeline ---
         logger.info(f"Task {task_id}: === Executing Dataset Generation Pipeline ===")
-        final_context = runner.run(initial_context)
+        final_context = await runner.run(initial_context) 
         logger.info(f"Task {task_id}: === Dataset Generation Pipeline Finished ===")
 
         # --- Finalize Task (Success) ---
@@ -151,9 +151,9 @@ async def _generate_dataset_task_async(self: EventPublishingTask, dataset_id: in
         # dependency_provider might have resources to release if it managed them directly
 
 @shared_task(
-    bind=True, name="tasks.generate_dataset", acks_late=True
+    bind=True, name="tasks.generate_dataset", acks_late=True, base=EventPublishingTask
 )  # Enable acks_late
-def generate_dataset_task(self: Task, dataset_id: int):
+def generate_dataset_task(self: EventPublishingTask, dataset_id: int):
     return asyncio.run(
         _generate_dataset_task_async(self, dataset_id)
     )  # Run the async function in the event loop

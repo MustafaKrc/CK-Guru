@@ -1,6 +1,6 @@
 # shared/schemas/ml_model.py
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -60,3 +60,9 @@ class MLModelRead(MLModelBase):
     model_config = {
         "from_attributes": True,  # Pydantic V2+ ORM mode
     }
+
+class PaginatedMLModelRead(BaseModel):
+    items: List[MLModelRead]
+    total: int
+    skip: Optional[int] = None
+    limit: Optional[int] = None 

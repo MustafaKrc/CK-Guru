@@ -44,3 +44,10 @@ class BotPatternRead(BotPatternBase):
         "from_attributes": True,  # Pydantic V2 way
         "use_enum_values": True,  # Serialize enums as strings
     }
+
+class PaginatedBotPatternRead(BaseModel):
+    total: int
+    items: list[BotPatternRead]
+
+    skip: Optional[int] = None
+    limit: Optional[int] = None

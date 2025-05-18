@@ -93,7 +93,7 @@ async def create_repo_bot_pattern_endpoint(
 
 @router.get(
     "/repositories/{repo_id}/bot-patterns",
-    response_model=List[schemas.BotPatternRead],
+    response_model=schemas.PaginatedBotPatternRead,  # Updated response_model
     summary="List Bot Patterns for a Repository (includes global)",
 )
 async def read_repo_bot_patterns_endpoint(
@@ -113,14 +113,17 @@ async def read_repo_bot_patterns_endpoint(
             status_code=status.HTTP_404_NOT_FOUND, detail="Repository not found"
         )
 
-    patterns = await crud.crud_bot_pattern.get_bot_patterns(
+    # Assuming crud_bot_pattern.get_bot_patterns now returns a tuple: (items, total_count)
+    patterns, total_count = await crud.crud_bot_pattern.get_bot_patterns(
         db=db,
         repository_id=repo_id,
         include_global=include_global,
         skip=skip,
         limit=limit,
     )
-    return patterns
+    return schemas.PaginatedBotPatternRead(
+        items=patterns, total=total_count, skip=skip, limit=limit
+    )
 
 
 # === Operations on Specific Patterns (by ID) ===

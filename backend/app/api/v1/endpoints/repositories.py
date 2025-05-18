@@ -198,9 +198,9 @@ async def trigger_ingest_task(
 
 @router.get(
     "/{repo_id}/models",
-    #response_model=List[schemas.MLModelRead],
+    response_model=schemas.PaginatedMLModelRead, # Updated response_model
     summary="List ML Models for a Specific Repository",
-    tags=["Repositories", "ML & Inference Jobs"], # Add "Repositories" tag for grouping
+    tags=["Repositories", "ML & Inference Jobs"], 
     responses={404: {"description": "Repository not found"}}
 )
 async def list_repository_ml_models(
@@ -212,19 +212,21 @@ async def list_repository_ml_models(
     """
     Retrieve all ML Models associated with datasets belonging to a specific repository.
     """
-    # First, check if repository exists to return a proper 404 if it doesn't
     repo = await crud.crud_repository.get_repository(db, repo_id=repo_id)
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
     
-    models = await crud.crud_ml_model.get_ml_models_by_repository(
+    # Assuming crud_ml_model.get_ml_models_by_repository now returns (items, total_count)
+    models, total_count = await crud.crud_ml_model.get_ml_models_by_repository(
         db, repository_id=repo_id, skip=skip, limit=limit
     )
-    return models
+    return schemas.PaginatedMLModelRead(
+        items=models, total=total_count, skip=skip, limit=limit
+    )
 
 @router.get(
     "/{repo_id}/training-jobs",
-    #response_model=List[schemas.TrainingJobRead],
+    response_model=schemas.PaginatedTrainingJobRead, # Updated response_model
     summary="List Training Jobs for a Specific Repository",
     tags=["Repositories", "ML & Inference Jobs"],
     responses={404: {"description": "Repository not found"}}
@@ -239,14 +241,17 @@ async def list_repository_training_jobs(
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
     
-    jobs = await crud.crud_training_job.get_training_jobs_by_repository(
+    # Assuming crud_training_job.get_training_jobs_by_repository now returns (items, total_count)
+    jobs, total_count = await crud.crud_training_job.get_training_jobs_by_repository(
         db, repository_id=repo_id, skip=skip, limit=limit
     )
-    return jobs
+    return schemas.PaginatedTrainingJobRead(
+        items=jobs, total=total_count, skip=skip, limit=limit
+    )
 
 @router.get(
     "/{repo_id}/hp-search-jobs",
-    #response_model=List[schemas.HPSearchJobRead],
+    response_model=schemas.PaginatedHPSearchJobRead, # Updated response_model
     summary="List Hyperparameter Search Jobs for a Specific Repository",
     tags=["Repositories", "ML & Inference Jobs"],
     responses={404: {"description": "Repository not found"}}
@@ -261,14 +266,17 @@ async def list_repository_hp_search_jobs(
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
 
-    jobs = await crud.crud_hp_search_job.get_hp_search_jobs_by_repository(
+    # Assuming crud_hp_search_job.get_hp_search_jobs_by_repository now returns (items, total_count)
+    jobs, total_count = await crud.crud_hp_search_job.get_hp_search_jobs_by_repository(
         db, repository_id=repo_id, skip=skip, limit=limit
     )
-    return jobs
+    return schemas.PaginatedHPSearchJobRead(
+        items=jobs, total=total_count, skip=skip, limit=limit
+    )
 
 @router.get(
     "/{repo_id}/inference-jobs",
-    #response_model=List[schemas.InferenceJobRead],
+    response_model=schemas.PaginatedInferenceJobRead, # Updated response_model
     summary="List Inference Jobs for a Specific Repository",
     tags=["Repositories", "ML & Inference Jobs"],
     responses={404: {"description": "Repository not found"}}
@@ -283,7 +291,10 @@ async def list_repository_inference_jobs(
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
 
-    jobs = await crud.crud_inference_job.get_inference_jobs_by_repository(
+    # Assuming crud_inference_job.get_inference_jobs_by_repository now returns (items, total_count)
+    jobs, total_count = await crud.crud_inference_job.get_inference_jobs_by_repository(
         db, repository_id=repo_id, skip=skip, limit=limit
     )
-    return jobs
+    return schemas.PaginatedInferenceJobRead(
+        items=jobs, total=total_count, skip=skip, limit=limit
+    )

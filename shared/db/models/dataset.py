@@ -1,8 +1,8 @@
 # shared/db/models/dataset.py
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from sqlalchemy import JSON, DateTime, Enum, ForeignKey, String, Text
+from sqlalchemy import JSON, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -22,6 +22,8 @@ class Dataset(Base):
     )
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    num_rows: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, comment="Number of rows in the generated dataset")
 
     # Store configuration as JSON
     config: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)

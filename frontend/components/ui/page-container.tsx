@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils"
 
 interface PageContainerProps extends React.HTMLAttributes<HTMLDivElement> {
   title?: string
-  description?: string
+  description?: string | React.ReactNode
   actions?: React.ReactNode
 }
 

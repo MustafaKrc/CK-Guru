@@ -1,9 +1,10 @@
 # backend/app/crud/crud_ml_model.py
 import logging
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict, Optional, Sequence, Tuple  # Add Tuple
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select  # Add func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from shared.db.models.dataset import Dataset
 from shared.db.models.ml_model import MLModel
@@ -95,16 +96,32 @@ async def delete_ml_model(db: AsyncSession, *, model_id: int) -> Optional[MLMode
         # TODO: Queue artifact deletion task here?
     return db_obj
 
-async def get_ml_models_by_repository(db: AsyncSession, *, repository_id: int, skip: int = 0, limit: int = 100) -> Sequence[MLModel]:
+
+async def get_ml_models_by_repository(
+    db: AsyncSession, *, repository_id: int, skip: int = 0, limit: int = 100
+) -> Tuple[Sequence[MLModel], int]:  # Updated return type
+    """Get ML models associated with a specific repository, with total count."""
     # Subquery to get dataset IDs for the given repository
     dataset_ids_stmt = select(Dataset.id).where(Dataset.repository_id == repository_id)
-    
-    stmt = (
+
+    # Query for items
+    stmt_items = (
         select(MLModel)
+        .options(selectinload(MLModel.dataset))  # Eager load dataset
         .where(MLModel.dataset_id.in_(dataset_ids_stmt))
-        .order_by(MLModel.name, MLModel.version.desc())
+        .order_by(MLModel.created_at.desc())
         .offset(skip)
         .limit(limit)
     )
-    result = await db.execute(stmt)
-    return result.scalars().all()
+    result_items = await db.execute(stmt_items)
+    items = result_items.scalars().all()
+
+    # Query for total count
+    stmt_total = (
+        select(func.count(MLModel.id))
+        .where(MLModel.dataset_id.in_(dataset_ids_stmt))
+    )
+    result_total = await db.execute(stmt_total)
+    total = result_total.scalar_one_or_none() or 0
+
+    return items, total

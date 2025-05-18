@@ -1,8 +1,8 @@
 # backend/app/crud/crud_dataset.py
 import logging
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict, Optional, Sequence, Tuple
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -29,16 +29,29 @@ async def get_dataset(db: AsyncSession, dataset_id: int) -> Optional[Dataset]:
 
 async def get_datasets_by_repository(
     db: AsyncSession, *, repository_id: int, skip: int = 0, limit: int = 100
-) -> Sequence[Dataset]:
-    """Get datasets associated with a specific repository."""
-    result = await db.execute(
+) -> Tuple[Sequence[Dataset], int]:
+    """Get datasets associated with a specific repository, with total count."""
+    
+    # Query for items
+    stmt_items = (
         select(Dataset)
         .filter(Dataset.repository_id == repository_id)
         .order_by(Dataset.created_at.desc())
         .offset(skip)
         .limit(limit)
     )
-    return result.scalars().all()
+    result_items = await db.execute(stmt_items)
+    items = result_items.scalars().all()
+
+    # Query for total count
+    stmt_total = (
+        select(func.count(Dataset.id))
+        .filter(Dataset.repository_id == repository_id)
+    )
+    result_total = await db.execute(stmt_total)
+    total = result_total.scalar_one_or_none() or 0
+    
+    return items, total
 
 
 # --- Create Dataset ---

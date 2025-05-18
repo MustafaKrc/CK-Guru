@@ -1,4 +1,4 @@
-// frontend/types/api/inference_job.ts
+// frontend/types/api/inference-job.ts
 import { JobStatusEnum } from "./enums";
 // Assuming FilePredictionDetail is also typed if needed for detailed view
 // For now, prediction_result is Record<string, any> as per schema, but we can refine
@@ -44,4 +44,9 @@ export interface ManualInferenceRequestPayload {
 export interface InferenceTriggerResponse {
     inference_job_id: number;
     initial_task_id: string; // This is the feature extraction task ID
+}
+
+export interface PaginatedInferenceJobRead {
+  items: InferenceJobRead[];
+  total: number;
 }

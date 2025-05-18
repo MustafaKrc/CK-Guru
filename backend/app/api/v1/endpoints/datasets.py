@@ -133,7 +133,7 @@ async def create_dataset_endpoint(
 
 @router.get(
     "/repositories/{repo_id}/datasets",
-    response_model=List[schemas.DatasetRead],
+    response_model=schemas.PaginatedDatasetRead,
     summary="List Datasets for a Repository",
 )
 async def list_repository_datasets_endpoint(
@@ -150,10 +150,10 @@ async def list_repository_datasets_endpoint(
             status_code=status.HTTP_404_NOT_FOUND, detail="Repository not found"
         )
 
-    datasets = await crud.crud_dataset.get_datasets_by_repository(
+    items, total = await crud.crud_dataset.get_datasets_by_repository(
         db=db, repository_id=repo_id, skip=skip, limit=limit
     )
-    return datasets
+    return schemas.PaginatedDatasetRead(items=items, total=total) 
 
 
 @router.get(

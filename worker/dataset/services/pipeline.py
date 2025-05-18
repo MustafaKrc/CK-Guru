@@ -56,8 +56,12 @@ class PipelineRunner:
                     self.current_step_instance, context
                 )
 
-                # Execute the step
-                context = await self.current_step_instance.execute(context, **dependencies)
+                # Execute the step - check if result is awaitable
+                result = self.current_step_instance.execute(context, **dependencies)
+                if asyncio.iscoroutine(result):
+                    context = await result
+                else:
+                    context = result
 
                 pipeline_logger.info(
                     f"Completed step {i+1}/{total_steps} [{step_key}]."
@@ -66,11 +70,11 @@ class PipelineRunner:
                 # Update overall progress based on step completion
                 runner_progress = int(100 * ((i + 1) / total_steps))
                 if context.task_instance:
-                    await context.task_instance.update_task_state( # CHANGED to await
+                    await context.task_instance.update_task_state( 
                         state=JobStatusEnum.RUNNING.value,
                         progress=runner_progress,
                         status_message=f"Pipeline: Completed step {self.current_step_instance.name}",
-                        job_type=context.event_job_type, # Use from context
+                        job_type=context.event_job_type,
                         entity_id=context.event_entity_id,
                         entity_type=context.event_entity_type,
                         user_id=context.event_user_id 

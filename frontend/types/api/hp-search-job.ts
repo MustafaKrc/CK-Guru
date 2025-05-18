@@ -1,6 +1,6 @@
-// frontend/types/api/hp_search_job.ts
+// frontend/types/api/hp-search-job.ts
 import { JobStatusEnum, ModelTypeEnum, ObjectiveMetricEnum, SamplerTypeEnum, PrunerTypeEnum } from "./enums";
-import { MLModelRead } from "./ml_model";
+import { MLModelRead } from "./ml-model";
 
 export interface HPSuggestion {
   param_name: string;
@@ -65,4 +65,9 @@ export interface HPSearchJobSubmitResponse {
     job_id: number;
     celery_task_id: string;
     message: string;
+}
+
+export interface PaginatedHPSearchJobRead {
+  items: HPSearchJobRead[];
+  total: number;
 }

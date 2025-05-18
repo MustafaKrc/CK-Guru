@@ -1,4 +1,4 @@
-// frontend/types/api/ml_model.ts
+// frontend/types/api/ml-model.ts
 import { ModelTypeEnum } from "./enums"; // Assuming enums.ts is created or ModelTypeEnum is imported elsewhere
 
 export interface MLModelRead {
@@ -15,6 +15,11 @@ export interface MLModelRead {
   hp_search_job_id?: number | null;
   created_at: string; // ISO datetime string
   updated_at: string; // ISO datetime string
+}
+
+export interface PaginatedMLModelRead {
+  items: MLModelRead[];
+  total: number;
 }
 
 // Add Create/Update payloads if forms for these are built later

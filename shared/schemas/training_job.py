@@ -82,3 +82,14 @@ class TrainingJobSubmitResponse(BaseModel):
     job_id: int
     celery_task_id: str
     message: str = "Training job submitted successfully."
+
+
+class PaginatedTrainingJobRead(BaseModel):
+    items: List[TrainingJobRead]
+    total: int
+    skip: Optional[int] = Field(
+        None, description="Number of jobs skipped in the current page."
+    )
+    limit: Optional[int] = Field(
+        None, description="Number of jobs returned in the current page."
+    )

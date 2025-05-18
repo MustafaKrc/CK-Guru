@@ -35,8 +35,3 @@ export interface RepositoryUpdatePayload {
   name?: string;
   git_url?: string;
 }
-
-export interface TaskResponse {
-  task_id: string;
-  message: string;
-}

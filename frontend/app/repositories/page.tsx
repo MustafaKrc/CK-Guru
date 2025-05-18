@@ -29,7 +29,8 @@ import { useToast } from "@/hooks/use-toast"
 import { Skeleton } from "@/components/ui/skeleton"
 
 import { apiService, handleApiError, ApiError } from "@/lib/apiService"
-import { Repository, RepositoryCreatePayload, TaskResponse } from "@/types/api/repository"
+import { Repository, RepositoryCreatePayload } from "@/types/api/repository"
+import { TaskResponse } from "@/types/api/task"
 
 import { useTaskStore, TaskStatusUpdatePayload } from "@/store/taskStore";
 import { getLatestTaskForEntity } from "@/lib/taskUtils";

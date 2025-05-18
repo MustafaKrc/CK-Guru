@@ -1,8 +1,8 @@
 # backend/app/crud/crud_training_job.py
 import logging
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict, Optional, Sequence, Tuple
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -109,15 +109,31 @@ async def delete_training_job(
         logger.info(f"Deleted Training Job ID {job_id}")
     return db_obj
 
-async def get_training_jobs_by_repository(db: AsyncSession, *, repository_id: int, skip: int = 0, limit: int = 100) -> Sequence[TrainingJob]:
+
+async def get_training_jobs_by_repository(
+    db: AsyncSession, *, repository_id: int, skip: int = 0, limit: int = 100
+) -> Tuple[Sequence[TrainingJob], int]:
+    """Get training jobs for a repository with pagination and total count."""
     dataset_ids_stmt = select(Dataset.id).where(Dataset.repository_id == repository_id)
-    stmt = (
+
+    # Query for items
+    stmt_items = (
         select(TrainingJob)
-        .options(selectinload(TrainingJob.ml_model)) # Eager load associated model
+        .options(selectinload(TrainingJob.ml_model))  # Eager load related model
         .where(TrainingJob.dataset_id.in_(dataset_ids_stmt))
         .order_by(TrainingJob.created_at.desc())
         .offset(skip)
         .limit(limit)
     )
-    result = await db.execute(stmt)
-    return result.scalars().all()
+    result_items = await db.execute(stmt_items)
+    items = result_items.scalars().all()
+
+    # Query for total count
+    stmt_total = (
+        select(func.count(TrainingJob.id))
+        .where(TrainingJob.dataset_id.in_(dataset_ids_stmt))
+    )
+    result_total = await db.execute(stmt_total)
+    total = result_total.scalar_one_or_none() or 0
+    
+    return items, total

@@ -258,6 +258,7 @@ class JobStatusUpdater(IJobStatusUpdater):
         message: str,
         storage_path: Optional[str] = None,
         background_data_path: Optional[str] = None,
+        num_rows: Optional[int] = None,
     ) -> bool:
         """Updates final Dataset status and paths."""
         results = {}
@@ -266,4 +267,6 @@ class JobStatusUpdater(IJobStatusUpdater):
                 results["storage_path"] = storage_path
             if background_data_path:
                 results["background_data_path"] = background_data_path
+            if num_rows:
+                results["num_rows"] = num_rows
         return self.update_job_completion(dataset_id, Dataset, status, message, results)

@@ -25,6 +25,7 @@ export interface DatasetRead {
   created_at: string; // ISO datetime string
   updated_at: string; // ISO datetime string
   background_data_path?: string | null;
+  num_rows?: number | null; // Number of rows in the dataset
 }
 
 // Payload for creating a dataset, mirrors shared/schemas/dataset.py -> DatasetCreate
@@ -39,4 +40,9 @@ export interface DatasetCreatePayload {
 export interface DatasetTaskResponse {
     dataset_id: number; // Corrected from 'int' to 'number'
     task_id: string;
+}
+
+export interface PaginatedDatasetRead {
+  items: DatasetRead[];
+  total: number;
 }

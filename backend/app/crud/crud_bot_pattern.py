@@ -1,8 +1,8 @@
 # backend/app/crud/crud_bot_pattern.py
 import logging
-from typing import List, Optional, Sequence
+from typing import List, Optional, Sequence, Tuple
 
-from sqlalchemy import ColumnElement, select
+from sqlalchemy import ColumnElement, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.core.config import settings
@@ -27,9 +27,12 @@ async def get_bot_patterns(
     include_global: bool = True,  # Also include global patterns
     skip: int = 0,
     limit: int = 100,
-) -> Sequence[BotPattern]:
-    """Get bot patterns, optionally filtered by repository, including global ones."""
-    stmt = select(BotPattern)
+) -> Tuple[Sequence[BotPattern], int]:
+    """
+    Get bot patterns, optionally filtered by repository, including global ones.
+    Returns a tuple of (items, total_count).
+    """
+    stmt_items = select(BotPattern)
     filters: List[ColumnElement[bool]] = []
 
     if repository_id is not None:
@@ -48,15 +51,25 @@ async def get_bot_patterns(
     # else: get all patterns (repo-specific and global) if repo_id is None and include_global is True
 
     if filters:
-        stmt = stmt.where(*filters)
+        stmt_items = stmt_items.where(*filters)
 
-    stmt = (
-        stmt.order_by(BotPattern.repository_id.nullslast(), BotPattern.id)
+    stmt_items = (
+        stmt_items.order_by(BotPattern.repository_id.nullslast(), BotPattern.id)
         .offset(skip)
         .limit(limit)
     )  # Show global last
-    result = await db.execute(stmt)
-    return result.scalars().all()
+    result_items = await db.execute(stmt_items)
+    items = result_items.scalars().all()
+
+    # Query for total count
+    stmt_total = select(func.count(BotPattern.id))
+    if filters:
+        stmt_total = stmt_total.where(*filters)
+
+    result_total = await db.execute(stmt_total)
+    total = result_total.scalar_one_or_none() or 0
+
+    return items, total
 
 
 # --- Create Bot Pattern ---

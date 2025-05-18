@@ -88,3 +88,17 @@ class InferenceTriggerResponse(BaseModel):
     initial_task_id: str = Field(
         ..., description="The Celery task ID for the initial feature extraction step."
     )
+
+class PaginatedInferenceJobRead(BaseModel):
+    """Response for paginated inference job queries."""
+
+    total: int = Field(..., description="Total number of inference jobs.")
+    items: List[InferenceJobRead] = Field(
+        ..., description="List of inference jobs in the current page."
+    )
+    skip: Optional[int] = Field(
+        None, description="Number of jobs skipped in the current page."
+    )
+    limit: Optional[int] = Field(
+        None, description="Number of jobs returned in the current page."
+    )

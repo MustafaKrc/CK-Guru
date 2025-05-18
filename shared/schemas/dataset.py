@@ -60,6 +60,7 @@ class DatasetRead(DatasetBase):
     created_at: datetime
     updated_at: datetime
     background_data_path: Optional[str] = None
+    num_rows: Optional[int] = None 
 
     model_config = {
         "from_attributes": True,  # Pydantic V2 way
@@ -86,3 +87,9 @@ class DatasetStatusUpdate(BaseModel):
 class DatasetTaskResponse(BaseModel):
     dataset_id: int
     task_id: str
+
+class PaginatedDatasetRead(BaseModel):
+    items: List[DatasetRead]
+    total: int
+    skip: Optional[int] = None
+    limit: Optional[int] = None 
