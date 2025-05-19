@@ -48,16 +48,34 @@ async def get_inference_jobs(
     limit: int = 100,
     model_id: Optional[int] = None,
     status: Optional[JobStatusEnum] = None,
-) -> Sequence[InferenceJob]:
+) -> Tuple[Sequence[InferenceJob], int]: # Return tuple
     """Get multiple inference jobs with optional filtering and pagination."""
-    stmt = select(InferenceJob).order_by(InferenceJob.created_at.desc())
+    stmt_items = (
+        select(InferenceJob)
+        .options(selectinload(InferenceJob.ml_model)) # Eager load for consistency
+        .order_by(InferenceJob.created_at.desc())
+    )
+    filters = []
     if model_id is not None:
-        stmt = stmt.filter(InferenceJob.ml_model_id == model_id)
+        filters.append(InferenceJob.ml_model_id == model_id)
     if status:
-        stmt = stmt.filter(InferenceJob.status == status)
-    stmt = stmt.offset(skip).limit(limit)
-    result = await db.execute(stmt)
-    return result.scalars().all()
+        filters.append(InferenceJob.status == status)
+    
+    if filters:
+        stmt_items = stmt_items.where(*filters)
+
+    stmt_total = select(func.count(InferenceJob.id))
+    if filters:
+        stmt_total = stmt_total.where(*filters)
+
+    result_total = await db.execute(stmt_total)
+    total = result_total.scalar_one_or_none() or 0
+    
+    stmt_items = stmt_items.offset(skip).limit(limit)
+    result_items = await db.execute(stmt_items)
+    items = result_items.scalars().all()
+    
+    return items, total
 
 
 async def create_inference_job(

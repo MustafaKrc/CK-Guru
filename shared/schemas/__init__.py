@@ -62,6 +62,7 @@ from .repository import (
     RepositoryInDB,
     RepositoryRead,
     RepositoryUpdate,
+    PaginatedRepositoryRead,
 )
 from .rule_definition import RuleDefinition, RuleParamDefinition
 from .task import TaskResponse, TaskStatusEnum, TaskStatusResponse
@@ -110,6 +111,7 @@ __all__ = [
     "RepositoryRead",
     "RepositoryUpdate",
     "RepositoryInDB",
+    "PaginatedRepositoryRead",
     "TaskResponse",
     "TaskStatusResponse",
     "BotPatternBase",

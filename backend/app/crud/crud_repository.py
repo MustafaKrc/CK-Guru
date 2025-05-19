@@ -1,9 +1,9 @@
 # backend/app/crud/crud_repository.py
 import logging
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Tuple
 from urllib.parse import urlparse
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.core.config import settings
@@ -63,15 +63,22 @@ async def get_repository_by_git_url(
 
 async def get_repositories(
     db: AsyncSession, skip: int = 0, limit: int = 100
-) -> Sequence[Repository]:
+) -> Tuple[Sequence[Repository], int]:
     """Get multiple repositories with pagination."""
-    result = await db.execute(
+    stmt_items = (
         select(Repository)
         .order_by(Repository.created_at.desc())
         .offset(skip)
         .limit(limit)
     )
-    return result.scalars().all()
+    result_items = await db.execute(stmt_items)
+    items = result_items.scalars().all()
+
+    stmt_total = select(func.count(Repository.id))
+    result_total = await db.execute(stmt_total)
+    total = result_total.scalar_one_or_none() or 0
+    
+    return items, total
 
 
 async def create_repository(

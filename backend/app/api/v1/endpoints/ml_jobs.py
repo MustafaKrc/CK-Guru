@@ -149,7 +149,7 @@ async def get_training_job_details(
 
 @router.get(
     "/train",
-    response_model=List[schemas.TrainingJobRead],
+    response_model=schemas.PaginatedTrainingJobRead, # Use Paginated schema
     summary="List Training Jobs",
     description="Retrieves a list of training jobs with optional filters and pagination.",
 )
@@ -160,11 +160,10 @@ async def list_training_jobs(
     dataset_id: Optional[int] = Query(None, description="Filter by dataset ID"),
     status: Optional[JobStatusEnum] = Query(None, description="Filter by job status"),
 ):
-    """Retrieve a list of training jobs."""
-    jobs = await crud.crud_training_job.get_training_jobs(
+    items, total = await crud.crud_training_job.get_training_jobs(
         db, skip=skip, limit=limit, dataset_id=dataset_id, status=status
     )
-    return jobs
+    return schemas.PaginatedTrainingJobRead(items=items, total=total, skip=skip, limit=limit)
 
 
 # === ML Models ===
@@ -172,7 +171,7 @@ async def list_training_jobs(
 
 @router.get(
     "/models",
-    response_model=List[schemas.MLModelRead],
+    response_model=schemas.PaginatedMLModelRead, # Use Paginated schema
     summary="List ML Models",
     description="Retrieves a list of registered ML models with filtering and pagination.",
 )
@@ -180,25 +179,17 @@ async def list_ml_models(
     db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=200),
-    model_name: Optional[str] = Query(
-        None, description="Filter by logical model name."
-    ),
-    model_type: Optional[str] = Query(
-        None, description="Filter by model type (e.g., sklearn_randomforest)."
-    ),
+    model_name: Optional[str] = Query(None, description="Filter by logical model name."),
+    model_type: Optional[str] = Query(None, description="Filter by model type."),
+    dataset_id: Optional[int] = Query(None, description="Filter by dataset ID.") # Added dataset_id
 ):
-    """
-    Retrieve ML Models registered in the system.
-    Allows filtering by name and type.
-    """
     logger.info(
-        f"Listing ML models (Name: {model_name}, Type: {model_type}, Skip: {skip}, Limit: {limit})"
+        f"Listing ML models (Name: {model_name}, Type: {model_type}, Dataset: {dataset_id}, Skip: {skip}, Limit: {limit})"
     )
-    models = await crud.crud_ml_model.get_ml_models(
-        db, skip=skip, limit=limit, model_name=model_name, model_type=model_type
+    items, total = await crud.crud_ml_model.get_ml_models(
+        db, skip=skip, limit=limit, model_name=model_name, model_type=model_type, dataset_id=dataset_id
     )
-    # Pydantic handles the conversion from ORM model to Read schema
-    return models
+    return schemas.PaginatedMLModelRead(items=items, total=total, skip=skip, limit=limit)
 
 
 @router.get(
@@ -476,7 +467,7 @@ async def get_hp_search_job_details(
 
 @router.get(
     "/search",
-    response_model=List[schemas.HPSearchJobRead],  # Use shared schema
+    response_model=schemas.PaginatedHPSearchJobRead, # Use Paginated schema
     summary="List HP Search Jobs",
     description="Retrieves a list of HP search jobs with optional filters and pagination.",
 )
@@ -486,10 +477,9 @@ async def list_hp_search_jobs(
     limit: int = Query(100, ge=1, le=200),
     dataset_id: Optional[int] = Query(None, description="Filter by dataset ID"),
     status: Optional[JobStatusEnum] = Query(None, description="Filter by job status"),
-    study_name: Optional[str] = Query(None, description="Filter by Optuna study name"),
+    study_name: Optional[str] = Query(None, description="Filter by Optuna study name (partial match)"),
 ):
-    """Retrieve a list of HP search jobs."""
-    jobs = await crud.crud_hp_search_job.get_hp_search_jobs(
+    items, total = await crud.crud_hp_search_job.get_hp_search_jobs(
         db,
         skip=skip,
         limit=limit,
@@ -497,7 +487,7 @@ async def list_hp_search_jobs(
         status=status,
         study_name=study_name,
     )
-    return jobs
+    return schemas.PaginatedHPSearchJobRead(items=items, total=total, skip=skip, limit=limit)
 
 
 # === Manual Inference Trigger ===
@@ -548,23 +538,23 @@ async def get_inference_job_details(
 
 @router.get(
     "/infer",
-    response_model=List[schemas.InferenceJobRead],
+    response_model=schemas.PaginatedInferenceJobRead, # Use Paginated schema
     summary="List Inference Jobs",
     description="Retrieves a list of inference jobs with optional filters and pagination.",
 )
 async def list_inference_jobs(
-    db: AsyncSession = Depends(get_async_db_session),  # Keep DB for simple reads
+    db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=200),
     model_id: Optional[int] = Query(None, description="Filter by ML Model ID used."),
     status: Optional[JobStatusEnum] = Query(None, description="Filter by job status"),
 ):
-    """Retrieve a list of inference jobs (using CRUD directly for simple listing)."""
-    jobs = await crud.crud_inference_job.get_inference_jobs(
+    items, total = await crud.crud_inference_job.get_inference_jobs(
         db, skip=skip, limit=limit, model_id=model_id, status=status
     )
-    # Convert to Read schemas before returning
-    return [schemas.InferenceJobRead.model_validate(job) for job in jobs]
+    # Convert ORM objects to Pydantic Read schemas if not already done by PaginatedInferenceJobRead
+    # No, PaginatedInferenceJobRead expects a list of InferenceJobRead, which happens from_attributes
+    return schemas.PaginatedInferenceJobRead(items=items, total=total, skip=skip, limit=limit)
 
 
 # --- XAI Orchestration ---

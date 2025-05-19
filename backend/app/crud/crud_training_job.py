@@ -44,20 +44,34 @@ async def get_training_jobs(
     limit: int = 100,
     dataset_id: Optional[int] = None,
     status: Optional[JobStatusEnum] = None,
-) -> Sequence[TrainingJob]:
+) -> Tuple[Sequence[TrainingJob], int]: # Return tuple
     """Get multiple training jobs with optional filtering and pagination."""
-    stmt = (
+    stmt_items = (
         select(TrainingJob)
-        .options(selectinload(TrainingJob.ml_model))  # Eager load
+        .options(selectinload(TrainingJob.ml_model))
         .order_by(TrainingJob.created_at.desc())
     )
+    filters = []
     if dataset_id is not None:
-        stmt = stmt.filter(TrainingJob.dataset_id == dataset_id)
+        filters.append(TrainingJob.dataset_id == dataset_id)
     if status:
-        stmt = stmt.filter(TrainingJob.status == status)
-    stmt = stmt.offset(skip).limit(limit)
-    result = await db.execute(stmt)
-    return result.scalars().all()
+        filters.append(TrainingJob.status == status)
+    
+    if filters:
+        stmt_items = stmt_items.where(*filters)
+
+    stmt_total = select(func.count(TrainingJob.id))
+    if filters:
+        stmt_total = stmt_total.where(*filters)
+    
+    result_total = await db.execute(stmt_total)
+    total = result_total.scalar_one_or_none() or 0
+    
+    stmt_items = stmt_items.offset(skip).limit(limit)
+    result_items = await db.execute(stmt_items)
+    items = result_items.scalars().all()
+    
+    return items, total
 
 
 async def create_training_job(

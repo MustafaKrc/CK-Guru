@@ -536,7 +536,7 @@ export default function RepositoryDetailPage() {
                                   const datasetUsed = datasets.find(d => d.id === job.dataset_id);
                                   return ( 
                                       <li key={`train-${job.id}`} className="text-sm flex justify-between items-center py-1.5 border-b border-dashed last:border-b-0">
-                                          <Link href={`/jobs/${job.id}`} className="hover:underline font-medium truncate pr-2" title={`Train: ${job.config.model_name} on ${datasetUsed?.name || job.dataset_id}`}>
+                                          <Link href={`/jobs/${job.id}?type=training`} className="hover:underline font-medium truncate pr-2" title={`Train: ${job.config.model_name} on ${datasetUsed?.name || job.dataset_id}`}>
                                               Train: {job.config.model_name.length > 25 ? job.config.model_name.substring(0,25) + "..." : job.config.model_name}
                                           </Link>
                                           {renderTaskAwareStatusBadge(jobTask, job.status)}
@@ -548,7 +548,7 @@ export default function RepositoryDetailPage() {
                                     const datasetUsed = datasets.find(d => d.id === job.dataset_id);
                                     return ( 
                                       <li key={`hp-${job.id}`} className="text-sm flex justify-between items-center py-1.5 border-b border-dashed last:border-b-0">
-                                          <Link href={`/jobs/${job.id}`} className="hover:underline font-medium truncate pr-2" title={`HP Search: ${job.optuna_study_name} on ${datasetUsed?.name || job.dataset_id}`}>
+                                          <Link href={`/jobs/${job.id}?type=hp_search`} className="hover:underline font-medium truncate pr-2" title={`HP Search: ${job.optuna_study_name} on ${datasetUsed?.name || job.dataset_id}`}>
                                               HP Search: {job.optuna_study_name.length > 20 ? job.optuna_study_name.substring(0,20) + "..." : job.optuna_study_name}
                                           </Link>
                                           {renderTaskAwareStatusBadge(jobTask, job.status)}
@@ -728,10 +728,14 @@ export default function RepositoryDetailPage() {
                                 <TableCell>{renderTaskAwareStatusBadge(jobTask, job.status)}</TableCell>
                                 <TableCell>{formatDate(job.created_at)}</TableCell>
                                 <TableCell className="text-right space-x-1">
-                                    <Button variant="outline" size="sm" asChild><Link href={`/jobs/${job.id}`}>Details</Link></Button>
-                                    {job.ml_model_id && job.status === JobStatusEnum.SUCCESS &&
-                                        <Button variant="link" size="sm" asChild><Link href={`/models/${job.ml_model_id}`}>View Model</Link></Button>
-                                    }
+                                    <Button variant="outline" size="sm" asChild>
+                                      <Link href={`/jobs/${job.id}?type=training`}>Details</Link>
+                                    </Button>
+                                    {job.ml_model_id && job.status === JobStatusEnum.SUCCESS && (
+                                      <Button variant="link" size="sm" asChild>
+                                        <Link href={`/models/${job.ml_model_id}`}>View Model</Link>
+                                      </Button>
+                                    )}
                                 </TableCell>
                             </TableRow>
                         )})}
@@ -763,7 +767,7 @@ export default function RepositoryDetailPage() {
                                 <TableCell>{datasetUsed ? <Link href={`/datasets/${job.dataset_id}`} className="hover:underline">{datasetUsed.name}</Link> : job.dataset_id}</TableCell>
                                 <TableCell>{renderTaskAwareStatusBadge(jobTask, job.status)}</TableCell>
                                 <TableCell>{formatDate(job.created_at)}</TableCell>
-                                <TableCell className="text-right"><Button variant="outline" size="sm" asChild><Link href={`/jobs/${job.id}`}>Details</Link></Button></TableCell>
+                                <TableCell className="text-right"><Button variant="outline" size="sm" asChild><Link href={`/jobs/${job.id}?type=hp_search`}>Details</Link></Button></TableCell>
                             </TableRow>
                         )})}
                       </TableBody>

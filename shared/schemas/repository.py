@@ -48,3 +48,9 @@ class RepositoryInDB(RepositoryInDBBase):
     # Add any additional fields that are stored in DB but not returned to client
     # For most repositories, this might be the same as RepositoryInDBBase
     pass
+
+class PaginatedRepositoryRead(BaseModel):
+    items: List[RepositoryRead]
+    total: int
+    skip: Optional[int] = None
+    limit: Optional[int] = None

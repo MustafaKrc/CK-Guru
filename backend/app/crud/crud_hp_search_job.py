@@ -48,23 +48,36 @@ async def get_hp_search_jobs(
     dataset_id: Optional[int] = None,
     status: Optional[JobStatusEnum] = None,
     study_name: Optional[str] = None,
-) -> Sequence[HyperparameterSearchJob]:
+) -> Tuple[Sequence[HyperparameterSearchJob], int]: # Return tuple
     """Get multiple HP search jobs with optional filtering and pagination."""
-    stmt = (
+    stmt_items = (
         select(HyperparameterSearchJob)
         .options(selectinload(HyperparameterSearchJob.best_ml_model))
         .order_by(HyperparameterSearchJob.created_at.desc())
     )
-
+    filters = []
     if dataset_id is not None:
-        stmt = stmt.filter(HyperparameterSearchJob.dataset_id == dataset_id)
+        filters.append(HyperparameterSearchJob.dataset_id == dataset_id)
     if status:
-        stmt = stmt.filter(HyperparameterSearchJob.status == status)
+        filters.append(HyperparameterSearchJob.status == status)
     if study_name:
-        stmt = stmt.filter(HyperparameterSearchJob.optuna_study_name == study_name)
-    stmt = stmt.offset(skip).limit(limit)
-    result = await db.execute(stmt)
-    return result.scalars().all()
+        filters.append(HyperparameterSearchJob.optuna_study_name.ilike(f"%{study_name}%")) # Added ilike for partial match
+
+    if filters:
+        stmt_items = stmt_items.where(*filters)
+
+    stmt_total = select(func.count(HyperparameterSearchJob.id))
+    if filters:
+        stmt_total = stmt_total.where(*filters)
+        
+    result_total = await db.execute(stmt_total)
+    total = result_total.scalar_one_or_none() or 0
+    
+    stmt_items = stmt_items.offset(skip).limit(limit)
+    result_items = await db.execute(stmt_items)
+    items = result_items.scalars().all()
+    
+    return items, total
 
 
 async def create_hp_search_job(

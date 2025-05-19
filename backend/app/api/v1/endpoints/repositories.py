@@ -46,7 +46,7 @@ async def create_repository_endpoint(
 
 @router.get(
     "/",
-    response_model=List[schemas.RepositoryRead],  # Return a list
+    response_model=schemas.PaginatedRepositoryRead, # Use Paginated schema
     summary="List registered repositories",
     description="Retrieves a list of repositories with pagination.",
 )
@@ -60,13 +60,8 @@ async def read_repositories_endpoint(
     """
     Retrieve repositories.
     """
-    repositories: Sequence[schemas.RepositoryRead] = (
-        await crud.crud_repository.get_repositories(db, skip=skip, limit=limit)
-    )
-    # Pydantic V2 automatically handles conversion from ORM model to schema
-    # if ConfigDict(from_attributes=True) is set in the schema.
-    # No explicit loop needed unless custom mapping is required.
-    return repositories
+    items, total = await crud.crud_repository.get_repositories(db, skip=skip, limit=limit)
+    return schemas.PaginatedRepositoryRead(items=items, total=total, skip=skip, limit=limit)
 
 
 @router.get(

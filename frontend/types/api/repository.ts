@@ -35,3 +35,10 @@ export interface RepositoryUpdatePayload {
   name?: string;
   git_url?: string;
 }
+
+export interface PaginatedRepositoryRead {
+  items: Repository[];
+  total: number;
+  skip?: number;
+  limit?: number;
+}
