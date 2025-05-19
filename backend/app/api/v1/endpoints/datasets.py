@@ -2,7 +2,7 @@
 import csv
 import io
 import logging
-from typing import Any, AsyncGenerator, Dict, List
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import pandas as pd
 import pyarrow.parquet as pq
@@ -20,6 +20,9 @@ from shared.db.models.cleaning_rule_definitions import CleaningRuleDefinitionDB
 from shared.db.models.dataset import DatasetStatusEnum
 from shared.db_session import get_async_db_session
 from shared.schemas import RuleDefinition as BackendRuleDefinitionSchema
+
+from shared.schemas import PaginatedDatasetRead # Ensure this is imported
+from shared.schemas.enums import DatasetStatusEnum as DatasetStatusEnumSchema # For query param type hint
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
@@ -57,6 +60,27 @@ async def get_available_cleaning_rules_endpoint(
     logger.info(f"Returning {len(response_rules)} available cleaning rules.")
     return response_rules
 
+@router.get(
+    "/datasets", # This will be /api/v1/datasets due to api_router prefix
+    response_model=PaginatedDatasetRead,
+    summary="List All Datasets",
+    description="Retrieves a list of all datasets with pagination and optional filters.",
+)
+async def list_all_datasets_endpoint(
+    db: AsyncSession = Depends(get_async_db_session),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000), # Increased max limit for filter dropdown population
+    status: Optional[DatasetStatusEnumSchema] = Query(None, description="Filter by dataset status (e.g., ready)"),
+    # Add user_id filter here once auth is integrated
+):
+    """
+    Retrieve all datasets.
+    Eventually, this should be scoped to the authenticated user or their team.
+    """
+    items, total = await crud.crud_dataset.get_all_datasets(
+        db, skip=skip, limit=limit, status=status
+    )
+    return PaginatedDatasetRead(items=items, total=total, skip=skip, limit=limit)
 
 @router.post(
     "/repositories/{repo_id}/datasets",

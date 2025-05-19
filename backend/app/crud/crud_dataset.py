@@ -9,6 +9,8 @@ from sqlalchemy.orm import selectinload
 from shared.core.config import settings
 from shared.db.models.dataset import Dataset, DatasetStatusEnum
 from shared.schemas.dataset import DatasetCreate, DatasetUpdate
+from shared.schemas.dataset import DatasetCreate, DatasetUpdate, DatasetRead
+from shared.schemas.enums import DatasetStatusEnum as DatasetStatusEnumSchema # For filtering
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
@@ -26,6 +28,43 @@ async def get_dataset(db: AsyncSession, dataset_id: int) -> Optional[Dataset]:
     )
     return result.scalars().first()
 
+async def get_all_datasets(
+    db: AsyncSession,
+    *,
+    skip: int = 0,
+    limit: int = 100,
+    status: Optional[DatasetStatusEnumSchema] = None,
+    # Add other filters like user_id when auth is integrated
+) -> Tuple[Sequence[Dataset], int]:
+    """Get all datasets with pagination and optional filtering."""
+    stmt_items = (
+        select(Dataset)
+        .options(selectinload(Dataset.repository)) # Good to load repository name
+        .order_by(Dataset.created_at.desc())
+    )
+    
+    filters = []
+    if status:
+        filters.append(Dataset.status == status)
+    # Example: if user_id filtering is added
+    # if user_id:
+    #     filters.append(Dataset.owner_id == user_id) # Assuming an owner_id field
+    
+    if filters:
+        stmt_items = stmt_items.where(*filters)
+
+    stmt_total = select(func.count(Dataset.id))
+    if filters:
+        stmt_total = stmt_total.where(*filters)
+    
+    result_total = await db.execute(stmt_total)
+    total = result_total.scalar_one_or_none() or 0
+    
+    stmt_items = stmt_items.offset(skip).limit(limit)
+    result_items = await db.execute(stmt_items)
+    items = result_items.scalars().all()
+    
+    return items, total
 
 async def get_datasets_by_repository(
     db: AsyncSession, *, repository_id: int, skip: int = 0, limit: int = 100

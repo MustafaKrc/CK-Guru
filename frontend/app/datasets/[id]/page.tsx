@@ -28,7 +28,7 @@ import {
 
 import { apiService, handleApiError } from "@/lib/apiService";
 import { DatasetRead, DatasetConfig } from "@/types/api/dataset"; // Make sure DatasetConfig is exported from your types
-import { MLModelRead } from "@/types/api/ml-model";
+import { MLModelRead, PaginatedMLModelRead } from "@/types/api/ml-model";
 
 import { useTaskStore, TaskStatusUpdatePayload } from "@/store/taskStore";
 import { getLatestTaskForEntity } from "@/lib/taskUtils";
@@ -142,11 +142,19 @@ export default function DatasetDetailPage() {
   const fetchModelsTrained = async () => {
     if (!datasetId) return;
     setIsLoadingModels(true);
+    setModelsTrained([]); // Initialize as empty array before fetch
     try {
-      const modelsData = await apiService.get<MLModelRead[]>(`/ml/models?dataset_id=${datasetId}`);
-      setModelsTrained(modelsData);
+      // Expect PaginatedMLModelRead from the API
+      const response = await apiService.get<PaginatedMLModelRead>(`/ml/models?dataset_id=${datasetId}&limit=100`); // Add a limit
+      if (response && Array.isArray(response.items)) {
+        setModelsTrained(response.items);
+      } else {
+        console.error("Unexpected response structure for models trained on dataset:", response);
+        setModelsTrained([]); // Ensure it's an array even if response is weird
+      }
     } catch (err) {
       handleApiError(err, "Failed to fetch trained models");
+      setModelsTrained([]); // Ensure it's an array on error
     } finally {
       setIsLoadingModels(false);
     }

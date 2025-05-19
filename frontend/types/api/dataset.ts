@@ -45,4 +45,6 @@ export interface DatasetTaskResponse {
 export interface PaginatedDatasetRead {
   items: DatasetRead[];
   total: number;
+  skip?: number;
+  limit?: number;
 }

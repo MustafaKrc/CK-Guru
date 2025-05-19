@@ -12,6 +12,7 @@ from .crud_dataset import (
     get_datasets_by_repository,
     update_dataset,
     update_dataset_status,
+    get_all_datasets,
 )
 from .crud_hp_search_job import (
     create_hp_search_job,
@@ -65,6 +66,7 @@ __all__ = [
     "get_bot_patterns",
     "update_bot_pattern",
     "create_dataset",
+    "get_all_datasets",
     "delete_dataset",
     "get_dataset",
     "get_datasets_by_repository",
