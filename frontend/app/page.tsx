@@ -57,9 +57,7 @@ export default function LandingPage() {
           <Link href="#how-it-works" className="text-muted-foreground hover:text-foreground transition-colors">
             How It Works
           </Link>
-          <Link href="/public-repositories" className="text-muted-foreground hover:text-foreground transition-colors">
-            Public Repositories
-          </Link>
+
         </nav>
         <div className="ml-auto flex items-center gap-2">
           {mounted && ( // Conditionally render theme toggle
@@ -260,8 +258,8 @@ export default function LandingPage() {
             </div>
           </div>
         </section>
-
-        {/* Public Repositories Section */}
+        {/*
+        {/* Public Repositories Section /}
         <section className="py-20 bg-background border-y">
           <div className="container mx-auto px-4">
             <div className="text-center mb-16">
@@ -321,6 +319,7 @@ export default function LandingPage() {
             </div>
           </div>
         </section>
+        */}
 
         {/* CTA Section */}
         <section className="py-20 bg-primary/5 border-y">

@@ -149,11 +149,14 @@ export function MainLayout({ children }: MainLayoutProps) {
           icon: <Layers className="h-4 w-4" />,
           exactPath: true,
         },
+        /*}
         {
           name: "Public Repositories",
           path: "/public-repositories",
           icon: <Server className="h-4 w-4" />,
         },
+        */
+        
         {
           name: "Bot Patterns",
           path: "/bot-patterns",
