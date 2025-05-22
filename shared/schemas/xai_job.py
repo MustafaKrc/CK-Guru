@@ -49,3 +49,8 @@ class XAIResultRead(XAIResultBase):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True, use_enum_values=True)
+
+
+class XAITriggerResponse(BaseModel):
+    task_id: Optional[str] = Field(None, description="Celery task ID for the XAI orchestration.")
+    message: str = Field(..., description="Message indicating the result of the trigger.")

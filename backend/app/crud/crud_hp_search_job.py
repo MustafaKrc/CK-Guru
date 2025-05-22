@@ -2,7 +2,7 @@
 import logging
 from typing import Any, Dict, Optional, Sequence, Tuple
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -48,7 +48,7 @@ async def get_hp_search_jobs(
     dataset_id: Optional[int] = None,
     status: Optional[JobStatusEnum] = None,
     study_name: Optional[str] = None,
-) -> Tuple[Sequence[HyperparameterSearchJob], int]: # Return tuple
+) -> Tuple[Sequence[HyperparameterSearchJob], int]:  # Return tuple
     """Get multiple HP search jobs with optional filtering and pagination."""
     stmt_items = (
         select(HyperparameterSearchJob)
@@ -61,7 +61,9 @@ async def get_hp_search_jobs(
     if status:
         filters.append(HyperparameterSearchJob.status == status)
     if study_name:
-        filters.append(HyperparameterSearchJob.optuna_study_name.ilike(f"%{study_name}%")) # Added ilike for partial match
+        filters.append(
+            HyperparameterSearchJob.optuna_study_name.ilike(f"%{study_name}%")
+        )  # Added ilike for partial match
 
     if filters:
         stmt_items = stmt_items.where(*filters)
@@ -69,14 +71,14 @@ async def get_hp_search_jobs(
     stmt_total = select(func.count(HyperparameterSearchJob.id))
     if filters:
         stmt_total = stmt_total.where(*filters)
-        
+
     result_total = await db.execute(stmt_total)
     total = result_total.scalar_one_or_none() or 0
-    
+
     stmt_items = stmt_items.offset(skip).limit(limit)
     result_items = await db.execute(stmt_items)
     items = result_items.scalars().all()
-    
+
     return items, total
 
 
@@ -141,11 +143,11 @@ async def get_hp_search_jobs_by_repository(
 ) -> Tuple[Sequence[HyperparameterSearchJob], int]:
     """Get HP search jobs for a repository with pagination and total count."""
     dataset_ids_stmt = select(Dataset.id).where(Dataset.repository_id == repository_id)
-    
+
     # Query for items
     stmt_items = (
         select(HyperparameterSearchJob)
-        .options(selectinload(HyperparameterSearchJob.best_ml_model)) # Eager load
+        .options(selectinload(HyperparameterSearchJob.best_ml_model))  # Eager load
         .where(HyperparameterSearchJob.dataset_id.in_(dataset_ids_stmt))
         .order_by(HyperparameterSearchJob.created_at.desc())
         .offset(skip)
@@ -155,11 +157,10 @@ async def get_hp_search_jobs_by_repository(
     items = result_items.scalars().all()
 
     # Query for total count
-    stmt_total = (
-        select(func.count(HyperparameterSearchJob.id))
-        .where(HyperparameterSearchJob.dataset_id.in_(dataset_ids_stmt))
+    stmt_total = select(func.count(HyperparameterSearchJob.id)).where(
+        HyperparameterSearchJob.dataset_id.in_(dataset_ids_stmt)
     )
     result_total = await db.execute(stmt_total)
     total = result_total.scalar_one_or_none() or 0
-    
+
     return items, total

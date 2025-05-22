@@ -2,7 +2,7 @@
 import logging
 from typing import List, Optional, Sequence, Tuple
 
-from sqlalchemy import ColumnElement, select, func
+from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.core.config import settings

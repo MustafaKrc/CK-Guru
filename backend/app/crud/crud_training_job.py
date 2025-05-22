@@ -2,7 +2,7 @@
 import logging
 from typing import Any, Dict, Optional, Sequence, Tuple
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -44,7 +44,7 @@ async def get_training_jobs(
     limit: int = 100,
     dataset_id: Optional[int] = None,
     status: Optional[JobStatusEnum] = None,
-) -> Tuple[Sequence[TrainingJob], int]: # Return tuple
+) -> Tuple[Sequence[TrainingJob], int]:  # Return tuple
     """Get multiple training jobs with optional filtering and pagination."""
     stmt_items = (
         select(TrainingJob)
@@ -56,21 +56,21 @@ async def get_training_jobs(
         filters.append(TrainingJob.dataset_id == dataset_id)
     if status:
         filters.append(TrainingJob.status == status)
-    
+
     if filters:
         stmt_items = stmt_items.where(*filters)
 
     stmt_total = select(func.count(TrainingJob.id))
     if filters:
         stmt_total = stmt_total.where(*filters)
-    
+
     result_total = await db.execute(stmt_total)
     total = result_total.scalar_one_or_none() or 0
-    
+
     stmt_items = stmt_items.offset(skip).limit(limit)
     result_items = await db.execute(stmt_items)
     items = result_items.scalars().all()
-    
+
     return items, total
 
 
@@ -143,11 +143,10 @@ async def get_training_jobs_by_repository(
     items = result_items.scalars().all()
 
     # Query for total count
-    stmt_total = (
-        select(func.count(TrainingJob.id))
-        .where(TrainingJob.dataset_id.in_(dataset_ids_stmt))
+    stmt_total = select(func.count(TrainingJob.id)).where(
+        TrainingJob.dataset_id.in_(dataset_ids_stmt)
     )
     result_total = await db.execute(stmt_total)
     total = result_total.scalar_one_or_none() or 0
-    
+
     return items, total

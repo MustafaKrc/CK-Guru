@@ -77,7 +77,7 @@ async def get_repositories(
     stmt_total = select(func.count(Repository.id))
     result_total = await db.execute(stmt_total)
     total = result_total.scalar_one_or_none() or 0
-    
+
     return items, total
 
 

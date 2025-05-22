@@ -1,8 +1,8 @@
 # backend/app/main.py
 from fastapi import FastAPI, status
 from fastapi.logger import logger
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.v1.router import api_router
@@ -44,18 +44,18 @@ app = FastAPI(
 # For production, use your actual frontend domain.
 # Use environment variables for origins in production.
 origins = [
-    "http://localhost:3000", # Frontend development server
-    "http://ckguru_frontend:3000", # Frontend production server
-    "http://ckguru_frontend_dev:3000", # Frontend development server
+    "http://localhost:3000",  # Frontend development server
+    "http://ckguru_frontend:3000",  # Frontend production server
+    "http://ckguru_frontend_dev:3000",  # Frontend development server
     # "https://your-production-frontend.com", # Example production frontend
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],#origins,
+    allow_origins=["*"],  # origins,
     allow_credentials=True,
-    allow_methods=["*"], # Allows all methods
-    allow_headers=["*"], # Allows all headers
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
 )
 
 

@@ -1,5 +1,4 @@
 import logging
-from typing import List, Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,7 +45,7 @@ async def create_repository_endpoint(
 
 @router.get(
     "/",
-    response_model=schemas.PaginatedRepositoryRead, # Use Paginated schema
+    response_model=schemas.PaginatedRepositoryRead,  # Use Paginated schema
     summary="List registered repositories",
     description="Retrieves a list of repositories with pagination.",
 )
@@ -60,8 +59,12 @@ async def read_repositories_endpoint(
     """
     Retrieve repositories.
     """
-    items, total = await crud.crud_repository.get_repositories(db, skip=skip, limit=limit)
-    return schemas.PaginatedRepositoryRead(items=items, total=total, skip=skip, limit=limit)
+    items, total = await crud.crud_repository.get_repositories(
+        db, skip=skip, limit=limit
+    )
+    return schemas.PaginatedRepositoryRead(
+        items=items, total=total, skip=skip, limit=limit
+    )
 
 
 @router.get(
@@ -188,15 +191,14 @@ async def trigger_ingest_task(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to submit background task. Please try again later.",
         )
-    
 
 
 @router.get(
     "/{repo_id}/models",
-    response_model=schemas.PaginatedMLModelRead, # Updated response_model
+    response_model=schemas.PaginatedMLModelRead,  # Updated response_model
     summary="List ML Models for a Specific Repository",
-    tags=["Repositories", "ML & Inference Jobs"], 
-    responses={404: {"description": "Repository not found"}}
+    tags=["Repositories", "ML & Inference Jobs"],
+    responses={404: {"description": "Repository not found"}},
 )
 async def list_repository_ml_models(
     repo_id: int,
@@ -210,7 +212,7 @@ async def list_repository_ml_models(
     repo = await crud.crud_repository.get_repository(db, repo_id=repo_id)
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
-    
+
     # Assuming crud_ml_model.get_ml_models_by_repository now returns (items, total_count)
     models, total_count = await crud.crud_ml_model.get_ml_models_by_repository(
         db, repository_id=repo_id, skip=skip, limit=limit
@@ -219,12 +221,13 @@ async def list_repository_ml_models(
         items=models, total=total_count, skip=skip, limit=limit
     )
 
+
 @router.get(
     "/{repo_id}/training-jobs",
-    response_model=schemas.PaginatedTrainingJobRead, # Updated response_model
+    response_model=schemas.PaginatedTrainingJobRead,  # Updated response_model
     summary="List Training Jobs for a Specific Repository",
     tags=["Repositories", "ML & Inference Jobs"],
-    responses={404: {"description": "Repository not found"}}
+    responses={404: {"description": "Repository not found"}},
 )
 async def list_repository_training_jobs(
     repo_id: int,
@@ -235,7 +238,7 @@ async def list_repository_training_jobs(
     repo = await crud.crud_repository.get_repository(db, repo_id=repo_id)
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
-    
+
     # Assuming crud_training_job.get_training_jobs_by_repository now returns (items, total_count)
     jobs, total_count = await crud.crud_training_job.get_training_jobs_by_repository(
         db, repository_id=repo_id, skip=skip, limit=limit
@@ -244,12 +247,13 @@ async def list_repository_training_jobs(
         items=jobs, total=total_count, skip=skip, limit=limit
     )
 
+
 @router.get(
     "/{repo_id}/hp-search-jobs",
-    response_model=schemas.PaginatedHPSearchJobRead, # Updated response_model
+    response_model=schemas.PaginatedHPSearchJobRead,  # Updated response_model
     summary="List Hyperparameter Search Jobs for a Specific Repository",
     tags=["Repositories", "ML & Inference Jobs"],
-    responses={404: {"description": "Repository not found"}}
+    responses={404: {"description": "Repository not found"}},
 )
 async def list_repository_hp_search_jobs(
     repo_id: int,
@@ -269,12 +273,13 @@ async def list_repository_hp_search_jobs(
         items=jobs, total=total_count, skip=skip, limit=limit
     )
 
+
 @router.get(
     "/{repo_id}/inference-jobs",
-    response_model=schemas.PaginatedInferenceJobRead, # Updated response_model
+    response_model=schemas.PaginatedInferenceJobRead,  # Updated response_model
     summary="List Inference Jobs for a Specific Repository",
     tags=["Repositories", "ML & Inference Jobs"],
-    responses={404: {"description": "Repository not found"}}
+    responses={404: {"description": "Repository not found"}},
 )
 async def list_repository_inference_jobs(
     repo_id: int,

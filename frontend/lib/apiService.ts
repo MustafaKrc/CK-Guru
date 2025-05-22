@@ -114,6 +114,49 @@ export const apiService = {
   },
 };
 
+// --- Dedicated API Service Functions ---
+// Import types from the centralized location. Assuming `~/types/api` resolves correctly.
+import {
+  PaginatedInferenceJobRead,
+  InferenceJobRead,
+  XAIResultRead,
+  XAITriggerResponse,
+  JobStatusEnum, // For potential use in params
+} from "~/types/api"; // This path should work if tsconfig paths are set up
+
+export interface GetInferenceJobsParams {
+  skip?: number;
+  limit?: number;
+  ml_model_id?: number;
+  status?: JobStatusEnum | string; // Allow string for flexibility if enum isn't strictly used in query
+  // Add other query parameters as needed, e.g., search_query, sort_by
+}
+
+export const getInferenceJobs = async (params?: GetInferenceJobsParams): Promise<PaginatedInferenceJobRead> => {
+  const queryParams = new URLSearchParams();
+  if (params) {
+    if (params.skip !== undefined) queryParams.append('skip', String(params.skip));
+    if (params.limit !== undefined) queryParams.append('limit', String(params.limit));
+    if (params.ml_model_id !== undefined) queryParams.append('ml_model_id', String(params.ml_model_id));
+    if (params.status !== undefined) queryParams.append('status', params.status);
+  }
+  const endpoint = `/ml-jobs/infer?${queryParams.toString()}`;
+  return apiService.get<PaginatedInferenceJobRead>(endpoint);
+};
+
+export const getInferenceJobDetails = async (jobId: string | number): Promise<InferenceJobRead> => {
+  return apiService.get<InferenceJobRead>(`/ml-jobs/infer/${jobId}`);
+};
+
+export const getXAIResultsForJob = async (inferenceJobId: string | number): Promise<XAIResultRead[]> => {
+  return apiService.get<XAIResultRead[]>(`/xai/inference-jobs/${inferenceJobId}/xai-results`);
+};
+
+export const triggerXAIProcessing = async (inferenceJobId: string | number): Promise<XAITriggerResponse> => {
+  return apiService.post<XAITriggerResponse>(`/xai/inference-jobs/${inferenceJobId}/xai-results/trigger`, {});
+};
+
+
 // Utility to show toast notifications for API errors
 export const handleApiError = (
   error: any,

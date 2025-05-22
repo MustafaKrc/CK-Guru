@@ -2,7 +2,7 @@
 import logging
 from typing import Any, Dict, Optional, Sequence, Tuple  # Add Tuple
 
-from sqlalchemy import select, func  # Add func
+from sqlalchemy import func, select  # Add func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -48,11 +48,11 @@ async def get_inference_jobs(
     limit: int = 100,
     model_id: Optional[int] = None,
     status: Optional[JobStatusEnum] = None,
-) -> Tuple[Sequence[InferenceJob], int]: # Return tuple
+) -> Tuple[Sequence[InferenceJob], int]:  # Return tuple
     """Get multiple inference jobs with optional filtering and pagination."""
     stmt_items = (
         select(InferenceJob)
-        .options(selectinload(InferenceJob.ml_model)) # Eager load for consistency
+        .options(selectinload(InferenceJob.ml_model))  # Eager load for consistency
         .order_by(InferenceJob.created_at.desc())
     )
     filters = []
@@ -60,7 +60,7 @@ async def get_inference_jobs(
         filters.append(InferenceJob.ml_model_id == model_id)
     if status:
         filters.append(InferenceJob.status == status)
-    
+
     if filters:
         stmt_items = stmt_items.where(*filters)
 
@@ -70,11 +70,11 @@ async def get_inference_jobs(
 
     result_total = await db.execute(stmt_total)
     total = result_total.scalar_one_or_none() or 0
-    
+
     stmt_items = stmt_items.offset(skip).limit(limit)
     result_items = await db.execute(stmt_items)
     items = result_items.scalars().all()
-    
+
     return items, total
 
 
@@ -140,7 +140,9 @@ async def get_inference_jobs_by_repository(
     # Subquery to get ML Model IDs associated with the repository
     # MLModel -> Dataset -> Repository
     dataset_ids_stmt = select(Dataset.id).where(Dataset.repository_id == repository_id)
-    ml_model_ids_stmt = select(MLModel.id).where(MLModel.dataset_id.in_(dataset_ids_stmt))
+    ml_model_ids_stmt = select(MLModel.id).where(
+        MLModel.dataset_id.in_(dataset_ids_stmt)
+    )
 
     # Query for items
     stmt_items = (
@@ -155,9 +157,8 @@ async def get_inference_jobs_by_repository(
     items = result_items.scalars().all()
 
     # Query for total count
-    stmt_total = (
-        select(func.count(InferenceJob.id))
-        .where(InferenceJob.ml_model_id.in_(ml_model_ids_stmt))
+    stmt_total = select(func.count(InferenceJob.id)).where(
+        InferenceJob.ml_model_id.in_(ml_model_ids_stmt)
     )
     result_total = await db.execute(stmt_total)
     total = result_total.scalar_one_or_none() or 0

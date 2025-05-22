@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional, Sequence, Tuple
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload # <--- IMPORT THIS
+from sqlalchemy.orm import selectinload  # <--- IMPORT THIS
 
 from shared.db.models.dataset import Dataset
 from shared.db.models.ml_model import MLModel
@@ -12,14 +12,15 @@ from shared.schemas.ml_model import MLModelCreate, MLModelUpdate
 
 logger = logging.getLogger(__name__)
 
+
 async def get_ml_model(db: AsyncSession, model_id: int) -> Optional[MLModel]:
     """Get a single ML model by ID."""
     stmt = (
         select(MLModel)
         .options(
-            selectinload(MLModel.dataset), 
-            selectinload(MLModel.training_job), 
-            selectinload(MLModel.hp_search_job)
+            selectinload(MLModel.dataset),
+            selectinload(MLModel.training_job),
+            selectinload(MLModel.hp_search_job),
         )
         .filter(MLModel.id == model_id)
     )
@@ -34,19 +35,19 @@ async def get_ml_models(
     limit: int = 100,
     model_name: Optional[str] = None,
     model_type: Optional[str] = None,
-    dataset_id: Optional[int] = None, # Added dataset_id filter
-) -> Tuple[Sequence[MLModel], int]: # Return tuple
+    dataset_id: Optional[int] = None,  # Added dataset_id filter
+) -> Tuple[Sequence[MLModel], int]:  # Return tuple
     """Get multiple ML models with optional filtering and pagination."""
     stmt_items = (
         select(MLModel)
-        .options( # Eager load for list view as well, for consistency on model objects
+        .options(  # Eager load for list view as well, for consistency on model objects
             selectinload(MLModel.dataset),
             selectinload(MLModel.training_job),
-            selectinload(MLModel.hp_search_job)
+            selectinload(MLModel.hp_search_job),
         )
         .order_by(MLModel.name, MLModel.version.desc())
     )
-    
+
     filters = []
     if model_name:
         filters.append(MLModel.name == model_name)
@@ -54,7 +55,7 @@ async def get_ml_models(
         filters.append(MLModel.model_type == model_type)
     if dataset_id is not None:
         filters.append(MLModel.dataset_id == dataset_id)
-    
+
     if filters:
         stmt_items = stmt_items.where(*filters)
 
@@ -62,15 +63,16 @@ async def get_ml_models(
     stmt_total = select(func.count(MLModel.id))
     if filters:
         stmt_total = stmt_total.where(*filters)
-    
+
     result_total = await db.execute(stmt_total)
     total = result_total.scalar_one_or_none() or 0
 
     stmt_items = stmt_items.offset(skip).limit(limit)
     result_items = await db.execute(stmt_items)
     items = result_items.scalars().all()
-    
+
     return items, total
+
 
 async def get_latest_model_version(db: AsyncSession, model_name: str) -> Optional[int]:
     """Gets the highest version number for a given model name."""
@@ -109,7 +111,9 @@ async def update_ml_model(
     db.add(db_obj)
     await db.commit()
     await db.refresh(db_obj)
-    await db.refresh(db_obj, attribute_names=["dataset", "training_job", "hp_search_job"])
+    await db.refresh(
+        db_obj, attribute_names=["dataset", "training_job", "hp_search_job"]
+    )
     logger.info(f"Updated ML Model ID {db_obj.id}")
     return db_obj
 
@@ -138,7 +142,7 @@ async def get_ml_models_by_repository(
         .options(
             selectinload(MLModel.dataset),
             selectinload(MLModel.training_job),
-            selectinload(MLModel.hp_search_job)
+            selectinload(MLModel.hp_search_job),
         )
         .where(MLModel.dataset_id.in_(dataset_ids_stmt))
         .order_by(MLModel.created_at.desc())
@@ -148,9 +152,8 @@ async def get_ml_models_by_repository(
     result_items = await db.execute(stmt_items)
     items = result_items.scalars().all()
 
-    stmt_total = (
-        select(func.count(MLModel.id))
-        .where(MLModel.dataset_id.in_(dataset_ids_stmt))
+    stmt_total = select(func.count(MLModel.id)).where(
+        MLModel.dataset_id.in_(dataset_ids_stmt)
     )
     result_total = await db.execute(stmt_total)
     total = result_total.scalar_one_or_none() or 0

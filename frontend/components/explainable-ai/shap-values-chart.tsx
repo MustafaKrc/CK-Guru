@@ -2,19 +2,22 @@
 
 import { useEffect, useRef } from "react"
 
-interface ShapValuesProps {
-  data: {
-    feature: string
-    value: number
-    baseline: number
-  }[]
+interface FeatureSHAPValueDisplay { // Renamed to avoid conflict if FeatureSHAPValue is imported
+  feature: string;
+  value: number;
+  // feature_value?: any; // Not used in current chart logic, can be omitted for clarity here
 }
 
-export function ShapValuesChart({ data }: ShapValuesProps) {
+interface ShapValuesProps {
+  data: FeatureSHAPValueDisplay[];
+  baseline?: number; // Make baseline an optional top-level prop
+}
+
+export function ShapValuesChart({ data, baseline }: ShapValuesProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
-    if (!canvasRef.current) return
+    if (!canvasRef.current || !baseline === undefined) return; // Ensure baseline is also available if needed by drawing logic
 
     const canvas = canvasRef.current
     const ctx = canvas.getContext("2d")
@@ -52,7 +55,8 @@ export function ShapValuesChart({ data }: ShapValuesProps) {
     ctx.fillStyle = "#64748b" // slate-500
     ctx.font = "12px Inter, sans-serif"
     ctx.textAlign = "center"
-    ctx.fillText("Baseline", centerX, totalHeight - bottomPadding + 25)
+    // Use the passed 'baseline' prop for the label
+    ctx.fillText(`Baseline: ${baseline?.toFixed(2) ?? 'N/A'}`, centerX, totalHeight - bottomPadding + 25)
 
     // Draw bars
     sortedData.forEach((item, index) => {
@@ -118,7 +122,7 @@ export function ShapValuesChart({ data }: ShapValuesProps) {
     ctx.font = "12px Inter, sans-serif"
     ctx.textAlign = "right"
     ctx.fillText("Pushes away from prediction", centerX - 210, legendY)
-  }, [data])
+  }, [data, baseline]) // Add baseline to dependency array
 
   // Helper function to format feature names
   const formatFeatureName = (name: string) => {

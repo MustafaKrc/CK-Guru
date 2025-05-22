@@ -1,168 +1,220 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { MainLayout } from "@/components/main-layout"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Search, ArrowRight, Calendar, FileText, BarChart } from "lucide-react"
-import Link from "next/link"
+import React, { useEffect, useState, useMemo } from "react";
+import Link from "next/link";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button"; // Assuming Button is used for links
+import { Skeleton } from "@/components/ui/skeleton"; // For loading state
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"; // For error messages
+import { ExclamationTriangleIcon } from "@radix-ui/react-icons"; // For error icon
 
-interface PredictionInsight {
-  id: string
-  title: string
-  modelName: string
-  date: string
-  status: "high_confidence" | "medium_confidence" | "low_confidence"
-  fileCount: number
-}
+// Import dedicated API service functions and types
+import { getInferenceJobs, handleApiError } from "../../../lib/apiService"; // Adjusted path
+import {
+  InferenceJobRead,
+  PaginatedInferenceJobRead,
+  JobStatusEnum,
+  // FilePredictionDetail, // Not directly used here, but available from ~/types/api
+  // InferenceResultPackage, // Not directly used here, but available from ~/types/api
+} from "~/types/api"; // Assuming path alias is configured for frontend/types/api
 
-export default function PredictionInsightsPage() {
-  const [searchQuery, setSearchQuery] = useState("")
+// Type for the items we'll display, can be same as InferenceJobRead or a subset
+type DisplayableInferenceJob = InferenceJobRead;
 
-  // Mock data for prediction insights
-  const insights: PredictionInsight[] = [
-    {
-      id: "insight-123",
-      title: "Authentication Service Analysis",
-      modelName: "CodeQuality-v2",
-      date: "2023-11-15",
-      status: "high_confidence",
-      fileCount: 12,
-    },
-    {
-      id: "insight-456",
-      title: "Payment Gateway Integration",
-      modelName: "SecurityAudit-v1",
-      date: "2023-11-10",
-      status: "medium_confidence",
-      fileCount: 8,
-    },
-    {
-      id: "insight-789",
-      title: "User Profile Management",
-      modelName: "CodeQuality-v2",
-      date: "2023-11-05",
-      status: "low_confidence",
-      fileCount: 15,
-    },
-    {
-      id: "insight-101",
-      title: "Database Migration Scripts",
-      modelName: "PerformanceOptimizer-v1",
-      date: "2023-10-28",
-      status: "high_confidence",
-      fileCount: 5,
-    },
-    {
-      id: "insight-102",
-      title: "API Endpoint Refactoring",
-      modelName: "CodeQuality-v2",
-      date: "2023-10-20",
-      status: "medium_confidence",
-      fileCount: 23,
-    },
-  ]
+const PredictionInsightsPage = () => {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [inferenceJobs, setInferenceJobs] = useState<DisplayableInferenceJob[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredInsights = insights.filter(
-    (insight) =>
-      insight.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      insight.modelName.toLowerCase().includes(searchQuery.toLowerCase()),
-  )
+  useEffect(() => {
+    const fetchInferenceJobs = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        // Use the dedicated service function
+        // Pass any necessary query parameters, e.g., for pagination or filtering
+        const response = await getInferenceJobs({ limit: 50 }); // Example: fetch first 50
+        setInferenceJobs(response.items);
+      } catch (err) {
+        // handleApiError now directly shows a toast, so we might not need to set error message manually
+        // unless we want to display it in a specific component location.
+        // For now, keeping setError for potential inline error display.
+        const defaultMessage = "Failed to fetch inference jobs.";
+        if (err instanceof Error) {
+            setError(err.message); // Store the error message from ApiError or generic Error
+        } else {
+            setError(defaultMessage);
+        }
+        // The toast is handled by handleApiError from apiService.ts if it's called there,
+        // or we can call it here if getInferenceJobs re-throws a plain error.
+        // Assuming getInferenceJobs throws ApiError which is then caught by a component-level try-catch.
+        // Let's adjust to call handleApiError here for UI feedback.
+        handleApiError(err, "Failed to fetch jobs");
 
-  const getStatusBadge = (status: string) => {
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchInferenceJobs();
+  }, []);
+
+  const getStatusBadge = (status: JobStatusEnum) => {
     switch (status) {
-      case "high_confidence":
-        return (
-          <Badge className="bg-green-100 text-green-800 hover:bg-green-100 dark:bg-green-900 dark:text-green-100">
-            High Confidence
-          </Badge>
-        )
-      case "medium_confidence":
-        return (
-          <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100 dark:bg-yellow-900 dark:text-yellow-100">
-            Medium Confidence
-          </Badge>
-        )
-      case "low_confidence":
-        return (
-          <Badge className="bg-red-100 text-red-800 hover:bg-red-100 dark:bg-red-900 dark:text-red-100">
-            Low Confidence
-          </Badge>
-        )
+      case JobStatusEnum.SUCCESS:
+        return <Badge variant="success">Success</Badge>;
+      case JobStatusEnum.FAILURE:
+        return <Badge variant="destructive">Failure</Badge>;
+      case JobStatusEnum.IN_PROGRESS:
+        return <Badge variant="secondary">In Progress</Badge>;
+      case JobStatusEnum.PENDING:
+        return <Badge variant="outline">Pending</Badge>;
+      case JobStatusEnum.CANCELLED:
+        return <Badge variant="warning">Cancelled</Badge>;
+      case JobStatusEnum.TIMEOUT:
+        return <Badge variant="warning">Timeout</Badge>;
       default:
-        return <Badge>{status}</Badge>
+        return <Badge>{status}</Badge>;
     }
-  }
+  };
 
-  return (
-    <MainLayout>
-      <div className="container mx-auto py-6 space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Prediction Insights</h1>
-            <p className="text-muted-foreground mt-1">Explore and understand model predictions with explainable AI</p>
-          </div>
-          <Button asChild>
-            <Link href="/jobs/inference">
-              Generate New Insights
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Link>
-          </Button>
+  const filteredInsights = useMemo(() => {
+    if (!searchQuery) {
+      return inferenceJobs;
+    }
+    return inferenceJobs.filter((job) => {
+      const query = searchQuery.toLowerCase();
+      return (
+        job.id.toString().includes(query) ||
+        job.ml_model_id.toString().includes(query) ||
+        (job.input_reference.commit_hash && typeof job.input_reference.commit_hash === 'string' && job.input_reference.commit_hash.toLowerCase().includes(query)) ||
+        (job.status && job.status.toLowerCase().includes(query))
+      );
+    });
+  }, [searchQuery, inferenceJobs]);
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto p-4">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold">Prediction Insights</h1>
+          <Skeleton className="h-10 w-1/3" /> {/* Search input skeleton */}
         </div>
-
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search insights by title or model..."
-            className="pl-10"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {filteredInsights.map((insight) => (
-            <Card key={insight.id} className="overflow-hidden">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-xl">{insight.title}</CardTitle>
-                <CardDescription className="flex items-center mt-1">
-                  <BarChart className="h-4 w-4 mr-1" />
-                  {insight.modelName}
-                </CardDescription>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[...Array(3)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader>
+                <Skeleton className="h-6 w-3/4" />
+                <Skeleton className="h-4 w-1/2 mt-1" />
               </CardHeader>
-              <CardContent className="pb-2">
-                <div className="flex justify-between items-center mb-4">
-                  <div className="flex items-center text-sm text-muted-foreground">
-                    <Calendar className="h-4 w-4 mr-1" />
-                    {insight.date}
-                  </div>
-                  <div className="flex items-center text-sm text-muted-foreground">
-                    <FileText className="h-4 w-4 mr-1" />
-                    {insight.fileCount} files
-                  </div>
-                </div>
-                <div>{getStatusBadge(insight.status)}</div>
+              <CardContent>
+                <Skeleton className="h-4 w-full mb-2" />
+                <Skeleton className="h-4 w-2/3 mb-2" />
+                <Skeleton className="h-4 w-1/2" />
               </CardContent>
-              <CardFooter className="bg-muted/50 pt-2">
-                <Button asChild variant="ghost" className="w-full">
-                  <Link href={`/prediction-insights/${insight.id}`}>
-                    View Details
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
-                </Button>
+              <CardFooter>
+                <Skeleton className="h-10 w-28" />
               </CardFooter>
             </Card>
           ))}
         </div>
-
-        {filteredInsights.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground">No insights found matching your search criteria.</p>
-          </div>
-        )}
       </div>
-    </MainLayout>
-  )
-}
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto p-4 flex justify-center items-center h-[calc(100vh-200px)]">
+        <Alert variant="destructive" className="max-w-lg">
+          <ExclamationTriangleIcon className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto p-4">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold">Prediction Insights</h1>
+        <Input
+          type="text"
+          placeholder="Search by ID, Model ID, Commit Hash, Status..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="max-w-sm"
+        />
+      </div>
+
+      {filteredInsights.length === 0 ? (
+        <div className="text-center text-gray-500 py-10">
+          No inference jobs found.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredInsights.map((job) => (
+            <Card key={job.id} className="flex flex-col justify-between">
+              <CardHeader>
+                <CardTitle>Inference Job #{job.id}</CardTitle>
+                <CardDescription>
+                  Model ID: {job.ml_model_id}
+                  {job.input_reference.commit_hash && (
+                    <span className="block text-xs text-gray-500 mt-1">
+                      Commit: {String(job.input_reference.commit_hash).substring(0, 7)}...
+                    </span>
+                  )}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div>
+                    <strong>Status:</strong> {getStatusBadge(job.status)}
+                  </div>
+                  <div>
+                    <strong>Created:</strong>{" "}
+                    {new Date(job.created_at).toLocaleDateString()}
+                  </div>
+                  {job.completed_at && (
+                     <div>
+                       <strong>Completed:</strong>{" "}
+                       {new Date(job.completed_at).toLocaleDateString()}
+                     </div>
+                  )}
+                  <div>
+                    <strong>Files Analyzed:</strong>{" "}
+                    {job.prediction_result?.num_files_analyzed ?? "N/A"}
+                  </div>
+                   {job.status_message && (
+                    <div className="text-sm text-muted-foreground">
+                      <strong>Message:</strong> {job.status_message}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+              <CardFooter>
+                <Link href={`/prediction-insights/${job.id}`} passHref legacyBehavior>
+                  <Button asChild>
+                    <a>View Details</a>
+                  </Button>
+                </Link>
+              </CardFooter>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default PredictionInsightsPage;
