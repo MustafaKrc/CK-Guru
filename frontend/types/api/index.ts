@@ -7,5 +7,5 @@ export * from "./ml-model";
 export * from "./training-job";
 export * from "./hp-search-job";
 export * from "./inference-job";
-// export * from "./xai";
+export * from "./xai";
 // Add other schema types as they are created

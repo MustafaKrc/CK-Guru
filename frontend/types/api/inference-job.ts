@@ -1,15 +1,6 @@
 // frontend/types/api/inference-job.ts
 import { JobStatusEnum } from "./enums";
-// Assuming FilePredictionDetail is also typed if needed for detailed view
-// For now, prediction_result is Record<string, any> as per schema, but we can refine
-// based on InferenceResultPackage from shared/schemas/inference_job.py
-
-export interface FilePredictionDetail {
-    file?: string | null;
-    class_name?: string | null; // Matches 'class' alias
-    prediction: number;
-    probability: number;
-}
+import { FilePredictionDetail } from "./xai"; 
 
 export interface InferenceResultPackage {
     commit_prediction: number;

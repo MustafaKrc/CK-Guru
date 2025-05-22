@@ -121,8 +121,9 @@ import {
   InferenceJobRead,
   XAIResultRead,
   XAITriggerResponse,
-  JobStatusEnum, // For potential use in params
-} from "~/types/api"; // This path should work if tsconfig paths are set up
+} from "@/types/api"; // This path should work if tsconfig paths are set up
+
+import { JobStatusEnum } from "@/types/api/enums";
 
 export interface GetInferenceJobsParams {
   skip?: number;
@@ -140,12 +141,12 @@ export const getInferenceJobs = async (params?: GetInferenceJobsParams): Promise
     if (params.ml_model_id !== undefined) queryParams.append('ml_model_id', String(params.ml_model_id));
     if (params.status !== undefined) queryParams.append('status', params.status);
   }
-  const endpoint = `/ml-jobs/infer?${queryParams.toString()}`;
+  const endpoint = `/ml/infer?${queryParams.toString()}`;
   return apiService.get<PaginatedInferenceJobRead>(endpoint);
 };
 
 export const getInferenceJobDetails = async (jobId: string | number): Promise<InferenceJobRead> => {
-  return apiService.get<InferenceJobRead>(`/ml-jobs/infer/${jobId}`);
+  return apiService.get<InferenceJobRead>(`/ml/infer/${jobId}`);
 };
 
 export const getXAIResultsForJob = async (inferenceJobId: string | number): Promise<XAIResultRead[]> => {

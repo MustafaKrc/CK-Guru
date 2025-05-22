@@ -27,14 +27,12 @@ import {
   getXAIResultsForJob, 
   triggerXAIProcessing,
   handleApiError 
-} from "../../../lib/apiService"; // Adjusted path
+} from "@/lib/apiService"; // Adjusted path
+
 import {
   InferenceJobRead,
   XAIResultRead,
   XAITriggerResponse,
-  JobStatusEnum,
-  XAITypeEnum,
-  XAIStatusEnum,
   FeatureImportanceResultData,
   SHAPResultData,
   LIMEResultData,
@@ -42,7 +40,9 @@ import {
   DecisionPathResultData,
   // FilePredictionDetail, // Not directly used here, but available from ~/types/api
   // InferenceResultPackage, // Not directly used here, but available from ~/types/api
-} from "~/types/api"; // Assuming path alias is configured for frontend/types/api
+} from "@/types/api"; // Assuming path alias is configured for frontend/types/api
+
+import { JobStatusEnum, XAIStatusEnum, XAITypeEnum } from "@/types/api/enums";
 
 
 // XAI Components (Placeholders - these would ideally be more sophisticated)
@@ -112,7 +112,7 @@ const PredictionInsightDetailPage = () => {
       // Logic to set active tab (remains the same as provided in the full example)
       if (xaiResultsResponse && xaiResultsResponse.length > 0) {
         if (!activeTab || !xaiResultsResponse.find(r => r.xai_type === activeTab)) {
-            const firstSuccessOrPending = xaiResultsResponse.find(r => r.status === XAIStatusEnum.SUCCESS || r.status === XAIStatusEnum.PENDING || r.status === XAIStatusEnum.IN_PROGRESS);
+            const firstSuccessOrPending = xaiResultsResponse.find(r => r.status === XAIStatusEnum.SUCCESS || r.status === XAIStatusEnum.PENDING || r.status === XAIStatusEnum.RUNNING);
             if (firstSuccessOrPending) {
                 setActiveTab(firstSuccessOrPending.xai_type);
             } else if (xaiResultsResponse[0]) {
@@ -164,14 +164,14 @@ const PredictionInsightDetailPage = () => {
 
   const getXAIStatusBadge = (status: XAIStatusEnum, message?: string | null) => {
     let icon = <InfoCircledIcon className="mr-1" />;
-    let variant: "success" | "destructive" | "secondary" | "outline" | "warning" = "secondary";
+    let variant: "default" | "destructive" | "secondary" | "outline" = "secondary";
 
     switch (status) {
-      case XAIStatusEnum.SUCCESS: icon = <CheckCircledIcon className="mr-1" />; variant = "success"; break;
-      case XAIStatusEnum.FAILURE: icon = <ExclamationTriangleIcon className="mr-1" />; variant = "destructive"; break;
+      case XAIStatusEnum.SUCCESS: icon = <CheckCircledIcon className="mr-1" />; variant = "default"; break;
+      case XAIStatusEnum.FAILED: icon = <ExclamationTriangleIcon className="mr-1" />; variant = "destructive"; break;
       case XAIStatusEnum.PENDING: variant = "outline"; break;
-      case XAIStatusEnum.IN_PROGRESS: variant = "secondary"; break;
-      case XAIStatusEnum.NOT_APPLICABLE: variant = "warning"; break;
+      case XAIStatusEnum.RUNNING: variant = "secondary"; break;
+      case XAIStatusEnum.REVOKED: variant = "secondary"; break; 
       default: break;
     }
     return <Badge variant={variant} className="ml-2 text-xs whitespace-nowrap" title={message || status}>{icon}{status}</Badge>;
@@ -180,8 +180,8 @@ const PredictionInsightDetailPage = () => {
   const getJobStatusBadge = (status: JobStatusEnum) => {
     // Simplified version from previous task for brevity
     switch (status) {
-      case JobStatusEnum.SUCCESS: return <Badge variant="success">Success</Badge>;
-      case JobStatusEnum.FAILURE: return <Badge variant="destructive">Failure</Badge>;
+      case JobStatusEnum.SUCCESS: return <Badge variant="default">Success</Badge>;
+      case JobStatusEnum.FAILED: return <Badge variant="destructive">Failure</Badge>;
       default: return <Badge variant="secondary">{status}</Badge>;
     }
   };
@@ -235,7 +235,7 @@ const PredictionInsightDetailPage = () => {
 
     switch (result.status) {
       case XAIStatusEnum.SUCCESS:
-        if (!result.result_data) return <Alert variant="warning"><ExclamationTriangleIcon className="mr-2 h-4 w-4"/>Explanation data is missing.</Alert>;
+        if (!result.result_data) return <Alert variant="default"><ExclamationTriangleIcon className="mr-2 h-4 w-4"/>Explanation data is missing.</Alert>;
         switch (xaiType) {
           case XAITypeEnum.FEATURE_IMPORTANCE:
             return <FeatureImportanceChart data={(result.result_data as FeatureImportanceResultData).feature_importances} />;
@@ -251,7 +251,7 @@ const PredictionInsightDetailPage = () => {
               <LimeExplanationDisplay data={limeData.instance_lime_values[0].explanation} />
             ) : <Alert variant="default"><InfoCircledIcon className="mr-2 h-4 w-4"/>No LIME instances found.</Alert>;
           }
-           case XAITypeEnum.COUNTERFACTUAL: {
+           case XAITypeEnum.COUNTERFACTUALS: {
             const cfData = result.result_data as CounterfactualResultData;
             return cfData.instance_counterfactuals && cfData.instance_counterfactuals.length > 0 ? (
               <CounterfactualExamplesDisplay data={cfData.instance_counterfactuals[0].counterfactuals} />
@@ -264,10 +264,10 @@ const PredictionInsightDetailPage = () => {
             ) : <Alert variant="default"><InfoCircledIcon className="mr-2 h-4 w-4"/>No Decision Path instances found.</Alert>;
           }
           default:
-            return <Alert variant="warning">Unsupported XAI type for display.</Alert>;
+            return <Alert variant="default">Unsupported XAI type for display.</Alert>;
         }
       case XAIStatusEnum.PENDING:
-      case XAIStatusEnum.IN_PROGRESS:
+      case XAIStatusEnum.RUNNING:
         return (
           <Alert variant="default" className="flex items-center">
             <ReloadIcon className="mr-2 h-4 w-4 animate-spin" />
@@ -275,7 +275,7 @@ const PredictionInsightDetailPage = () => {
             {result.status_message && <p className="text-xs mt-1">{result.status_message}</p>}
           </Alert>
         );
-      case XAIStatusEnum.FAILURE:
+      case XAIStatusEnum.FAILED:
         return (
           <Alert variant="destructive">
             <ExclamationTriangleIcon className="mr-2 h-4 w-4" />
@@ -283,7 +283,7 @@ const PredictionInsightDetailPage = () => {
           </Alert>
         );
       default:
-        return <Alert variant="outline">{result.status_message || `Status: ${result.status}`}</Alert>;
+        return <Alert variant="default">{result.status_message || `Status: ${result.status}`}</Alert>;
     }
   };
 
@@ -319,7 +319,7 @@ const PredictionInsightDetailPage = () => {
         </CardHeader>
         {inferenceJobDetails?.status !== JobStatusEnum.SUCCESS && (
              <CardContent>
-                <Alert variant="info">
+                <Alert variant="default">
                     <InfoCircledIcon className="h-4 w-4"/>
                     <AlertTitle>XAI Not Available</AlertTitle>
                     <AlertDescription>

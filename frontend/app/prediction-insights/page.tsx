@@ -18,14 +18,13 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"; // 
 import { ExclamationTriangleIcon } from "@radix-ui/react-icons"; // For error icon
 
 // Import dedicated API service functions and types
-import { getInferenceJobs, handleApiError } from "../../../lib/apiService"; // Adjusted path
+import { getInferenceJobs, handleApiError } from "@/lib/apiService"; // Adjusted path
 import {
   InferenceJobRead,
   PaginatedInferenceJobRead,
-  JobStatusEnum,
-  // FilePredictionDetail, // Not directly used here, but available from ~/types/api
-  // InferenceResultPackage, // Not directly used here, but available from ~/types/api
-} from "~/types/api"; // Assuming path alias is configured for frontend/types/api
+} from "@/types/api"; // Assuming path alias is configured for frontend/types/api
+
+import { JobStatusEnum } from "@/types/api/enums";
 
 // Type for the items we'll display, can be same as InferenceJobRead or a subset
 type DisplayableInferenceJob = InferenceJobRead;
@@ -72,17 +71,17 @@ const PredictionInsightsPage = () => {
   const getStatusBadge = (status: JobStatusEnum) => {
     switch (status) {
       case JobStatusEnum.SUCCESS:
-        return <Badge variant="success">Success</Badge>;
-      case JobStatusEnum.FAILURE:
+        return <Badge variant="default">Success</Badge>;
+      case JobStatusEnum.FAILED:
         return <Badge variant="destructive">Failure</Badge>;
-      case JobStatusEnum.IN_PROGRESS:
+      case JobStatusEnum.RUNNING:
         return <Badge variant="secondary">In Progress</Badge>;
       case JobStatusEnum.PENDING:
         return <Badge variant="outline">Pending</Badge>;
-      case JobStatusEnum.CANCELLED:
-        return <Badge variant="warning">Cancelled</Badge>;
-      case JobStatusEnum.TIMEOUT:
-        return <Badge variant="warning">Timeout</Badge>;
+      case JobStatusEnum.REVOKED:
+        return <Badge variant="secondary">Cancelled</Badge>;
+      case JobStatusEnum.SKIPPED:
+        return <Badge variant="secondary">Timeout</Badge>;
       default:
         return <Badge>{status}</Badge>;
     }
