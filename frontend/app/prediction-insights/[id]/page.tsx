@@ -1,24 +1,20 @@
+// frontend/app/prediction-insights/[id]/page.tsx
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 
 // UI Components
+import { MainLayout } from "@/components/main-layout";
+import { PageContainer } from "@/components/ui/page-container";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { InfoCircledIcon, ExclamationTriangleIcon, CheckCircledIcon, ReloadIcon, PlayIcon } from "@radix-ui/react-icons";
+import { InfoCircledIcon, ExclamationTriangleIcon, CheckCircledIcon, ReloadIcon, PlayIcon, RocketIcon, BarChartIcon, CodeIcon, Share1Icon, ShuffleIcon, MixerHorizontalIcon, TargetIcon } from "@radix-ui/react-icons";
 import { toast } from "sonner";
 
 // API Services & Types
@@ -27,109 +23,76 @@ import {
   getXAIResultsForJob, 
   triggerXAIProcessing,
   handleApiError 
-} from "@/lib/apiService"; // Adjusted path
+} from "@/lib/apiService"; 
 
 import {
   InferenceJobRead,
   XAIResultRead,
-  XAITriggerResponse,
   FeatureImportanceResultData,
   SHAPResultData,
   LIMEResultData,
   CounterfactualResultData,
   DecisionPathResultData,
-  // FilePredictionDetail, // Not directly used here, but available from ~/types/api
-  // InferenceResultPackage, // Not directly used here, but available from ~/types/api
-} from "@/types/api"; // Assuming path alias is configured for frontend/types/api
+} from "@/types/api"; 
 
 import { JobStatusEnum, XAIStatusEnum, XAITypeEnum } from "@/types/api/enums";
 
-
-// XAI Components (Placeholders - these would ideally be more sophisticated)
-const FeatureImportanceChart = ({ data }: { data: any }) => (
-  <Card>
-    <CardHeader><CardTitle>Feature Importances</CardTitle></CardHeader>
-    <CardContent><pre className="text-xs bg-gray-100 p-2 rounded-md overflow-auto max-h-96">{JSON.stringify(data, null, 2)}</pre></CardContent>
-  </Card>
-);
-const ShapValuesChart = ({ data, baseline }: { data: any, baseline?: number }) => (
-   <Card>
-    <CardHeader><CardTitle>SHAP Values (Instance 0)</CardTitle></CardHeader>
-    <CardContent>
-      {baseline !== undefined && <p className="text-sm text-muted-foreground">Baseline (Average Prediction): {baseline.toFixed(4)}</p>}
-      <pre className="text-xs bg-gray-100 p-2 rounded-md overflow-auto max-h-96">{JSON.stringify(data, null, 2)}</pre>
-    </CardContent>
-  </Card>
-);
-const LimeExplanationDisplay = ({ data }: { data: any }) => (
- <Card>
-    <CardHeader><CardTitle>LIME Explanations (Instance 0)</CardTitle></CardHeader>
-    <CardContent><pre className="text-xs bg-gray-100 p-2 rounded-md overflow-auto max-h-96">{JSON.stringify(data, null, 2)}</pre></CardContent>
-  </Card>
-);
-const CounterfactualExamplesDisplay = ({ data }: { data: any }) => (
-  <Card>
-    <CardHeader><CardTitle>Counterfactual Examples (Instance 0)</CardTitle></CardHeader>
-    <CardContent><pre className="text-xs bg-gray-100 p-2 rounded-md overflow-auto max-h-96">{JSON.stringify(data, null, 2)}</pre></CardContent>
-  </Card>
-);
-const DecisionPathVisualizer = ({ data }: { data: any }) => (
- <Card>
-    <CardHeader><CardTitle>Decision Path (Instance 0)</CardTitle></CardHeader>
-    <CardContent><pre className="text-xs bg-gray-100 p-2 rounded-md overflow-auto max-h-96">{JSON.stringify(data, null, 2)}</pre></CardContent>
-  </Card>
-);
+// XAI Display Components
+import { FeatureImportanceDisplay } from "@/components/explainable-ai/FeatureImportanceDisplay";
+import { ShapDisplay } from "@/components/explainable-ai/ShapDisplay";
+import { LimeDisplay } from "@/components/explainable-ai/LimeDisplay";
+import { DecisionPathDisplay } from "@/components/explainable-ai/DecisionPathDisplay";
+import { CounterfactualsDisplay } from "@/components/explainable-ai/CounterfactualsDisplay";
 
 const PredictionInsightDetailPage = () => {
   const params = useParams();
   const router = useRouter();
-  const inferenceJobId = params.id as string; // Ensure this is correctly typed, string if from URL
+  const inferenceJobId = params.id as string;
 
   const [inferenceJobDetails, setInferenceJobDetails] = useState<InferenceJobRead | null>(null);
-  const [xaiResults, setXaiResults] = useState<XAIResultRead[] | null>(null);
-  const [isLoading, setIsLoading] = useState(true); // Combined loading state for initial fetch
-  const [isTriggering, setIsTriggering] = useState(false); // Specific loading state for XAI trigger
+  const [xaiResults, setXaiResults] = useState<XAIResultRead[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isTriggering, setIsTriggering] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<string>(""); // Default active tab
+  const [activeTab, setActiveTab] = useState<string>("");
 
   const fetchAllData = useCallback(async (showLoadingToast = false) => {
     if (!inferenceJobId) return;
-    if(showLoadingToast) toast.loading("Refreshing XAI data...", {id: "fetch-data-toast"});
+    if (showLoadingToast) toast.loading("Refreshing XAI data...", { id: `fetch-data-${inferenceJobId}` });
 
-    setIsLoading(true); 
+    setIsLoading(true);
     setError(null);
 
     try {
-      // Use dedicated service functions
       const jobDetailsPromise = getInferenceJobDetails(inferenceJobId);
       const xaiResultsPromise = getXAIResultsForJob(inferenceJobId);
       
       const [jobDetailsResponse, xaiResultsResponse] = await Promise.all([jobDetailsPromise, xaiResultsPromise]);
       
       setInferenceJobDetails(jobDetailsResponse);
-      setXaiResults(xaiResultsResponse);
+      setXaiResults(xaiResultsResponse || []);
 
-      // Logic to set active tab (remains the same as provided in the full example)
       if (xaiResultsResponse && xaiResultsResponse.length > 0) {
-        if (!activeTab || !xaiResultsResponse.find(r => r.xai_type === activeTab)) {
-            const firstSuccessOrPending = xaiResultsResponse.find(r => r.status === XAIStatusEnum.SUCCESS || r.status === XAIStatusEnum.PENDING || r.status === XAIStatusEnum.RUNNING);
-            if (firstSuccessOrPending) {
-                setActiveTab(firstSuccessOrPending.xai_type);
-            } else if (xaiResultsResponse[0]) {
-                setActiveTab(xaiResultsResponse[0].xai_type);
+        const currentActiveTabIsValid = activeTab && xaiResultsResponse.some(r => r.xai_type === activeTab && r.status === XAIStatusEnum.SUCCESS);
+        if (!currentActiveTabIsValid) {
+            const firstSuccess = xaiResultsResponse.find(r => r.status === XAIStatusEnum.SUCCESS);
+            if (firstSuccess) {
+                setActiveTab(firstSuccess.xai_type);
+            } else {
+                 const firstPendingOrRunning = xaiResultsResponse.find(r => r.status === XAIStatusEnum.PENDING || r.status === XAIStatusEnum.RUNNING);
+                 if(firstPendingOrRunning) setActiveTab(firstPendingOrRunning.xai_type);
+                 else if (xaiResultsResponse[0]) setActiveTab(xaiResultsResponse[0].xai_type);
+                 else setActiveTab(XAITypeEnum.FEATURE_IMPORTANCE);
             }
         }
       } else {
-        setActiveTab(""); // No results, no active tab
+        setActiveTab(XAITypeEnum.FEATURE_IMPORTANCE); // Default if no results
       }
-      if(showLoadingToast) toast.success("Data refreshed!", {id: "fetch-data-toast"});
+      if (showLoadingToast) toast.success("Data refreshed!", { id: `fetch-data-${inferenceJobId}` });
     } catch (err) {
       const defaultMessage = "Failed to load insight details.";
-      // Assuming service functions throw ApiError or similar that handleApiError can process
       handleApiError(err, defaultMessage); 
       if (err instanceof Error) setError(err.message); else setError(defaultMessage);
-      // No need to call toast.error if handleApiError already does it.
-      // Based on apiService.ts, handleApiError shows the toast.
     } finally {
       setIsLoading(false);
     }
@@ -137,7 +100,8 @@ const PredictionInsightDetailPage = () => {
 
   useEffect(() => {
     fetchAllData();
-  }, [fetchAllData]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inferenceJobId]); 
 
   const handleTriggerXAI = async () => {
     if (!inferenceJobId || inferenceJobDetails?.status !== JobStatusEnum.SUCCESS) {
@@ -146,16 +110,17 @@ const PredictionInsightDetailPage = () => {
     }
     setIsTriggering(true);
     setError(null);
-    toast.loading("Triggering XAI generation...", { id: "trigger-xai-toast" });
+    const triggerToastId = `trigger-xai-${inferenceJobId}`;
+    toast.loading("Triggering XAI generation...", { id: triggerToastId });
 
     try {
-      // Use dedicated service function
       const response = await triggerXAIProcessing(inferenceJobId);
-      toast.success(response.message || "XAI generation started.", { id: "trigger-xai-toast" });
-      setTimeout(() => fetchAllData(true), 3000); // Re-fetch with toast after a delay
+      toast.success(response.message || "XAI generation tasks submitted.", { id: triggerToastId });
+      setTimeout(() => fetchAllData(true), 3000); 
     } catch (err) {
       const defaultMessage = "Failed to trigger XAI generation.";
-      handleApiError(err, defaultMessage); // handleApiError shows the toast
+      toast.dismiss(triggerToastId); // Dismiss the loading toast
+      handleApiError(err, defaultMessage); // handleApiError will show its own toast
       if (err instanceof Error) setError(err.message); else setError(defaultMessage);
     } finally {
       setIsTriggering(false);
@@ -163,222 +128,280 @@ const PredictionInsightDetailPage = () => {
   };
 
   const getXAIStatusBadge = (status: XAIStatusEnum, message?: string | null) => {
-    let icon = <InfoCircledIcon className="mr-1" />;
+    let icon: React.ReactNode = <InfoCircledIcon className="mr-1 h-3 w-3" />;
     let variant: "default" | "destructive" | "secondary" | "outline" = "secondary";
+    let text = status.charAt(0) + status.slice(1).toLowerCase();
 
     switch (status) {
-      case XAIStatusEnum.SUCCESS: icon = <CheckCircledIcon className="mr-1" />; variant = "default"; break;
-      case XAIStatusEnum.FAILED: icon = <ExclamationTriangleIcon className="mr-1" />; variant = "destructive"; break;
-      case XAIStatusEnum.PENDING: variant = "outline"; break;
-      case XAIStatusEnum.RUNNING: variant = "secondary"; break;
-      case XAIStatusEnum.REVOKED: variant = "secondary"; break; 
+      case XAIStatusEnum.SUCCESS: icon = <CheckCircledIcon className="mr-1 h-3 w-3" />; variant = "default"; text="Success"; break;
+      case XAIStatusEnum.FAILED: icon = <ExclamationTriangleIcon className="mr-1 h-3 w-3" />; variant = "destructive"; text="Failed"; break;
+      case XAIStatusEnum.PENDING: icon = <ReloadIcon className="mr-1 h-3 w-3 animate-spin" />; variant = "outline"; text="Pending"; break;
+      case XAIStatusEnum.RUNNING: icon = <ReloadIcon className="mr-1 h-3 w-3 animate-spin" />; variant = "secondary"; text="Running"; break;
       default: break;
     }
-    return <Badge variant={variant} className="ml-2 text-xs whitespace-nowrap" title={message || status}>{icon}{status}</Badge>;
+    return <Badge variant={variant} className="ml-2 text-xs whitespace-nowrap py-0.5 px-1.5" title={message || status}>{icon}{text}</Badge>;
   };
 
-  const getJobStatusBadge = (status: JobStatusEnum) => {
-    // Simplified version from previous task for brevity
+  const getJobStatusBadge = (status?: JobStatusEnum) => {
+    if (!status) return <Badge variant="secondary">Unknown</Badge>;
     switch (status) {
-      case JobStatusEnum.SUCCESS: return <Badge variant="default">Success</Badge>;
+      case JobStatusEnum.SUCCESS: return <Badge variant="default" className="bg-green-600 hover:bg-green-700">Success</Badge>;
       case JobStatusEnum.FAILED: return <Badge variant="destructive">Failure</Badge>;
       default: return <Badge variant="secondary">{status}</Badge>;
     }
   };
 
-  // Prepare available XAI types for tabs, prioritizing successful ones
-  const availableXaiTabs = Object.values(XAITypeEnum).filter(type => 
-    xaiResults?.some(r => r.xai_type === type)
-  ).sort((a,b) => { // Sort to put SUCCESS ones first, then PENDING/IN_PROGRESS
-    const statusA = xaiResults?.find(r => r.xai_type === a)?.status === XAIStatusEnum.SUCCESS ? 0 : 1;
-    const statusB = xaiResults?.find(r => r.xai_type === b)?.status === XAIStatusEnum.SUCCESS ? 0 : 1;
-    return statusA - statusB;
-  });
-
-
-  if (isLoading && !inferenceJobDetails && !xaiResults) { // Initial full page load
-    return (
-      <div className="container mx-auto p-4 space-y-6">
-        <Skeleton className="h-8 w-1/4" /> {/* Back button */}
-        <Skeleton className="h-10 w-1/2" /> {/* Title */}
-        <Card>
-          <CardHeader><Skeleton className="h-6 w-1/3" /></CardHeader>
-          <CardContent className="space-y-3">
-            {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-5 w-full" />)}
-          </CardContent>
-        </Card>
-        <Skeleton className="h-12 w-full" /> {/* Tabs Skeleton */}
-        <Card>
-          <CardHeader><Skeleton className="h-6 w-1/3" /></CardHeader>
-          <CardContent><Skeleton className="h-40 w-full" /></CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  if (error && !inferenceJobDetails && !xaiResults) { // Critical error loading initial data
-    return (
-      <div className="container mx-auto p-4 flex justify-center items-center h-[calc(100vh-200px)]">
-        <Alert variant="destructive" className="max-w-lg">
-          <ExclamationTriangleIcon className="h-4 w-4" />
-          <AlertTitle>Error Loading Page</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-          <Button onClick={() => fetchAllData(true)} className="mt-4">Try Again</Button>
-        </Alert>
-      </div>
-    );
-  }
+  const xaiTypeIcons: Record<XAITypeEnum, React.ReactNode> = {
+    [XAITypeEnum.FEATURE_IMPORTANCE]: <TargetIcon className="mr-1 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4"/>,
+    [XAITypeEnum.SHAP]: <MixerHorizontalIcon className="mr-1 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4"/>,
+    [XAITypeEnum.LIME]: <RocketIcon className="mr-1 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4"/>,
+    [XAITypeEnum.COUNTERFACTUALS]: <ShuffleIcon className="mr-1 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4"/>,
+    [XAITypeEnum.DECISION_PATH]: <Share1Icon className="mr-1 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4"/>,
+  };
   
+  const availableXaiTabs = useMemo(() => {
+    const order: XAITypeEnum[] = Object.values(XAITypeEnum); // Use defined order
+    return order.filter(type => 
+        xaiResults?.some(r => r.xai_type === type)
+    );
+  }, [xaiResults]);
+
+  useEffect(() => {
+    // Auto-select tab logic refined
+    if (!activeTab && availableXaiTabs.length > 0) {
+      const firstSuccess = availableXaiTabs.find(type => xaiResults.find(r => r.xai_type === type)?.status === XAIStatusEnum.SUCCESS);
+      if (firstSuccess) {
+        setActiveTab(firstSuccess);
+      } else {
+        const firstInProgress = availableXaiTabs.find(type => xaiResults.find(r => r.xai_type === type)?.status === XAIStatusEnum.RUNNING || xaiResults.find(r => r.xai_type === type)?.status === XAIStatusEnum.PENDING);
+        setActiveTab(firstInProgress || availableXaiTabs[0] || XAITypeEnum.FEATURE_IMPORTANCE);
+      }
+    } else if (activeTab && !availableXaiTabs.includes(activeTab as XAITypeEnum) && availableXaiTabs.length > 0) {
+        // If current activeTab is no longer valid (e.g. data removed), switch to first available
+        setActiveTab(availableXaiTabs[0]);
+    } else if (availableXaiTabs.length === 0) {
+        setActiveTab(XAITypeEnum.FEATURE_IMPORTANCE); // Default if nothing available
+    }
+  }, [availableXaiTabs, activeTab, xaiResults]);
+
   const renderXAIContent = (xaiType: XAITypeEnum) => {
     const result = xaiResults?.find(r => r.xai_type === xaiType);
-    if (!result) return <Alert variant="default"><InfoCircledIcon className="mr-2 h-4 w-4"/>No data available for this explanation type.</Alert>;
+    if (!result) return <Alert variant="default" className="mt-4"><InfoCircledIcon className="mr-2 h-4 w-4"/>No data available yet for this explanation type. Try generating explanations.</Alert>;
 
     switch (result.status) {
       case XAIStatusEnum.SUCCESS:
-        if (!result.result_data) return <Alert variant="default"><ExclamationTriangleIcon className="mr-2 h-4 w-4"/>Explanation data is missing.</Alert>;
+        if (!result.result_data) return <Alert variant="default" className="mt-4"><ExclamationTriangleIcon className="mr-2 h-4 w-4"/>Explanation data is missing though status is success.</Alert>;
         switch (xaiType) {
           case XAITypeEnum.FEATURE_IMPORTANCE:
-            return <FeatureImportanceChart data={(result.result_data as FeatureImportanceResultData).feature_importances} />;
-          case XAITypeEnum.SHAP: {
-            const shapData = result.result_data as SHAPResultData;
-            return shapData.instance_shap_values && shapData.instance_shap_values.length > 0 ? (
-              <ShapValuesChart data={shapData.instance_shap_values[0].shap_values} baseline={shapData.instance_shap_values[0].base_value} />
-            ) : <Alert variant="default"><InfoCircledIcon className="mr-2 h-4 w-4"/>No SHAP instances found.</Alert>;
-          }
-          case XAITypeEnum.LIME: {
-            const limeData = result.result_data as LIMEResultData;
-             return limeData.instance_lime_values && limeData.instance_lime_values.length > 0 ? (
-              <LimeExplanationDisplay data={limeData.instance_lime_values[0].explanation} />
-            ) : <Alert variant="default"><InfoCircledIcon className="mr-2 h-4 w-4"/>No LIME instances found.</Alert>;
-          }
-           case XAITypeEnum.COUNTERFACTUALS: {
-            const cfData = result.result_data as CounterfactualResultData;
-            return cfData.instance_counterfactuals && cfData.instance_counterfactuals.length > 0 ? (
-              <CounterfactualExamplesDisplay data={cfData.instance_counterfactuals[0].counterfactuals} />
-            ) : <Alert variant="default"><InfoCircledIcon className="mr-2 h-4 w-4"/>No Counterfactual instances found.</Alert>;
-          }
-          case XAITypeEnum.DECISION_PATH: {
-            const dpData = result.result_data as DecisionPathResultData;
-            return dpData.instance_decision_paths && dpData.instance_decision_paths.length > 0 ? (
-               <DecisionPathVisualizer data={dpData.instance_decision_paths[0]} />
-            ) : <Alert variant="default"><InfoCircledIcon className="mr-2 h-4 w-4"/>No Decision Path instances found.</Alert>;
-          }
+            return <FeatureImportanceDisplay data={result.result_data as FeatureImportanceResultData} />;
+          case XAITypeEnum.SHAP:
+            return <ShapDisplay data={result.result_data as SHAPResultData} />;
+          case XAITypeEnum.LIME:
+            return <LimeDisplay data={result.result_data as LIMEResultData} />;
+          case XAITypeEnum.COUNTERFACTUALS:
+            return <CounterfactualsDisplay data={result.result_data as CounterfactualResultData} />;
+          case XAITypeEnum.DECISION_PATH:
+            return <DecisionPathDisplay data={result.result_data as DecisionPathResultData} />;
           default:
-            return <Alert variant="default">Unsupported XAI type for display.</Alert>;
+            return <Alert variant="default" className="mt-4">Unsupported XAI type for display: {xaiType}</Alert>;
         }
       case XAIStatusEnum.PENDING:
       case XAIStatusEnum.RUNNING:
         return (
-          <Alert variant="default" className="flex items-center">
-            <ReloadIcon className="mr-2 h-4 w-4 animate-spin" />
-            Explanation generation is {result.status.toLowerCase()}. Please check back soon.
-            {result.status_message && <p className="text-xs mt-1">{result.status_message}</p>}
+          <Alert variant="default" className="flex items-center mt-4 py-6 justify-center">
+            <ReloadIcon className="mr-2 h-5 w-5 animate-spin" />
+            <div className="text-center">
+                <p className="font-medium">Explanation generation is {result.status.toLowerCase()}.</p>
+                <p className="text-xs text-muted-foreground">{result.status_message || "Please check back soon."}</p>
+            </div>
           </Alert>
         );
       case XAIStatusEnum.FAILED:
         return (
-          <Alert variant="destructive">
-            <ExclamationTriangleIcon className="mr-2 h-4 w-4" />
-            Explanation generation failed: {result.status_message || "Unknown error."}
+          <Alert variant="destructive" className="mt-4 py-6">
+            <ExclamationTriangleIcon className="mr-2 h-5 w-5" />
+            <div>
+                <AlertTitle>Explanation Generation Failed</AlertTitle>
+                <AlertDescription>{result.status_message || "An unknown error occurred."}</AlertDescription>
+            </div>
           </Alert>
         );
       default:
-        return <Alert variant="default">{result.status_message || `Status: ${result.status}`}</Alert>;
+        return <Alert variant="default" className="mt-4">{result.status_message || `Status: ${result.status}`}</Alert>;
     }
   };
 
-  return (
-    <div className="container mx-auto p-4 space-y-6">
-      <Button variant="outline" onClick={() => router.back()} className="mb-4">
-        &larr; Back to Insights List
-      </Button>
+  const renderMainContent = () => {
+    if (!inferenceJobDetails) {
+        // This case should be covered by the main page loading skeleton
+        return <Alert variant="default"><InfoCircledIcon className="h-4 w-4" /> Inference job details not found or still loading.</Alert>
+    }
+    
+    const predictionOutcome = inferenceJobDetails.prediction_result?.commit_prediction;
+    const outcomeText = predictionOutcome === 1 ? "Defect-Prone" : predictionOutcome === 0 ? "Clean" : "N/A";
+    const outcomeVariant : "default" | "destructive" | "secondary" = predictionOutcome === 1 ? "destructive" : predictionOutcome === 0 ? "default" : "secondary";
 
-      <Card>
-        <CardHeader className="flex flex-row justify-between items-start">
-          <div>
-            <CardTitle className="text-2xl">Inference Job #{inferenceJobDetails?.id || inferenceJobId}</CardTitle>
-            {inferenceJobDetails && (
-              <CardDescription>
-                Model ID: {inferenceJobDetails.ml_model_id} | 
-                Created: {new Date(inferenceJobDetails.created_at).toLocaleString()} | 
-                Status: {getJobStatusBadge(inferenceJobDetails.status)}
-                {inferenceJobDetails.input_reference.commit_hash && (
-                    <span className="block text-xs text-gray-500 mt-1">
-                      Commit: {String(inferenceJobDetails.input_reference.commit_hash).substring(0, 12)}...
-                    </span>
-                  )}
-              </CardDescription>
-            )}
-          </div>
-          {inferenceJobDetails?.status === JobStatusEnum.SUCCESS && (
-            <Button onClick={handleTriggerXAI} disabled={isTriggering || isLoading} size="sm">
-              {isTriggering ? <ReloadIcon className="mr-2 h-4 w-4 animate-spin" /> : <PlayIcon className="mr-2 h-4 w-4" />}
-              {xaiResults && xaiResults.length > 0 ? "Regenerate Explanations" : "Generate Explanations"}
-            </Button>
-          )}
-        </CardHeader>
-        {inferenceJobDetails?.status !== JobStatusEnum.SUCCESS && (
-             <CardContent>
-                <Alert variant="default">
-                    <InfoCircledIcon className="h-4 w-4"/>
-                    <AlertTitle>XAI Not Available</AlertTitle>
-                    <AlertDescription>
-                        Explainability features can only be generated for successfully completed inference jobs. Current status: {inferenceJobDetails?.status}.
-                    </AlertDescription>
-                </Alert>
-             </CardContent>
-        )}
-      </Card>
-      
-      {error && (!inferenceJobDetails || !xaiResults) && ( // Display general error if main data is missing
-         <Alert variant="destructive" className="max-w-full">
-          <ExclamationTriangleIcon className="h-4 w-4" />
-          <AlertTitle>Page Error</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+    return (
+      <>
+        <Card className="mb-6">
+          <CardHeader>
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
+                <div className="mb-3 md:mb-0">
+                    <CardTitle className="text-xl md:text-2xl">
+                        Inference Overview
+                    </CardTitle>
+                    <CardDescription className="mt-1 text-xs md:text-sm">
+                        Summary of the prediction for job ID {inferenceJobDetails.id}.
+                    </CardDescription>
+                </div>
+                {inferenceJobDetails.prediction_result && (
+                    <Badge variant={outcomeVariant} className="text-sm md:text-base px-3 py-1.5 self-start md:self-center">
+                        Prediction: {outcomeText}
+                    </Badge>
+                )}
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 text-sm">
+            <div className="space-y-1 p-3 border rounded-md bg-muted/30">
+                <p className="text-xs text-muted-foreground">Model ID</p>
+                <p className="font-semibold"><Link href={`/models/${inferenceJobDetails.ml_model_id}`} className="text-primary hover:underline">{inferenceJobDetails.ml_model_id}</Link></p>
+            </div>
+            <div className="space-y-1 p-3 border rounded-md bg-muted/30">
+                <p className="text-xs text-muted-foreground">Commit Hash</p>
+                <p className="font-mono text-xs" title={String(inferenceJobDetails.input_reference?.commit_hash)}>{String(inferenceJobDetails.input_reference?.commit_hash).substring(0,12) || "N/A"}...</p>
+            </div>
+             <div className="space-y-1 p-3 border rounded-md bg-muted/30">
+                <p className="text-xs text-muted-foreground">Max Bug Probability</p>
+                <p className="font-semibold">{inferenceJobDetails.prediction_result?.max_bug_probability?.toFixed(4) ?? "N/A"}</p>
+            </div>
+             <div className="space-y-1 p-3 border rounded-md bg-muted/30">
+                <p className="text-xs text-muted-foreground">Files Analyzed</p>
+                <p className="font-semibold">{inferenceJobDetails.prediction_result?.num_files_analyzed ?? "N/A"}</p>
+            </div>
+          </CardContent>
+        </Card>
 
-
-      {inferenceJobDetails?.status === JobStatusEnum.SUCCESS && (
-        (isLoading && !xaiResults) ? ( // Loading XAI results specifically
+        {inferenceJobDetails.status !== JobStatusEnum.SUCCESS ? (
+          <Alert variant="default" className="mb-6">
+            <InfoCircledIcon className="h-4 w-4" />
+            <AlertTitle>XAI Not Available</AlertTitle>
+            <AlertDescription>
+              Explainability features can only be generated for successfully completed inference jobs. Current job status: {getJobStatusBadge(inferenceJobDetails.status)}.
+            </AlertDescription>
+          </Alert>
+        ) : (isLoading && !xaiResults?.length) ? ( // Loading XAI results specifically
             <Tabs defaultValue={XAITypeEnum.FEATURE_IMPORTANCE} className="w-full">
-                <TabsList className="grid w-full grid-cols-3 md:grid-cols-5">
-                    {Object.values(XAITypeEnum).map(type => <Skeleton key={type} className="h-10"/>)}
+                <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1">
+                    {Object.values(XAITypeEnum).map(type => <TabsTrigger value={type} key={type} disabled><Skeleton className="h-8 w-full"/></TabsTrigger>)}
                 </TabsList>
-                <TabsContent value={XAITypeEnum.FEATURE_IMPORTANCE}><Skeleton className="h-60 w-full mt-4"/></TabsContent>
+                <TabsContent value={XAITypeEnum.FEATURE_IMPORTANCE} className="mt-4"><Skeleton className="h-80 w-full"/></TabsContent>
             </Tabs>
-        ) : xaiResults && availableXaiTabs.length > 0 ? (
+        ) : xaiResults.length > 0 && activeTab ? (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-              {availableXaiTabs.map((type) => (
-                <TabsTrigger key={type} value={type} disabled={isLoading}>
-                  {type.replace(/_/g, ' ')}
-                  {xaiResults.find(r => r.xai_type === type) && getXAIStatusBadge(xaiResults.find(r => r.xai_type === type)!.status)}
-                </TabsTrigger>
-              ))}
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1">
+              {Object.values(XAITypeEnum).map((type) => { // Iterate over all possible XAI types to ensure consistent tab order
+                const xaiResult = xaiResults.find(r => r.xai_type === type);
+                const isTabAvailable = availableXaiTabs.includes(type);
+                
+                if(!isTabAvailable && !xaiResult) return null; // Don't render tab if no result AND not in available (e.g. new XAI type added to enum but not backend)
+
+                return (
+                  <TabsTrigger 
+                    key={type} 
+                    value={type} 
+                    disabled={isLoading || !xaiResult} // Disable if no result object exists for this type
+                    className={`flex-col h-auto py-2 px-1.5 text-xs sm:text-sm ${activeTab === type ? 'bg-primary/10 border-primary text-primary' : 'hover:bg-muted/50'}`}
+                  >
+                    <span className="flex items-center mb-0.5">{xaiTypeIcons[type]} {type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
+                    {xaiResult ? getXAIStatusBadge(xaiResult.status, xaiResult.status_message) : <Badge variant="outline" className="ml-2 text-xs">Not Run</Badge>}
+                  </TabsTrigger>
+                );
+              })}
             </TabsList>
-            {availableXaiTabs.map((type) => (
-              <TabsContent key={type} value={type} className="mt-4">
-                {renderXAIContent(type)}
+            {Object.values(XAITypeEnum).map((type) => (
+              <TabsContent key={type} value={type} className="mt-6">
+                {renderXAIContent(type as XAITypeEnum)}
               </TabsContent>
             ))}
           </Tabs>
         ) : (
-          !isLoading && ( // Only show if not loading and no results/tabs
-            <Card className="mt-6">
-              <CardHeader>
-                <CardTitle>No Explanations Available</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p>No XAI results have been generated for this inference job yet, or the existing ones are not displayable.</p>
-                <p className="mt-2">If the inference job was successful, you can try generating them.</p>
-                {/* Trigger button already available above, but can add another one here if needed */}
-              </CardContent>
-            </Card>
-          )
-        )
-      )}
-    </div>
+            !isLoading && (
+                <Card className="mt-6">
+                    <CardHeader><CardTitle>No Explanations Available</CardTitle></CardHeader>
+                    <CardContent>
+                        <p>No XAI results have been generated for this inference job yet.</p>
+                        <p className="mt-2">If the inference job was successful, you can try generating them using the button at the top of the page.</p>
+                    </CardContent>
+                </Card>
+            )
+        )}
+      </>
+    );
+  };
+  
+   if (isLoading && !inferenceJobDetails && !xaiResults) {
+    return (
+      <MainLayout>
+        <PageContainer title="Loading Prediction Insights...">
+          <Skeleton className="h-12 w-1/2 mb-6" />
+          <Skeleton className="h-64 w-full" />
+        </PageContainer>
+      </MainLayout>
+    );
+  }
+
+  if (error && !inferenceJobDetails && !xaiResults) {
+    return (
+      <MainLayout>
+        <PageContainer title="Error Loading Insights" description={error}>
+          <Alert variant="destructive">
+            <ExclamationTriangleIcon className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error || "Could not load prediction insights."}</AlertDescription>
+          </Alert>
+          <Button onClick={() => fetchAllData(true)} className="mt-4">Try Again</Button>
+        </PageContainer>
+      </MainLayout>
+    );
+  }
+
+  return (
+    <MainLayout>
+      <PageContainer
+        title={`Prediction Insights: Job #${inferenceJobDetails?.id || inferenceJobId}`}
+        description={
+          inferenceJobDetails ? (
+            <span className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+              <span>Model ID: 
+                <Link href={`/models/${inferenceJobDetails.ml_model_id}`} className="text-primary hover:underline ml-1">{inferenceJobDetails.ml_model_id}</Link>
+              </span>
+              <span>Status: {getJobStatusBadge(inferenceJobDetails.status)}</span>
+              {inferenceJobDetails.input_reference?.commit_hash && (
+                <span className="text-xs text-muted-foreground">
+                  Commit: {String(inferenceJobDetails.input_reference.commit_hash).substring(0, 12)}...
+                </span>
+              )}
+            </span>
+          ) : "Loading job details..."
+        }
+        actions={
+          <div className="flex gap-2">
+             <Button variant="outline" onClick={() => fetchAllData(true)} disabled={isLoading || isTriggering} size="sm">
+              <ReloadIcon className={`mr-2 h-4 w-4 ${(isLoading || isTriggering) ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+            {inferenceJobDetails?.status === JobStatusEnum.SUCCESS && (
+              <Button onClick={handleTriggerXAI} disabled={isTriggering || isLoading} size="sm">
+                {isTriggering ? <ReloadIcon className="mr-2 h-4 w-4 animate-spin" /> : <RocketIcon className="mr-2 h-4 w-4" />}
+                {xaiResults && xaiResults.filter(r => r.status === XAIStatusEnum.SUCCESS).length > 0 ? "Regenerate All" : "Generate Explanations"}
+              </Button>
+            )}
+          </div>
+        }
+      >
+        {renderMainContent()}
+      </PageContainer>
+    </MainLayout>
   );
 };
 
