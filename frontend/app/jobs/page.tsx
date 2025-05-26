@@ -1,7 +1,7 @@
 // frontend/app/jobs/page.tsx
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";  
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { MainLayout } from "@/components/main-layout";
@@ -44,7 +44,7 @@ interface JobPaginationState {
   isLoading: boolean;
 }
 
-export default function JobsPage() {
+function JobsPageContent() {  
   const router = useRouter();
   const searchParamsHook = useSearchParams();
   const { toast } = useToast();
@@ -385,5 +385,13 @@ export default function JobsPage() {
 
       </PageContainer>
     </MainLayout>
+  );
+}
+
+export default function JobsPage() { // New wrapper component
+  return (
+    <Suspense fallback={<div>Loading page data...</div>}>
+      <JobsPageContent />
+    </Suspense>
   );
 }

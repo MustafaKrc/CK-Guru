@@ -1,7 +1,7 @@
 // frontend/app/jobs/hp-search/page.tsx
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, Suspense } from "react";  
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { MainLayout } from "@/components/main-layout";
@@ -31,7 +31,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 const API_ENDPOINT_SUBMIT_HP_SEARCH_JOB = "/ml/search";
 const API_ENDPOINT_LIST_DATASETS = "/datasets";
 
-export default function CreateHpSearchJobPage() {
+function CreateHpSearchJobPageContent() {  
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
@@ -453,5 +453,13 @@ export default function CreateHpSearchJobPage() {
         </form>
       </PageContainer>
     </MainLayout>
+  );
+}
+
+export default function CreateHpSearchJobPage() { // New wrapper component
+  return (
+    <Suspense fallback={<div>Loading page data...</div>}>
+      <CreateHpSearchJobPageContent />
+    </Suspense>
   );
 }

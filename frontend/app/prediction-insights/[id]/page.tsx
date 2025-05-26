@@ -17,6 +17,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { InfoCircledIcon, ExclamationTriangleIcon, CheckCircledIcon, ReloadIcon, PlayIcon, RocketIcon, BarChartIcon, CodeIcon, Share1Icon, ShuffleIcon, MixerHorizontalIcon, TargetIcon } from "@radix-ui/react-icons";
 import { toast } from "sonner";
 
+import { cn } from "@/lib/utils";
+
 // API Services & Types
 import { 
   getInferenceJobDetails, 
@@ -289,36 +291,49 @@ const PredictionInsightDetailPage = () => {
               Explainability features can only be generated for successfully completed inference jobs. Current job status: {getJobStatusBadge(inferenceJobDetails.status)}.
             </AlertDescription>
           </Alert>
-        ) : (isLoading && !xaiResults?.length) ? ( // Loading XAI results specifically
-            <Tabs defaultValue={XAITypeEnum.FEATURE_IMPORTANCE} className="w-full">
-                <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1">
-                    {Object.values(XAITypeEnum).map(type => <TabsTrigger value={type} key={type} disabled><Skeleton className="h-8 w-full"/></TabsTrigger>)}
-                </TabsList>
-                <TabsContent value={XAITypeEnum.FEATURE_IMPORTANCE} className="mt-4"><Skeleton className="h-80 w-full"/></TabsContent>
-            </Tabs>
-        ) : xaiResults.length > 0 && activeTab ? (
+        ) : (isLoading && !xaiResults?.length) ? (
+          <Tabs defaultValue={XAITypeEnum.FEATURE_IMPORTANCE} className="w-full">
+            {/* Skeleton TabsList - simplified for brevity, ensure it matches structure */}
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1 bg-muted p-1 rounded-lg">
+              {Object.values(XAITypeEnum).map(type => (
+                <TabsTrigger value={type} key={type} disabled className="h-auto py-2 px-1.5 text-xs sm:text-sm">
+                  <Skeleton className="h-5 w-full" />
+                  <Skeleton className="h-4 w-1/2 mt-1" />
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            <TabsContent value={XAITypeEnum.FEATURE_IMPORTANCE} className="mt-4"><Skeleton className="h-80 w-full" /></TabsContent>
+          </Tabs>
+        ) : availableXaiTabs.length > 0 && activeTab ? (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1">
-              {Object.values(XAITypeEnum).map((type) => { // Iterate over all possible XAI types to ensure consistent tab order
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1 bg-muted p-1 rounded-lg">
+              {availableXaiTabs.map((type) => {
                 const xaiResult = xaiResults.find(r => r.xai_type === type);
-                const isTabAvailable = availableXaiTabs.includes(type);
-                
-                if(!isTabAvailable && !xaiResult) return null; // Don't render tab if no result AND not in available (e.g. new XAI type added to enum but not backend)
-
+                const isActive = activeTab === type;
                 return (
-                  <TabsTrigger 
-                    key={type} 
-                    value={type} 
-                    disabled={isLoading || !xaiResult} // Disable if no result object exists for this type
-                    className={`flex-col h-auto py-2 px-1.5 text-xs sm:text-sm ${activeTab === type ? 'bg-primary/10 border-primary text-primary' : 'hover:bg-muted/50'}`}
+                  <TabsTrigger
+                    key={type}
+                    value={type}
+                    disabled={isLoading}
+                    className={cn(
+                      "flex-col h-auto py-2 px-1.5 text-xs sm:text-sm transition-all rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2", // Base styles + focus
+                      isActive
+                        ? "bg-background text-primary shadow-sm" // Active: uses background, primary text
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground", // Inactive & Hover
+                      "data-[disabled]:opacity-50 data-[disabled]:pointer-events-none" // Disabled state
+                    )}
                   >
-                    <span className="flex items-center mb-0.5">{xaiTypeIcons[type]} {type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
-                    {xaiResult ? getXAIStatusBadge(xaiResult.status, xaiResult.status_message) : <Badge variant="outline" className="ml-2 text-xs">Not Run</Badge>}
+                    <span className="flex items-center mb-0.5">
+                      {xaiTypeIcons[type as XAITypeEnum]}
+                      {type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    </span>
+                    {/* Badge styling should be self-contained and adapt to foreground color */}
+                    {xaiResult && getXAIStatusBadge(xaiResult.status, xaiResult.status_message)}
                   </TabsTrigger>
                 );
               })}
             </TabsList>
-            {Object.values(XAITypeEnum).map((type) => (
+            {availableXaiTabs.map((type) => (
               <TabsContent key={type} value={type} className="mt-6">
                 {renderXAIContent(type as XAITypeEnum)}
               </TabsContent>

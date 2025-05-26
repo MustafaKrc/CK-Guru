@@ -1,7 +1,7 @@
 // frontend/app/jobs/[id]/page.tsx
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, Suspense } from "react";  
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { MainLayout } from "@/components/main-layout";
@@ -43,9 +43,7 @@ function formatDate(dateString?: string | Date | null): string {
   });
 }
 
-
-
-export default function JobDetailPage() {
+function JobDetailPageContent() {  
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
@@ -343,5 +341,13 @@ export default function JobDetailPage() {
         </Card> */}
       </PageContainer>
     </MainLayout>
+  );
+}
+
+export default function JobDetailPage() { // New wrapper component
+  return (
+    <Suspense fallback={<div>Loading page data...</div>}>
+      <JobDetailPageContent />
+    </Suspense>
   );
 }

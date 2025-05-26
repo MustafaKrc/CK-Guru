@@ -4,17 +4,17 @@ import { FeatureImportanceResultData } from '@/types/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList } from 'recharts';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { InfoCircledIcon } from '@radix-ui/react-icons';
+import { InfoCircledIcon, BarChartIcon } from '@radix-ui/react-icons'; // Using BarChartIcon
 
 interface FeatureImportanceDisplayProps {
   data?: FeatureImportanceResultData | null;
 }
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+const CustomFeatureImportanceTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-background border p-2 shadow-lg rounded-md text-sm">
-        <p className="font-bold">{label}</p>
+      <div className="bg-popover border border-border p-2 shadow-lg rounded-md text-sm text-popover-foreground">
+        <p className="font-bold text-popover-foreground">{label}</p>
         <p className="text-primary">{`Importance: ${payload[0].value.toFixed(4)}`}</p>
       </div>
     );
@@ -26,47 +26,66 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 export const FeatureImportanceDisplay: React.FC<FeatureImportanceDisplayProps> = ({ data }) => {
   if (!data || !data.feature_importances || data.feature_importances.length === 0) {
     return (
-        <Alert variant="default">
-            <InfoCircledIcon className="h-4 w-4"/>
-            <AlertDescription>No feature importance data available for this prediction.</AlertDescription>
+        <Alert variant="default" className="text-foreground bg-card border-border">
+            <InfoCircledIcon className="h-4 w-4 text-muted-foreground"/>
+            <AlertDescription className="text-muted-foreground">No feature importance data available for this prediction.</AlertDescription>
         </Alert>
     );
   }
 
   const chartData = data.feature_importances
-    .filter(fi => fi.importance > 0.001) // Filter out very low importance features
+    .filter(fi => fi.importance > 0.0001) // Lowered filter slightly
     .sort((a, b) => b.importance - a.importance)
-    .slice(0, 15); // Display top 15 features
+    .slice(0, 20); // Display top 20 features
 
   return (
-    <Card>
+    <Card className="bg-card text-card-foreground border-border">
       <CardHeader>
-        <CardTitle>Global Feature Importances</CardTitle>
-        <CardDescription>Shows the most influential features for the model's predictions overall. Higher values indicate greater impact.</CardDescription>
+        <CardTitle className="flex items-center text-lg"><BarChartIcon className="mr-2 h-5 w-5 text-primary"/>Global Feature Importances</CardTitle>
+        <CardDescription className="text-muted-foreground">
+            Shows the most influential features for the model's predictions overall. Higher values indicate greater impact.
+        </CardDescription>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer
-          width="100%"
-          height={300 + chartData.length * 10} // Adjust height dynamically
-        >
+        <ResponsiveContainer width="100%" height={Math.max(300, chartData.length * 30)}>
           <BarChart
             data={chartData}
             layout="vertical"
-            margin={{ top: 5, right: 30, left: 100, bottom: 5 }} // Increased left margin for labels
+            margin={{ top: 5, right: 40, left: 120, bottom: 5 }}
           >
-            <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3}/>
-            <XAxis type="number" domain={[0, 'dataMax + 0.05']} tickFormatter={(tick) => tick.toFixed(2)} />
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5}/>
+            <XAxis 
+                type="number" 
+                domain={[0, 'dataMax + 0.05']} 
+                tickFormatter={(tick) => tick.toFixed(2)} 
+                stroke="hsl(var(--muted-foreground))" 
+                tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+            />
             <YAxis 
               dataKey="feature" 
               type="category" 
-              width={150} // Adjust width for longer feature names
-              tick={{ fontSize: 12 }}
+              width={170} // Adjusted for potentially longer feature names
+              tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
               interval={0} // Show all labels
+              stroke="hsl(var(--muted-foreground))"
             />
-            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsl(var(--muted))' }} />
-            <Legend verticalAlign="top" height={36}/>
+            <Tooltip 
+                content={<CustomFeatureImportanceTooltip />} 
+                cursor={{ fill: 'hsl(var(--accent))', fillOpacity: 0.3 }} 
+            />
+            <Legend 
+                verticalAlign="top" 
+                height={36} 
+                wrapperStyle={{ color: 'hsl(var(--foreground))', fontSize: '12px' }}
+            />
             <Bar dataKey="importance" name="Importance" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]}>
-              <LabelList dataKey="importance" position="right" formatter={(value: number) => value.toFixed(3)} fontSize={10} />
+              <LabelList 
+                dataKey="importance" 
+                position="right" 
+                formatter={(value: number) => value.toFixed(3)} 
+                fontSize={10} 
+                fill="hsl(var(--primary-foreground))" // Text on bar
+              />
             </Bar>
           </BarChart>
         </ResponsiveContainer>

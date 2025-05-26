@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, Suspense } from "react"  
 import { useRouter, useSearchParams } from "next/navigation"
 import { MainLayout } from "@/components/main-layout"
 import { Button } from "@/components/ui/button"
@@ -128,7 +128,7 @@ const cleaningRules = [
   },
 ]
 
-export default function CreateDatasetPage() {
+function CreateDatasetPageContent() {  
   const router = useRouter()
   const searchParams = useSearchParams()
   const preselectedRepoId = searchParams.get("repository")
@@ -520,4 +520,12 @@ export default function CreateDatasetPage() {
       </div>
     </MainLayout>
   )
+}
+
+export default function CreateDatasetPage() { // New wrapper component
+  return (
+    <Suspense fallback={<div>Loading page data...</div>}>
+      <CreateDatasetPageContent />
+    </Suspense>
+  );
 }

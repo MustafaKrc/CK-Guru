@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, Suspense } from "react"  
 import { MainLayout } from "@/components/main-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -87,7 +87,7 @@ const mockRepoPatterns = {
   ],
 }
 
-export default function BotPatternsPage() {
+function BotPatternsPageContent() {  
   const searchParams = useSearchParams()
   const preselectedRepoId = searchParams.get("repository")
 
@@ -443,4 +443,12 @@ export default function BotPatternsPage() {
       </div>
     </MainLayout>
   )
+}
+
+export default function BotPatternsPage() { // New wrapper component
+  return (
+    <Suspense fallback={<div>Loading page data...</div>}>
+      <BotPatternsPageContent />
+    </Suspense>
+  );
 }

@@ -1,23 +1,24 @@
 // frontend/components/explainable-ai/LimeDisplay.tsx
 import React, { useState, useMemo, useEffect } from 'react';
-import { LIMEResultData, InstanceLIMEResult } from '@/types/api';
+import { LIMEResultData } from '@/types/api';
 import { XaiInstanceSelector } from './XaiInstanceSelector';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, LabelList } from 'recharts';
-import { InfoCircledIcon } from '@radix-ui/react-icons';
+import { InfoCircledIcon, RocketIcon } from '@radix-ui/react-icons';
+import { Label } from '@/components/ui/label';
 
 interface LimeDisplayProps {
   data?: LIMEResultData | null;
 }
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+const CustomLimeTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     const weight = payload[0].value;
-    const contribution = weight > 0 ? "Supports prediction" : "Opposes prediction";
+    const contribution = weight > 0 ? "Supports this prediction" : "Opposes this prediction";
     return (
-      <div className="bg-background border p-2 shadow-lg rounded-md text-sm">
-        <p className="font-bold">{label}</p> {/* label is the feature_condition */}
+      <div className="bg-popover border border-border p-2 shadow-lg rounded-md text-sm text-popover-foreground">
+        <p className="font-bold text-popover-foreground max-w-xs break-words">{label}</p> {/* label is the feature_condition */}
         <p style={{ color: weight > 0 ? 'hsl(var(--primary))' : 'hsl(var(--destructive))' }}>
           Weight: {weight.toFixed(4)} ({contribution})
         </p>
@@ -36,7 +37,8 @@ export const LimeDisplay: React.FC<LimeDisplayProps> = ({ data }) => {
  useEffect(() => {
     if (instances.length > 0 && !selectedInstanceId) {
       const firstInstance = instances[0];
-      setSelectedInstanceId(firstInstance.class_name || firstInstance.file || `instance_0`);
+      const identifier = firstInstance.class_name || firstInstance.file || `instance_0`;
+      setSelectedInstanceId(identifier);
     }
   }, [instances, selectedInstanceId]);
 
@@ -47,25 +49,31 @@ export const LimeDisplay: React.FC<LimeDisplayProps> = ({ data }) => {
 
   if (!data || instances.length === 0) {
     return (
-      <Alert variant="default">
-        <InfoCircledIcon className="h-4 w-4"/>
-        <AlertDescription>No LIME data available for this prediction.</AlertDescription>
+      <Alert variant="default" className="text-foreground bg-card border-border">
+        <InfoCircledIcon className="h-4 w-4 text-muted-foreground"/>
+        <AlertDescription className="text-muted-foreground">No LIME data available for this prediction.</AlertDescription>
       </Alert>
     );
   }
   
   const chartData = selectedInstanceData?.explanation
-    .map(item => ({ name: item[0], weight: item[1] }))
+    .map(item => ({ 
+        name: item[0], // feature condition
+        weight: item[1],
+        fillColor: item[1] > 0 ? 'hsl(var(--primary))' : 'hsl(var(--destructive))',
+        labelFillColor: item[1] > 0 ? 'hsl(var(--primary-foreground))' : 'hsl(var(--destructive-foreground))'
+    }))
     .sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight)) // Sort by absolute weight
     .slice(0, 15) // Top 15 features
     .reverse(); // For horizontal bar chart
 
   return (
-    <Card>
+    <Card className="bg-card text-card-foreground border-border">
       <CardHeader>
-        <CardTitle>LIME (Local Interpretable Model-agnostic Explanations)</CardTitle>
-        <CardDescription>
-          Shows feature contributions for a specific prediction. Positive weights support the predicted class, negative weights oppose it.
+        <CardTitle className="flex items-center text-lg"><RocketIcon className="mr-2 h-5 w-5 text-primary"/>LIME Explanations</CardTitle>
+        <CardDescription className="text-muted-foreground">
+          Local Interpretable Model-agnostic Explanations. Shows feature contributions for a specific prediction.
+          Positive weights (blue) support the predicted class, negative weights (red) oppose it.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -74,21 +82,38 @@ export const LimeDisplay: React.FC<LimeDisplayProps> = ({ data }) => {
           selectedIdentifier={selectedInstanceId}
           onInstanceChange={setSelectedInstanceId}
           label="Select Code Instance (Class/File)"
+          identifierKey="class_name"
         />
         {chartData && chartData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={Math.max(300, chartData.length * 40)}>
+          <ResponsiveContainer width="100%" height={Math.max(300, chartData.length * 35)}>
             <BarChart 
                 data={chartData} 
                 layout="vertical" 
-                margin={{ top: 5, right: 50, left: 200, bottom: 20 }} // Increased left margin
+                margin={{ top: 5, right: 70, left: 200, bottom: 20 }} // Increased left margin for longer conditions
             >
-              <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3}/>
-              <XAxis type="number" />
-              <YAxis dataKey="name" type="category" width={200} tick={{ fontSize: 10 }} interval={0} />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsl(var(--muted))' }} />
-              <Legend verticalAlign="top" height={36}/>
-              <ReferenceLine x={0} stroke="hsl(var(--border))" strokeWidth={2}/>
-              <Bar dataKey="weight" name="LIME Weight" radius={[0,4,4,0]}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5}/>
+              <XAxis type="number" stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
+              <YAxis 
+                dataKey="name" 
+                type="category" 
+                width={250} // Adjusted for feature conditions
+                tickFormatter={(value) => value.length > 35 ? value.substring(0,32) + '...' : value} // Truncate long labels
+                tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} 
+                interval={0} 
+                stroke="hsl(var(--muted-foreground))"
+              />
+              <Tooltip content={<CustomLimeTooltip />} cursor={{ fill: 'hsl(var(--accent))', fillOpacity: 0.3 }} />
+              <Legend 
+                verticalAlign="top" 
+                height={36} 
+                wrapperStyle={{ color: 'hsl(var(--foreground))', fontSize: '12px' }}
+                payload={[
+                    { value: 'Supports Prediction', type: 'square', color: 'hsl(var(--primary))' },
+                    { value: 'Opposes Prediction', type: 'square', color: 'hsl(var(--destructive))' },
+                ]}
+              />
+              <ReferenceLine x={0} stroke="hsl(var(--border))" strokeWidth={1.5}/>
+              <Bar dataKey="weight" name="LIME Weight" radius={[0,3,3,0]}>
                  {chartData.map((entry, index) => (
                   <LabelList 
                     key={`label-${index}`} 
@@ -96,13 +121,13 @@ export const LimeDisplay: React.FC<LimeDisplayProps> = ({ data }) => {
                     position={entry.weight >= 0 ? "right" : "left"} 
                     offset={5}
                     formatter={(value: number) => value.toFixed(3)} 
-                    fontSize={10}
-                    fill={entry.weight >=0 ? 'hsl(var(--primary-foreground))' : 'hsl(var(--destructive-foreground))'}
+                    fontSize={9}
+                    fill={entry.labelFillColor}
                   />
                 ))}
                 {
                   chartData.map((entry, index) => (
-                    <Bar key={`cell-${index}`} dataKey="weight" fill={entry.weight > 0 ? 'hsl(var(--primary))' : 'hsl(var(--destructive))'} />
+                    <Bar key={`cell-${index}`} dataKey="weight" fill={entry.fillColor} />
                   ))
                 }
               </Bar>

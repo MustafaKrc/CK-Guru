@@ -1,7 +1,7 @@
 // frontend/app/models/[id]/page.tsx
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, Suspense } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { MainLayout } from "@/components/main-layout";
@@ -82,7 +82,7 @@ const KeyValueDisplay: React.FC<{ data: Record<string, any> | null | undefined, 
 };
 
 
-export default function ModelDetailPage() {
+function ModelDetailPageContent() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const searchParamsHook = useSearchParams(); // Renamed to avoid conflict
@@ -438,5 +438,13 @@ export default function ModelDetailPage() {
         </Tabs>
       </PageContainer>
     </MainLayout>
+  );
+}
+
+export default function ModelDetailPage() { // New wrapper component
+  return (
+    <Suspense fallback={<div>Loading page data...</div>}>
+      <ModelDetailPageContent />
+    </Suspense>
   );
 }

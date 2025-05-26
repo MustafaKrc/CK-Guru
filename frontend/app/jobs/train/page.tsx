@@ -1,7 +1,7 @@
 // frontend/app/jobs/train/page.tsx
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, Suspense } from "react";  
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { MainLayout } from "@/components/main-layout";
@@ -29,7 +29,7 @@ import { ScrollArea } from "@radix-ui/react-scroll-area";
 const API_ENDPOINT_SUBMIT_TRAINING_JOB = "/ml/train";
 const API_ENDPOINT_LIST_DATASETS = "/datasets"; // Needs query params for status=ready
 
-export default function CreateTrainingJobPage() {
+function CreateTrainingJobPageContent() {  
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
@@ -411,5 +411,13 @@ export default function CreateTrainingJobPage() {
         </form>
       </PageContainer>
     </MainLayout>
+  );
+}
+
+export default function CreateTrainingJobPage() { // New wrapper component
+  return (
+    <Suspense fallback={<div>Loading page data...</div>}>
+      <CreateTrainingJobPageContent />
+    </Suspense>
   );
 }
