@@ -159,9 +159,9 @@ export const ShapDisplay: React.FC<ShapDisplayProps> = ({ data }) => {
                     content={(props: any) => {
                         const { x, y, width, height, value } = props;
                         const isPositive = value >= 0;
-                        const labelX = isPositive ? (x + width + 5) : (x - 5);
+                        const labelX = isPositive ? (x + width - 5) : (x - 3);
                         const labelY = y + height / 2;
-                        const textAnchor = isPositive ? "start" : "end";
+                        const textAnchor = isPositive ? "end" : "end";
                         const fill = isPositive ? 'hsl(var(--destructive-foreground))' : 'hsl(var(--primary-foreground))'; // Match bar color
                         if (Math.abs(width) < 25) return null; // Don't render if bar too small
 

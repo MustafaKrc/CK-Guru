@@ -125,12 +125,25 @@ export const DecisionPathDisplay: React.FC<Props> = ({ data }) => {
     const NODE_W = BASE_NODE_STYLE.width as number;
     const LEVEL_Y = 120;        
     const BRANCH_X = NODE_W/2 
-    const TREE_GAP = 160;      
+    const TREE_GAP = 320;      
 
     const newNodes: Node[] = [];
     const newEdges: Edge[] = [];
 
     let globalX = 0; // left edge for next tree
+
+    // Track label occurrences for numbering
+    const labelCounts = new Map<string, number>();
+    const labelCounters = new Map<string, number>();
+
+    // First pass: count label occurrences
+    visible.forEach((path, treeIdx) => {
+      const instId = path.class_name || path.file || `instance_${treeIdx}`;
+      let baseLabel = path.class_name || path.file?.split('/')?.pop() || `Instance ${treeIdx + 1}`;
+      if (path.class_name && path.file) baseLabel = `${path.class_name}`;
+      
+      labelCounts.set(baseLabel, (labelCounts.get(baseLabel) || 0) + 1);
+    });
 
     visible.forEach((path, treeIdx) => {
       // capture start X for alignment
@@ -152,6 +165,17 @@ export const DecisionPathDisplay: React.FC<Props> = ({ data }) => {
 
       const instId = path.class_name || path.file || `instance_${treeIdx}`;
       const prefix = `${instId.replace(/[^a-zA-Z0-9]/g, '_')}_${treeIdx}`;
+
+      // Generate display label with tree numbering if needed
+      let baseLabel = path.class_name || path.file?.split('/')?.pop() || `Instance ${treeIdx + 1}`;
+      if (path.class_name && path.file) baseLabel = `${path.class_name}`;
+      
+      let displayLabel = baseLabel;
+      if (labelCounts.get(baseLabel)! > 1) {
+        const currentCount = (labelCounters.get(baseLabel) || 0) + 1;
+        labelCounters.set(baseLabel, currentCount);
+        displayLabel = `${baseLabel} - Tree ${currentCount}`;
+      }
 
       let minX = globalX;
       let maxX = globalX + NODE_W;
@@ -238,7 +262,6 @@ export const DecisionPathDisplay: React.FC<Props> = ({ data }) => {
         }
       };
 
-      // Helper to create edge object (unchanged)
       const makeEdge = (
         pre: string,
         srcId: string,
@@ -257,11 +280,15 @@ export const DecisionPathDisplay: React.FC<Props> = ({ data }) => {
       // Kick-off recursion at root, aligned to treeStartX
       place(root.id, treeStartX, 55);
 
-      // Add title node aligned with first node (root)
+      // Calculate the center of the tree based on actual span
+      const treeCenterX = (minX + maxX) / 2;
+      const titleWidth = Math.max(NODE_W + 20, displayLabel.length * 8 + 24);
+
+      // Add title node centered above the tree
       locNodes.push({
         id: `${prefix}-title`,
-        data: { label: instId },
-        position: { x: treeStartX - (NODE_W / 4), y: 0 }, // aligned with root
+        data: { label: displayLabel },
+        position: { x: treeCenterX - (titleWidth / 2), y: 0 }, // centered based on tree span
         draggable: false,
         selectable: false,
         style: {
@@ -271,7 +298,7 @@ export const DecisionPathDisplay: React.FC<Props> = ({ data }) => {
           background: COL.titleBg,
           color: COL.titleFg,
           border: `1px dashed ${COL.border}`,
-          width: 'auto',
+          width: titleWidth,
           minWidth: NODE_W + 20,
           padding: '8px 12px',
           textAlign: 'center',

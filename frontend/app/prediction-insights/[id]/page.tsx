@@ -306,7 +306,7 @@ const PredictionInsightDetailPage = () => {
           </Tabs>
         ) : availableXaiTabs.length > 0 && activeTab ? (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1 bg-muted p-1 rounded-lg">
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1 bg-muted p-1 rounded-lg h-auto min-h-[60px]">
               {availableXaiTabs.map((type) => {
                 const xaiResult = xaiResults.find(r => r.xai_type === type);
                 const isActive = activeTab === type;
@@ -316,9 +316,9 @@ const PredictionInsightDetailPage = () => {
                     value={type}
                     disabled={isLoading}
                     className={cn(
-                      "flex-col h-auto py-2 px-1.5 text-xs sm:text-sm transition-all rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2", 
+                      "flex-col h-full min-h-[52px] py-2 px-1.5 text-xs sm:text-sm transition-all rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 items-center justify-center", 
                       isActive
-                        ? "bg-primary text-primary-foreground shadow-sm" // MODIFIED HERE
+                        ? "bg-primary text-primary-foreground shadow-sm" 
                         : "text-muted-foreground hover:bg-accent hover:text-accent-foreground", 
                       "data-[disabled]:opacity-50 data-[disabled]:pointer-events-none" 
                     )}

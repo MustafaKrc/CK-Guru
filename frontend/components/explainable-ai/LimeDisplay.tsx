@@ -124,11 +124,10 @@ export const LimeDisplay: React.FC<LimeDisplayProps> = ({ data }) => {
                     content={(props: any) => {
                         const { x, y, width, height, value } = props;
                         const isPositive = value >= 0;
-                        const labelX = isPositive ? (x + width + 5) : (x - 5); // Outside bar
+                        const labelX = isPositive ? (x + width - 5) : (x - 3);
                         const labelY = y + height / 2;
-                        const textAnchor = isPositive ? "start" : "end";
-                        const fill = isPositive ? 'hsl(var(--primary))' : 'hsl(var(--destructive))'; // Label same color as bar for visibility
-
+                        const textAnchor = isPositive ? "end" : "end";
+                        const fill = isPositive ? 'hsl(var(--destructive-foreground))' : 'hsl(var(--primary-foreground))'; // Match bar color
                         if (Math.abs(width) < 25 && Math.abs(value) > 0.001) return null; // Avoid tiny labels on tiny bars
 
                         return (
