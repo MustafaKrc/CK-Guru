@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef } from "react"
+import { useTheme } from "next-themes"; // Import useTheme
 
 interface CounterfactualExplanationProps {
   data: {
@@ -14,13 +15,34 @@ interface CounterfactualExplanationProps {
 
 export function CounterfactualExplanation({ data, currentProbability }: CounterfactualExplanationProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const { resolvedTheme } = useTheme(); // Get the resolved theme (light or dark)
 
   useEffect(() => {
-    if (!canvasRef.current) return
+    if (!canvasRef.current || !resolvedTheme) return; // Wait for theme to be resolved
 
     const canvas = canvasRef.current
     const ctx = canvas.getContext("2d")
     if (!ctx) return
+
+    // Get computed styles based on the current theme
+    const rootStyle = getComputedStyle(document.documentElement);
+    const colors = {
+        text: rootStyle.getPropertyValue('--foreground').trim(),
+        textMuted: rootStyle.getPropertyValue('--muted-foreground').trim(),
+        primary: rootStyle.getPropertyValue('--primary').trim(), // For positive impact/new value
+        destructive: rootStyle.getPropertyValue('--destructive').trim(), // For negative impact/current value if worse
+        border: rootStyle.getPropertyValue('--border').trim(),
+        accent: rootStyle.getPropertyValue('--accent').trim(), // Could be used for neutral lines
+        // Define specific colors for positive/negative impacts if primary/destructive aren't semantically perfect
+        // For this example, let's assume green for improvement (positive impact on probability reduction)
+        // and red for detriment (negative impact on probability reduction).
+        // If `impact` is change in defect probability, negative impact is good.
+        positiveImpactColor: `hsl(${rootStyle.getPropertyValue('--primary').trim()})`, // Example: Blue if primary is blue (less defect)
+        negativeImpactColor: `hsl(${rootStyle.getPropertyValue('--destructive').trim()})`, // Example: Red (more defect)
+        currentMarkerColor: `hsl(${rootStyle.getPropertyValue('--destructive').trim()})`, // Assuming current is 'bad' state
+        suggestedMarkerColor: `hsl(${rootStyle.getPropertyValue('--primary').trim()})`,   // Assuming suggested is 'good' state
+    };
+
 
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height)
@@ -43,7 +65,7 @@ export function CounterfactualExplanation({ data, currentProbability }: Counterf
     const scaleWidth = maxBarWidth
 
     // Draw scale line
-    ctx.strokeStyle = "#e2e8f0" // slate-200
+    ctx.strokeStyle = `hsl(${colors.border})`;
     ctx.lineWidth = 2
     ctx.beginPath()
     ctx.moveTo(leftPadding, scaleY)
@@ -54,21 +76,21 @@ export function CounterfactualExplanation({ data, currentProbability }: Counterf
     for (let i = 0; i <= 10; i++) {
       const x = leftPadding + (i / 10) * scaleWidth
 
-      ctx.strokeStyle = "#94a3b8" // slate-400
+      ctx.strokeStyle = `hsl(${colors.textMuted})`;
       ctx.lineWidth = 1
       ctx.beginPath()
       ctx.moveTo(x, scaleY - 5)
       ctx.lineTo(x, scaleY + 5)
       ctx.stroke()
 
-      ctx.fillStyle = "#64748b" // slate-500
+      ctx.fillStyle = `hsl(${colors.textMuted})`;
       ctx.font = "12px Inter, sans-serif"
       ctx.textAlign = "center"
       ctx.fillText(`${i * 10}%`, x, scaleY + 20)
     }
 
     // Draw scale label
-    ctx.fillStyle = "#64748b" // slate-500
+    ctx.fillStyle = `hsl(${colors.textMuted})`;
     ctx.font = "14px Inter, sans-serif"
     ctx.textAlign = "center"
     ctx.fillText("Defect Probability", leftPadding + scaleWidth / 2, scaleY + 40)
@@ -78,7 +100,7 @@ export function CounterfactualExplanation({ data, currentProbability }: Counterf
       const y = topPadding + index * (barHeight + barGap)
 
       // Draw feature name
-      ctx.fillStyle = "#64748b" // text color
+      ctx.fillStyle = `hsl(${colors.textMuted})`; // Use theme color
       ctx.font = "14px Inter, sans-serif"
       ctx.textAlign = "right"
       ctx.fillText(formatFeatureName(item.feature), leftPadding - 10, y + barHeight / 2)
@@ -89,19 +111,19 @@ export function CounterfactualExplanation({ data, currentProbability }: Counterf
       const newX = leftPadding + newProbability * scaleWidth
 
       // Draw current value marker
-      ctx.fillStyle = "#f43f5e" // rose-500
+      ctx.fillStyle = colors.currentMarkerColor; // Theme-aware
       ctx.beginPath()
       ctx.arc(currentX, y + barHeight / 2, 8, 0, Math.PI * 2)
       ctx.fill()
 
       // Draw new value marker
-      ctx.fillStyle = "#10b981" // emerald-500
+      ctx.fillStyle = colors.suggestedMarkerColor; // Theme-aware
       ctx.beginPath()
       ctx.arc(newX, y + barHeight / 2, 8, 0, Math.PI * 2)
       ctx.fill()
 
       // Draw arrow connecting the points
-      ctx.strokeStyle = "#94a3b8" // slate-400
+      ctx.strokeStyle = `hsl(${colors.textMuted})`; // Use theme color
       ctx.lineWidth = 2
       ctx.beginPath()
       ctx.moveTo(currentX, y + barHeight / 2)
@@ -110,7 +132,7 @@ export function CounterfactualExplanation({ data, currentProbability }: Counterf
 
       // Draw arrowhead
       const arrowSize = 6
-      ctx.fillStyle = "#94a3b8" // slate-400
+      ctx.fillStyle = `hsl(${colors.textMuted})`; // Use theme color
       ctx.beginPath()
       if (newX < currentX) {
         // Arrow pointing left
@@ -126,7 +148,7 @@ export function CounterfactualExplanation({ data, currentProbability }: Counterf
       ctx.fill()
 
       // Draw value labels
-      ctx.fillStyle = "#1e293b" // slate-800
+      ctx.fillStyle = `hsl(${colors.text})`; // Use theme text color
       ctx.font = "12px Inter, sans-serif"
       ctx.textAlign = "center"
 
@@ -140,12 +162,13 @@ export function CounterfactualExplanation({ data, currentProbability }: Counterf
       const impactX = (currentX + newX) / 2
       const impactText = `${item.impact < 0 ? "" : "+"}${(item.impact * 100).toFixed(0)}% probability`
 
-      ctx.fillStyle = item.impact < 0 ? "#10b981" : "#f43f5e" // emerald-500 or rose-500
+      // Determine color based on impact direction (negative impact is good for defect probability)
+      ctx.fillStyle = item.impact < 0 ? colors.positiveImpactColor : colors.negativeImpactColor;
       ctx.font = "bold 12px Inter, sans-serif"
       ctx.textAlign = "center"
       ctx.fillText(impactText, impactX, y + barHeight / 2 + 40)
     })
-  }, [data, currentProbability])
+  }, [data, currentProbability, resolvedTheme]); // Add resolvedTheme to dependency array
 
   // Helper function to format feature names
   const formatFeatureName = (name: string) => {

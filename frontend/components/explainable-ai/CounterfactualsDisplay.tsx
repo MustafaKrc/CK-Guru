@@ -10,10 +10,11 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress'; // For visualizing probability change
+import { cn } from '@/lib/utils'; // Import cn for conditional classNames
 
 interface CounterfactualsDisplayProps {
   data?: CounterfactualResultData | null;
-  originalInstanceData?: { // To be passed from parent if available
+  originalInstanceData?: { 
     features: Record<string, any>;
     predictionProbability: number;
   } | null;
@@ -48,7 +49,7 @@ export const CounterfactualsDisplay: React.FC<CounterfactualsDisplayProps> = ({ 
   const renderFeatureChange = (feature: string, cfValue: any, originalValue?: any) => {
     const valueChanged = originalValue !== undefined && originalValue !== cfValue;
     return (
-        <TableRow key={feature} className={valueChanged ? "bg-accent/50 dark:bg-accent/20" : ""}>
+        <TableRow key={feature} className={cn(valueChanged ? "bg-accent/50 dark:bg-accent/20" : "", "hover:bg-accent/30 dark:hover:bg-accent/15")}>
             <TableCell className="font-medium text-xs py-2 text-foreground">{feature}</TableCell>
             {originalInstanceData && (
                 <TableCell className="text-right font-mono text-xs py-2 text-muted-foreground">{String(originalValue ?? 'N/A')}</TableCell>
@@ -92,7 +93,7 @@ export const CounterfactualsDisplay: React.FC<CounterfactualsDisplayProps> = ({ 
                 const isImprovement = probDiff < 0; // Assuming lower probability is an improvement (less defect-prone)
                 
                 return (
-                <Card key={index} className="bg-muted/30 dark:bg-muted/20 border-border shadow-sm">
+                <Card key={index} className="bg-muted/30 dark:bg-muted/20 border-border shadow-sm overflow-hidden">
                   <CardHeader className="pb-3 pt-4">
                     <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
                         <CardTitle className="text-md font-semibold">Counterfactual Suggestion #{index + 1}</CardTitle>
@@ -116,15 +117,20 @@ export const CounterfactualsDisplay: React.FC<CounterfactualsDisplayProps> = ({ 
                                 {probDiff !== 0 ? `${probDiff > 0 ? '+' : ''}${(probDiff * 100).toFixed(1)}% change` : "No change"}
                             </span>
                             {isImprovement ? <CheckIcon className="ml-1 h-4 w-4 text-green-600 dark:text-green-400"/> : (probDiff !== 0 && <Cross1Icon className="ml-1 h-3.5 w-3.5 text-red-600 dark:text-red-400"/>)}
-                            <Progress value={Math.abs(probDiff)*100} className="w-20 h-1.5 ml-2" 
-                                      indicatorClassName={isImprovement ? "bg-green-500" : "bg-red-500"}/>
+                            <Progress 
+                                value={Math.abs(probDiff)*100} 
+                                className="w-20 h-1.5 ml-2 bg-muted-foreground/20" // Added background for the track
+                                indicatorClassName={cn(
+                                    isImprovement ? "bg-green-500" : "bg-destructive"
+                                )}
+                            />
                         </div>
                     )}
                     <p className="text-xs text-muted-foreground mb-2">If the following features were changed as shown:</p>
                     <div className="rounded-md border border-border overflow-hidden">
                         <Table className="text-xs">
                         <TableHeader>
-                            <TableRow className="bg-muted/50 dark:bg-muted/10">
+                            <TableRow className="bg-muted/50 dark:bg-muted/10 hover:bg-muted/60 dark:hover:bg-muted/15">
                             <TableHead className="py-1.5 px-2">Feature</TableHead>
                             {originalInstanceData && <TableHead className="text-right py-1.5 px-2">Original Value</TableHead>}
                             <TableHead className="text-right py-1.5 px-2">Suggested Value</TableHead>

@@ -1,10 +1,10 @@
 // frontend/components/explainable-ai/LimeDisplay.tsx
 import React, { useState, useMemo, useEffect } from 'react';
-import { LIMEResultData } from '@/types/api';
+import { LIMEResultData, InstanceLIMEResult } from '@/types/api'; // Corrected import for InstanceLIMEResult
 import { XaiInstanceSelector } from './XaiInstanceSelector';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, LabelList } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, LabelList, Cell } from 'recharts'; // Added Cell
 import { InfoCircledIcon, RocketIcon } from '@radix-ui/react-icons';
 import { Label } from '@/components/ui/label';
 
@@ -42,9 +42,9 @@ export const LimeDisplay: React.FC<LimeDisplayProps> = ({ data }) => {
     }
   }, [instances, selectedInstanceId]);
 
-  const selectedInstanceData = useMemo(() => {
+  const selectedInstanceData: InstanceLIMEResult | null = useMemo(() => { // Type InstanceLIMEResult
     if (!selectedInstanceId) return null;
-    return instances.find(inst => (inst.class_name || inst.file || `instance_${instances.indexOf(inst)}`) === selectedInstanceId);
+    return instances.find(inst => (inst.class_name || inst.file || `instance_${instances.indexOf(inst)}`) === selectedInstanceId) || null;
   }, [instances, selectedInstanceId]);
 
   if (!data || instances.length === 0) {
@@ -56,16 +56,17 @@ export const LimeDisplay: React.FC<LimeDisplayProps> = ({ data }) => {
     );
   }
   
-  const chartData = selectedInstanceData?.explanation
+  const chartData = useMemo(() => selectedInstanceData?.explanation
     .map(item => ({ 
         name: item[0], // feature condition
         weight: item[1],
         fillColor: item[1] > 0 ? 'hsl(var(--primary))' : 'hsl(var(--destructive))',
+        // Label color should contrast with the bar fill
         labelFillColor: item[1] > 0 ? 'hsl(var(--primary-foreground))' : 'hsl(var(--destructive-foreground))'
     }))
-    .sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight)) // Sort by absolute weight
-    .slice(0, 15) // Top 15 features
-    .reverse(); // For horizontal bar chart
+    .sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight)) 
+    .slice(0, 15) 
+    .reverse(), [selectedInstanceData]); 
 
   return (
     <Card className="bg-card text-card-foreground border-border">
@@ -89,15 +90,15 @@ export const LimeDisplay: React.FC<LimeDisplayProps> = ({ data }) => {
             <BarChart 
                 data={chartData} 
                 layout="vertical" 
-                margin={{ top: 5, right: 70, left: 200, bottom: 20 }} // Increased left margin for longer conditions
+                margin={{ top: 5, right: 70, left: 200, bottom: 20 }} 
             >
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5}/>
               <XAxis type="number" stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
               <YAxis 
                 dataKey="name" 
                 type="category" 
-                width={250} // Adjusted for feature conditions
-                tickFormatter={(value) => value.length > 35 ? value.substring(0,32) + '...' : value} // Truncate long labels
+                width={250} 
+                tickFormatter={(value) => value.length > 35 ? value.substring(0,32) + '...' : value} 
                 tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} 
                 interval={0} 
                 stroke="hsl(var(--muted-foreground))"
@@ -115,21 +116,28 @@ export const LimeDisplay: React.FC<LimeDisplayProps> = ({ data }) => {
               <ReferenceLine x={0} stroke="hsl(var(--border))" strokeWidth={1.5}/>
               <Bar dataKey="weight" name="LIME Weight" radius={[0,3,3,0]}>
                  {chartData.map((entry, index) => (
-                  <LabelList 
-                    key={`label-${index}`} 
+                    <Cell key={`cell-${index}`} fill={entry.fillColor} />
+                 ))}
+                 <LabelList 
                     dataKey="weight" 
-                    position={entry.weight >= 0 ? "right" : "left"} 
-                    offset={5}
-                    formatter={(value: number) => value.toFixed(3)} 
-                    fontSize={9}
-                    fill={entry.labelFillColor}
+                    position="insideRight" // Default position, will adjust based on value
+                    content={(props: any) => {
+                        const { x, y, width, height, value } = props;
+                        const isPositive = value >= 0;
+                        const labelX = isPositive ? (x + width + 5) : (x - 5); // Outside bar
+                        const labelY = y + height / 2;
+                        const textAnchor = isPositive ? "start" : "end";
+                        const fill = isPositive ? 'hsl(var(--primary))' : 'hsl(var(--destructive))'; // Label same color as bar for visibility
+
+                        if (Math.abs(width) < 25 && Math.abs(value) > 0.001) return null; // Avoid tiny labels on tiny bars
+
+                        return (
+                            <text x={labelX} y={labelY} dy={4} fontSize="9" textAnchor={textAnchor} fill={fill}>
+                            {value.toFixed(3)}
+                            </text>
+                        );
+                    }}
                   />
-                ))}
-                {
-                  chartData.map((entry, index) => (
-                    <Bar key={`cell-${index}`} dataKey="weight" fill={entry.fillColor} />
-                  ))
-                }
               </Bar>
             </BarChart>
           </ResponsiveContainer>

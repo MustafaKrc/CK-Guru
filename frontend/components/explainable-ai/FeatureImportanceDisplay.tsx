@@ -1,10 +1,10 @@
 // frontend/components/explainable-ai/FeatureImportanceDisplay.tsx
 import React from 'react';
-import { FeatureImportanceResultData } from '@/types/api';
+import { FeatureImportanceResultData } from '@/types/api'; 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList } from 'recharts';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { InfoCircledIcon, BarChartIcon } from '@radix-ui/react-icons'; // Using BarChartIcon
+import { InfoCircledIcon, BarChartIcon } from '@radix-ui/react-icons'; 
 
 interface FeatureImportanceDisplayProps {
   data?: FeatureImportanceResultData | null;
@@ -15,7 +15,8 @@ const CustomFeatureImportanceTooltip = ({ active, payload, label }: any) => {
     return (
       <div className="bg-popover border border-border p-2 shadow-lg rounded-md text-sm text-popover-foreground">
         <p className="font-bold text-popover-foreground">{label}</p>
-        <p className="text-primary">{`Importance: ${payload[0].value.toFixed(4)}`}</p>
+        {/* Ensure tooltip text color is also theme-aware if not covered by popover-foreground */}
+        <p style={{ color: 'hsl(var(--primary))' }}>{`Importance: ${payload[0].value.toFixed(4)}`}</p>
       </div>
     );
   }
@@ -34,9 +35,9 @@ export const FeatureImportanceDisplay: React.FC<FeatureImportanceDisplayProps> =
   }
 
   const chartData = data.feature_importances
-    .filter(fi => fi.importance > 0.0001) // Lowered filter slightly
+    .filter(fi => fi.importance > 0.0001) 
     .sort((a, b) => b.importance - a.importance)
-    .slice(0, 20); // Display top 20 features
+    .slice(0, 20); 
 
   return (
     <Card className="bg-card text-card-foreground border-border">
@@ -51,7 +52,7 @@ export const FeatureImportanceDisplay: React.FC<FeatureImportanceDisplayProps> =
           <BarChart
             data={chartData}
             layout="vertical"
-            margin={{ top: 5, right: 40, left: 120, bottom: 5 }}
+            margin={{ top: 5, right: 50, left: 120, bottom: 5 }} // Increased right margin for LabelList
           >
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5}/>
             <XAxis 
@@ -64,9 +65,9 @@ export const FeatureImportanceDisplay: React.FC<FeatureImportanceDisplayProps> =
             <YAxis 
               dataKey="feature" 
               type="category" 
-              width={170} // Adjusted for potentially longer feature names
+              width={170} 
               tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
-              interval={0} // Show all labels
+              interval={0} 
               stroke="hsl(var(--muted-foreground))"
             />
             <Tooltip 
@@ -84,7 +85,7 @@ export const FeatureImportanceDisplay: React.FC<FeatureImportanceDisplayProps> =
                 position="right" 
                 formatter={(value: number) => value.toFixed(3)} 
                 fontSize={10} 
-                fill="hsl(var(--primary-foreground))" // Text on bar
+                fill="hsl(var(--foreground))" // Changed from primary-foreground for better contrast on primary bar
               />
             </Bar>
           </BarChart>

@@ -4,7 +4,7 @@ import { SHAPResultData, InstanceSHAPResult } from '@/types/api';
 import { XaiInstanceSelector } from './XaiInstanceSelector';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, LabelList } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, LabelList, Cell } from 'recharts'; // Added Cell
 import { InfoCircledIcon, ShuffleIcon } from '@radix-ui/react-icons';
 import { Label } from '@/components/ui/label';
 
@@ -14,13 +14,14 @@ interface ShapDisplayProps {
 
 const CustomShapTooltip = ({ active, payload, label, baseValue }: any) => {
   if (active && payload && payload.length) {
-    const shapValue = payload[0].value;
-    const featureValue = payload[0].payload.feature_value_display; // Use pre-formatted display value
+    const shapValue = payload[0].value; // This is the SHAP value itself
+    const featureOriginalValue = payload[0].payload.feature_value_display; // Access the pre-formatted original feature value
     const contribution = shapValue > 0 ? "Increases prediction" : "Decreases prediction";
+    
     return (
       <div className="bg-popover border border-border p-2 shadow-lg rounded-md text-sm text-popover-foreground">
-        <p className="font-bold text-popover-foreground">{label}</p>
-        {featureValue !== undefined && <p className="text-muted-foreground">Feature Value: {featureValue}</p>}
+        <p className="font-bold text-popover-foreground max-w-xs break-words">{label}</p> {/* label is the feature name */}
+        {featureOriginalValue !== undefined && <p className="text-muted-foreground text-xs">Feature Value: {featureOriginalValue}</p>}
         <p style={{ color: shapValue > 0 ? 'hsl(var(--destructive))' : 'hsl(var(--primary))' }}>
           SHAP Value: {shapValue.toFixed(4)} ({contribution})
         </p>
@@ -40,7 +41,6 @@ export const ShapDisplay: React.FC<ShapDisplayProps> = ({ data }) => {
   useEffect(() => {
     if (instances.length > 0 && !selectedInstanceId) {
       const firstInstance = instances[0];
-      // Construct a unique identifier, preferring class_name then file, then index
       const identifier = firstInstance.class_name || firstInstance.file || `instance_0`;
       setSelectedInstanceId(identifier);
     }
@@ -62,7 +62,6 @@ export const ShapDisplay: React.FC<ShapDisplayProps> = ({ data }) => {
     );
   }
   
-  // Format feature_value for display, handling objects/arrays
   const formatFeatureDisplayValue = (value: any): string => {
     if (typeof value === 'object' && value !== null) {
       return JSON.stringify(value);
@@ -73,22 +72,24 @@ export const ShapDisplay: React.FC<ShapDisplayProps> = ({ data }) => {
     return String(value);
   };
 
-  const chartData = selectedInstanceData?.shap_values
+  const chartData = useMemo(() => selectedInstanceData?.shap_values
     .map(item => ({ 
-        ...item, 
+        name: item.feature, // Feature name for YAxis
+        shap_value: item.value, // SHAP value for Bar
+        feature_value_display: formatFeatureDisplayValue(item.feature_value),
         abs_value: Math.abs(item.value),
-        feature_value_display: formatFeatureDisplayValue(item.feature_value), // Pre-format for tooltip
         fillColor: item.value > 0 ? 'hsl(var(--destructive))' : 'hsl(var(--primary))',
         labelFillColor: item.value > 0 ? 'hsl(var(--destructive-foreground))' : 'hsl(var(--primary-foreground))'
     }))
     .sort((a, b) => b.abs_value - a.abs_value)
-    .slice(0, 20) // Top 20 features by absolute SHAP value
-    .reverse(); // For horizontal bar chart, reverse to show most important at top
+    .slice(0, 20) 
+    .reverse(), [selectedInstanceData]); // Dependency on selectedInstanceData
 
   const baseValue = selectedInstanceData?.base_value;
-  const predictedValue = baseValue !== undefined && chartData 
-    ? baseValue + chartData.reduce((sum, item) => sum + item.value, 0)
-    : undefined;
+  const predictedValue = useMemo(() => {
+    if (baseValue === undefined || !chartData) return undefined;
+    return baseValue + chartData.reduce((sum, item) => sum + item.shap_value, 0)
+  }, [baseValue, chartData]);
 
   return (
     <Card className="bg-card text-card-foreground border-border">
@@ -105,7 +106,7 @@ export const ShapDisplay: React.FC<ShapDisplayProps> = ({ data }) => {
           selectedIdentifier={selectedInstanceId}
           onInstanceChange={setSelectedInstanceId}
           label="Select Code Instance (Class/File)"
-          identifierKey="class_name" // Prioritize class_name for SHAP instance selection
+          identifierKey="class_name" 
         />
         {selectedInstanceData && (
             <div className="grid grid-cols-2 gap-4 text-sm mb-4 p-3 border rounded-md bg-muted/30 dark:bg-muted/20">
@@ -124,14 +125,15 @@ export const ShapDisplay: React.FC<ShapDisplayProps> = ({ data }) => {
             <BarChart 
                 data={chartData} 
                 layout="vertical"
-                margin={{ top: 5, right: 70, left: 120, bottom: 20 }} // Adjusted margins
+                margin={{ top: 5, right: 70, left: 180, bottom: 20 }} // Adjusted left margin
             >
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5}/>
               <XAxis type="number" stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
               <YAxis 
                 dataKey="name" 
                 type="category" 
-                width={170} // Adjusted for feature names
+                width={170} // Adjusted width for potentially longer feature names
+                tickFormatter={(value) => value.length > 25 ? value.substring(0,22) + '...' : value} // Truncate long labels
                 tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} 
                 interval={0} 
                 stroke="hsl(var(--muted-foreground))"
@@ -149,20 +151,27 @@ export const ShapDisplay: React.FC<ShapDisplayProps> = ({ data }) => {
               <ReferenceLine x={0} stroke="hsl(var(--border))" strokeWidth={1.5} />
               <Bar dataKey="shap_value" name="SHAP Value" radius={[0, 3, 3, 0]}>
                 {chartData.map((entry, index) => (
-                  <LabelList 
-                    key={`label-${index}`} 
+                    <Cell key={`cell-${index}`} fill={entry.fillColor} />
+                ))}
+                <LabelList 
                     dataKey="shap_value" 
-                    position={entry.value >= 0 ? "right" : "left"} 
-                    offset={entry.value >= 0 ? 5 : 5} // Adjust offset for left/right
-                    formatter={(value: number) => value.toFixed(3)} 
-                    fontSize={9}
-                    fill={entry.labelFillColor}
-                  />
-                ))}
-                {/* Cell for dynamic fill */}
-                {chartData.map((entry, index) => (
-                    <Bar key={`cell-${index}`} dataKey="shap_value" fill={entry.fillColor} />
-                ))}
+                    position="insideRight" // Default position, will adjust based on value below
+                    content={(props: any) => {
+                        const { x, y, width, height, value } = props;
+                        const isPositive = value >= 0;
+                        const labelX = isPositive ? (x + width + 5) : (x - 5);
+                        const labelY = y + height / 2;
+                        const textAnchor = isPositive ? "start" : "end";
+                        const fill = isPositive ? 'hsl(var(--destructive-foreground))' : 'hsl(var(--primary-foreground))'; // Match bar color
+                        if (Math.abs(width) < 25) return null; // Don't render if bar too small
+
+                        return (
+                            <text x={labelX} y={labelY} dy={4} fontSize="9" textAnchor={textAnchor} fill={fill}>
+                            {value.toFixed(3)}
+                            </text>
+                        );
+                    }}
+                />
               </Bar>
             </BarChart>
           </ResponsiveContainer>

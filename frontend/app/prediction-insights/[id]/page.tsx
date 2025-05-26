@@ -201,7 +201,7 @@ const PredictionInsightDetailPage = () => {
           case XAITypeEnum.LIME:
             return <LimeDisplay data={result.result_data as LIMEResultData} />;
           case XAITypeEnum.COUNTERFACTUALS:
-            return <CounterfactualsDisplay data={result.result_data as CounterfactualResultData} />;
+            return <CounterfactualsDisplay data={result.result_data as CounterfactualResultData} originalInstanceData={inferenceJobDetails?.prediction_result ? { features: inferenceJobDetails.input_reference.features || {}, predictionProbability: inferenceJobDetails.prediction_result.max_bug_probability } : null }/>;
           case XAITypeEnum.DECISION_PATH:
             return <DecisionPathDisplay data={result.result_data as DecisionPathResultData} />;
           default:
@@ -316,18 +316,17 @@ const PredictionInsightDetailPage = () => {
                     value={type}
                     disabled={isLoading}
                     className={cn(
-                      "flex-col h-auto py-2 px-1.5 text-xs sm:text-sm transition-all rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2", // Base styles + focus
+                      "flex-col h-auto py-2 px-1.5 text-xs sm:text-sm transition-all rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2", 
                       isActive
-                        ? "bg-background text-primary shadow-sm" // Active: uses background, primary text
-                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground", // Inactive & Hover
-                      "data-[disabled]:opacity-50 data-[disabled]:pointer-events-none" // Disabled state
+                        ? "bg-primary text-primary-foreground shadow-sm" // MODIFIED HERE
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground", 
+                      "data-[disabled]:opacity-50 data-[disabled]:pointer-events-none" 
                     )}
                   >
                     <span className="flex items-center mb-0.5">
                       {xaiTypeIcons[type as XAITypeEnum]}
                       {type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                     </span>
-                    {/* Badge styling should be self-contained and adapt to foreground color */}
                     {xaiResult && getXAIStatusBadge(xaiResult.status, xaiResult.status_message)}
                   </TabsTrigger>
                 );
