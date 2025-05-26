@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { AuthenticatedLayout } from "@/components/layout/authenticated-layout"
+import { MainLayout } from "@/components/main-layout"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ProfileSettings } from "@/components/profile/profile-settings"
 import { RepositorySettings } from "@/components/profile/repository-settings"
@@ -13,7 +13,7 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState("profile")
 
   return (
-    <AuthenticatedLayout>
+    <MainLayout>
       <div className="container mx-auto py-6 space-y-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Profile Settings</h1>
@@ -50,6 +50,6 @@ export default function ProfilePage() {
           </TabsContent>
         </Tabs>
       </div>
-    </AuthenticatedLayout>
+    </MainLayout>
   )
 }

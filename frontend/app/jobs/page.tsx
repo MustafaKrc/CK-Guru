@@ -32,6 +32,7 @@ import { JobStatusEnum } from "@/types/api/enums";
 import { useTaskStore, TaskStatusUpdatePayload } from "@/store/taskStore";
 import { getLatestTaskForEntity } from "@/lib/taskUtils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageLoader } from '@/components/ui/page-loader'; // Added import
 
 const ITEMS_PER_PAGE = 10;
 const ALL_FILTER_VALUE = "_all_"; // For status filter "All" option
@@ -390,7 +391,7 @@ function JobsPageContent() {
 
 export default function JobsPage() { // New wrapper component
   return (
-    <Suspense fallback={<div>Loading page data...</div>}>
+    <Suspense fallback={<PageLoader message="Loading jobs dashboard..." />}>
       <JobsPageContent />
     </Suspense>
   );

@@ -30,6 +30,7 @@ import { TaskResponse } from "@/types/api/task";
 import { useTaskStore, TaskStatusUpdatePayload } from "@/store/taskStore";
 import { getLatestTaskForEntity } from "@/lib/taskUtils";
 import { JobStatusEnum } from "@/types/api/enums";
+import { PageLoader } from '@/components/ui/page-loader'; // Added import
 
 type JobDetails = TrainingJobRead | HPSearchJobRead;
 type JobType = "training" | "hp_search";
@@ -346,7 +347,7 @@ function JobDetailPageContent() {
 
 export default function JobDetailPage() { // New wrapper component
   return (
-    <Suspense fallback={<div>Loading page data...</div>}>
+    <Suspense fallback={<PageLoader message="Loading job details..." />}>
       <JobDetailPageContent />
     </Suspense>
   );

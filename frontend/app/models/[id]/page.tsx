@@ -7,32 +7,33 @@ import Link from "next/link";
 import { MainLayout } from "@/components/main-layout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  ArrowLeft, RefreshCw, BarChart3, Database, Layers, Settings, Play, Eye, AlertCircle, Loader2,
-  Puzzle, Plus, CheckCircle, Download, Trash2, Cog, FileJson, Brain, Wand2, FileText, CalendarDays,
-  Copy
-} from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
+} from "@/components/ui/alert-dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageContainer } from "@/components/ui/page-container";
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious, PaginationEllipsis } from "@/components/ui/pagination";
 import {
-  Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious, PaginationEllipsis
-} from "@/components/ui/pagination";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
+  ArrowLeft, RefreshCw, Trash2, Loader2, FileText, Cog, Brain, Play, Copy, Link2, AlertCircle, CheckCircle, Database, CalendarDays,
+  Wand2,
+  Layers,
+  Puzzle
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { PageLoader } from '@/components/ui/page-loader'; // Added import
 
 import { apiService, handleApiError } from "@/lib/apiService";
-import { MLModelRead, PaginatedMLModelRead } from "@/types/api/ml-model";
-import { InferenceJobRead, PaginatedInferenceJobRead } from "@/types/api/inference-job";
-import { TaskResponse } from "@/types/api/task";
+import { MLModelRead } from "@/types/api/ml-model";
+import { PaginatedInferenceJobRead, InferenceJobRead } from "@/types/api";
 import { useTaskStore, TaskStatusUpdatePayload } from "@/store/taskStore";
 import { getLatestTaskForEntity } from "@/lib/taskUtils";
 import { JobStatusEnum } from "@/types/api/enums";
+import { Label } from "@/components/ui/label";
 
 
 const ITEMS_PER_PAGE = 5;
@@ -443,7 +444,7 @@ function ModelDetailPageContent() {
 
 export default function ModelDetailPage() { // New wrapper component
   return (
-    <Suspense fallback={<div>Loading page data...</div>}>
+    <Suspense fallback={<PageLoader message="Loading model details..." />}>
       <ModelDetailPageContent />
     </Suspense>
   );

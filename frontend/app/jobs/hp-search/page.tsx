@@ -27,6 +27,7 @@ import {
 } from "@/types/api/hp-search-job";
 import { ModelTypeEnum, ObjectiveMetricEnum, SamplerTypeEnum, PrunerTypeEnum } from "@/types/api/enums";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { PageLoader } from '@/components/ui/page-loader'; // Added import
 
 const API_ENDPOINT_SUBMIT_HP_SEARCH_JOB = "/ml/search";
 const API_ENDPOINT_LIST_DATASETS = "/datasets";
@@ -458,7 +459,7 @@ function CreateHpSearchJobPageContent() {
 
 export default function CreateHpSearchJobPage() { // New wrapper component
   return (
-    <Suspense fallback={<div>Loading page data...</div>}>
+    <Suspense fallback={<PageLoader message="Loading HP search form..." />}>
       <CreateHpSearchJobPageContent />
     </Suspense>
   );

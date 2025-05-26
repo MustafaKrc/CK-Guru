@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PageContainer } from "@/components/ui/page-container";
 import { ArrowLeft, Wand2, Database, Cog, Settings, Loader2, AlertCircle, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { PageLoader } from '@/components/ui/page-loader'; // Added import
 
 import { apiService, handleApiError, ApiError } from "@/lib/apiService";
 import { DatasetRead, PaginatedDatasetRead } from "@/types/api/dataset";
@@ -416,7 +417,7 @@ function CreateTrainingJobPageContent() {
 
 export default function CreateTrainingJobPage() { // New wrapper component
   return (
-    <Suspense fallback={<div>Loading page data...</div>}>
+    <Suspense fallback={<PageLoader message="Loading training job form..." />}>
       <CreateTrainingJobPageContent />
     </Suspense>
   );

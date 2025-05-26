@@ -24,6 +24,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Plus, MoreHorizontal, Edit, Trash2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useSearchParams } from "next/navigation"
+import { PageLoader } from '@/components/ui/page-loader'; // Added import
 
 // Mock repositories for selection
 const mockRepositories = [
@@ -447,7 +448,7 @@ function BotPatternsPageContent() {
 
 export default function BotPatternsPage() { // New wrapper component
   return (
-    <Suspense fallback={<div>Loading page data...</div>}>
+    <Suspense fallback={<PageLoader message="Loading bot patterns page..." />}>
       <BotPatternsPageContent />
     </Suspense>
   );

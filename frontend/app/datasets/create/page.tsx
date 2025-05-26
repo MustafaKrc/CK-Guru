@@ -15,6 +15,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { ArrowLeft, ArrowRight, HelpCircle, Info } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { PageLoader } from '@/components/ui/page-loader'; // Added import
 
 // Mock repositories for selection
 const mockRepositories = [
@@ -524,7 +525,7 @@ function CreateDatasetPageContent() {
 
 export default function CreateDatasetPage() { // New wrapper component
   return (
-    <Suspense fallback={<div>Loading page data...</div>}>
+    <Suspense fallback={<PageLoader message="Loading dataset creation form..." />}>
       <CreateDatasetPageContent />
     </Suspense>
   );
