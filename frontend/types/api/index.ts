@@ -8,4 +8,5 @@ export * from "./training-job";
 export * from "./hp-search-job";
 export * from "./inference-job";
 export * from "./xai";
+export * from "./rule";
 // Add other schema types as they are created

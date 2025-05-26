@@ -1,529 +1,542 @@
-"use client"
+// frontend/app/datasets/create/page.tsx
+"use client";
 
-import type React from "react"
+import React, { useState, useEffect, useCallback, Suspense, useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { MainLayout } from "@/components/main-layout";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Separator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
+import { PageContainer } from "@/components/ui/page-container";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { ArrowLeft, ArrowRight, HelpCircle, Info, Loader2, AlertCircle, Link } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { PageLoader } from '@/components/ui/page-loader';
 
-import { useState, Suspense } from "react"  
-import { useRouter, useSearchParams } from "next/navigation"
-import { MainLayout } from "@/components/main-layout"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Label } from "@/components/ui/label"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Separator } from "@/components/ui/separator"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { ArrowLeft, ArrowRight, HelpCircle, Info } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
-import { PageLoader } from '@/components/ui/page-loader'; // Added import
+import { apiService, handleApiError, ApiError } from "@/lib/apiService";
+import { Repository, PaginatedRepositoryRead } from "@/types/api/repository";
+import { RuleDefinition, RuleParamDefinition } from "@/types/api/rule"; // Ensure these types are defined
+import { DatasetCreatePayload, DatasetTaskResponse, CleaningRuleConfig as BackendCleaningRuleConfig } from "@/types/api/dataset";
 
-// Mock repositories for selection
-const mockRepositories = [
-  { id: "1", name: "frontend-app" },
-  { id: "2", name: "backend-api" },
-  { id: "3", name: "mobile-client" },
-  { id: "4", name: "shared-lib" },
-]
+import { STATIC_AVAILABLE_METRICS, STATIC_AVAILABLE_TARGETS, MetricDefinition } from "./constants";
+import { Switch } from "@/components/ui/switch";
 
-// Mock available metrics
-const availableMetrics = [
-  { id: "CBO", name: "CBO", description: "Coupling Between Objects" },
-  { id: "RFC", name: "RFC", description: "Response For a Class" },
-  { id: "WMC", name: "WMC", description: "Weighted Methods per Class" },
-  { id: "LCOM", name: "LCOM", description: "Lack of Cohesion of Methods" },
-  { id: "DIT", name: "DIT", description: "Depth of Inheritance Tree" },
-  { id: "NOC", name: "NOC", description: "Number of Children" },
-  { id: "lines_added", name: "Lines Added", description: "Number of lines added in the commit" },
-  { id: "lines_deleted", name: "Lines Deleted", description: "Number of lines deleted in the commit" },
-  { id: "files_changed", name: "Files Changed", description: "Number of files changed in the commit" },
-  { id: "commit_message_length", name: "Commit Message Length", description: "Length of the commit message" },
-  { id: "commit_hour", name: "Commit Hour", description: "Hour of the day when the commit was made" },
-  { id: "commit_day", name: "Commit Day", description: "Day of the week when the commit was made" },
-]
+// Frontend internal state for cleaning rules
+interface InternalCleaningRuleConfig extends RuleDefinition { // RuleDefinition already has 'parameters: RuleParamDefinition[]'
+  enabled: boolean;
+  userParams: Record<string, any>; // Store user-configured parameters here
+}
 
-// Mock available target columns
-const availableTargets = [
-  { id: "is_buggy", name: "Is Buggy", description: "Whether the commit introduced a bug" },
-  { id: "bug_count", name: "Bug Count", description: "Number of bugs introduced by the commit" },
-  { id: "bug_severity", name: "Bug Severity", description: "Severity of bugs introduced by the commit" },
-]
+function CreateDatasetPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { toast } = useToast();
 
-// Mock cleaning rules
-const cleaningRules = [
-  {
-    id: "remove_outliers",
-    name: "Remove Outliers",
-    description: "Identify and remove outliers from the dataset",
-    enabled: true,
-    parameters: [
-      {
-        id: "method",
-        name: "Method",
-        type: "select",
-        options: ["iqr", "z-score", "percentile"],
-        default: "iqr",
-        description: "Method used to identify outliers",
-      },
-      {
-        id: "threshold",
-        name: "Threshold",
-        type: "number",
-        default: 1.5,
-        description: "Threshold value for outlier detection",
-      },
-    ],
-  },
-  {
-    id: "handle_missing_values",
-    name: "Handle Missing Values",
-    description: "Strategy for handling missing values in the dataset",
-    enabled: true,
-    parameters: [
-      {
-        id: "method",
-        name: "Method",
-        type: "select",
-        options: ["mean", "median", "mode", "drop"],
-        default: "mean",
-        description: "Method used to handle missing values",
-      },
-    ],
-  },
-  {
-    id: "filter_bot_commits",
-    name: "Filter Bot Commits",
-    description: "Remove commits made by bots based on patterns",
-    enabled: true,
-    parameters: [
-      {
-        id: "use_global_patterns",
-        name: "Use Global Patterns",
-        type: "checkbox",
-        default: true,
-        description: "Use global bot patterns defined in the system",
-      },
-      {
-        id: "use_repo_patterns",
-        name: "Use Repository Patterns",
-        type: "checkbox",
-        default: true,
-        description: "Use repository-specific bot patterns",
-      },
-    ],
-  },
-  {
-    id: "normalize_features",
-    name: "Normalize Features",
-    description: "Normalize feature values to a standard range",
-    enabled: false,
-    parameters: [
-      {
-        id: "method",
-        name: "Method",
-        type: "select",
-        options: ["min-max", "z-score", "robust"],
-        default: "min-max",
-        description: "Method used for normalization",
-      },
-    ],
-  },
-]
+  const preselectedRepoId = searchParams.get("repository");
 
-function CreateDatasetPageContent() {  
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const preselectedRepoId = searchParams.get("repository")
+  const [currentStep, setCurrentStep] = useState(1);
 
-  const [step, setStep] = useState(1)
-  const [formData, setFormData] = useState({
-    repositoryId: preselectedRepoId || "",
-    name: "",
-    description: "",
-    selectedMetrics: availableMetrics.slice(0, 6).map((m) => m.id), // Default to first 6 metrics
-    targetColumn: "is_buggy",
-    cleaningRules: cleaningRules.map((rule) => ({
-      ...rule,
-      parameters: rule.parameters.map((param) => ({
-        ...param,
-        value: param.default,
-      })),
-    })),
-  })
+  // Step 1 State
+  const [repositoryId, setRepositoryId] = useState<string>(preselectedRepoId || "");
+  const [datasetName, setDatasetName] = useState("");
+  const [datasetDescription, setDatasetDescription] = useState("");
 
-  const { toast } = useToast()
+  // Step 2 State
+  const [selectedFeatureColumns, setSelectedFeatureColumns] = useState<string[]>([]);
+  const [searchTermFeatures, setSearchTermFeatures] = useState("");
+  const [selectedTargetColumn, setSelectedTargetColumn] = useState<string>(STATIC_AVAILABLE_TARGETS[0]?.id || "is_buggy");
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
-  }
+  // Step 3 State
+  const [configuredCleaningRules, setConfiguredCleaningRules] = useState<InternalCleaningRuleConfig[]>([]);
 
-  const handleMetricToggle = (metricId: string) => {
-    setFormData((prev) => {
-      const selectedMetrics = [...prev.selectedMetrics]
-      if (selectedMetrics.includes(metricId)) {
-        return { ...prev, selectedMetrics: selectedMetrics.filter((id) => id !== metricId) }
-      } else {
-        return { ...prev, selectedMetrics: [...selectedMetrics, metricId] }
+  // Fetched Data State
+  const [availableRepositories, setAvailableRepositories] = useState<Repository[]>([]);
+  const [isLoadingRepos, setIsLoadingRepos] = useState(true);
+  const [availableRuleDefinitions, setAvailableRuleDefinitions] = useState<RuleDefinition[]>([]);
+  const [isLoadingRules, setIsLoadingRules] = useState(true);
+
+  // Form Submission State
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const fetchRepositories = useCallback(async () => {
+    setIsLoadingRepos(true);
+    try {
+      const response = await apiService.getRepositories({ limit: 200 }); 
+      setAvailableRepositories(response.items || []);
+      if (preselectedRepoId && response.items.find(r => r.id.toString() === preselectedRepoId)) {
+        setRepositoryId(preselectedRepoId);
       }
-    })
-  }
+    } catch (err) {
+      handleApiError(err, "Failed to load repositories");
+    } finally {
+      setIsLoadingRepos(false);
+    }
+  }, [preselectedRepoId]);
 
-  const handleRuleToggle = (ruleId: string, enabled: boolean) => {
-    setFormData((prev) => {
-      const updatedRules = prev.cleaningRules.map((rule) => (rule.id === ruleId ? { ...rule, enabled } : rule))
-      return { ...prev, cleaningRules: updatedRules }
-    })
-  }
+  const fetchCleaningRuleDefinitions = useCallback(async () => {
+    setIsLoadingRules(true);
+    try {
+      const data = await apiService.getAvailableCleaningRules();
+      setAvailableRuleDefinitions(data || []);
+      const initialConfiguredRules = (data || []).map(def => ({
+        ...def, // Spread all properties from RuleDefinition
+        enabled: true, // Default to enabled, or use a more specific default from definition if available
+        userParams: def.parameters.reduce((acc, param) => {
+          acc[param.name] = param.default !== undefined ? param.default : getDefaultValueForType(param.type);
+          return acc;
+        }, {} as Record<string, any>),
+      }));
+      setConfiguredCleaningRules(initialConfiguredRules);
+    } catch (err) {
+      handleApiError(err, "Failed to load cleaning rules");
+      setConfiguredCleaningRules([]);
+    } finally {
+      setIsLoadingRules(false);
+    }
+  }, []);
+  
+  const getDefaultValueForType = (type: string): any => {
+    switch (type) {
+      case 'integer':
+      case 'float':
+        return 0;
+      case 'boolean':
+        return false;
+      case 'string':
+      default:
+        return '';
+    }
+  };
 
-  const handleParameterChange = (ruleId: string, paramId: string, value: any) => {
-    setFormData((prev) => {
-      const updatedRules = prev.cleaningRules.map((rule) => {
-        if (rule.id === ruleId) {
-          const updatedParameters = rule.parameters.map((param) => (param.id === paramId ? { ...param, value } : param))
-          return { ...rule, parameters: updatedParameters }
-        }
-        return rule
-      })
-      return { ...prev, cleaningRules: updatedRules }
-    })
-  }
+
+  useEffect(() => {
+    fetchRepositories();
+    fetchCleaningRuleDefinitions();
+  }, [fetchRepositories, fetchCleaningRuleDefinitions]);
+
+  const handleFeatureToggle = (metricId: string) => {
+    setSelectedFeatureColumns(prev =>
+      prev.includes(metricId) ? prev.filter(id => id !== metricId) : [...prev, metricId]
+    );
+  };
+  
+  const handleSelectAllFeatures = (group?: MetricDefinition['group']) => {
+    const allMetricIdsInGroup = STATIC_AVAILABLE_METRICS
+        .filter(metric => !group || metric.group === group)
+        .map(metric => metric.id);
+    
+    // Check if all in the group are already selected
+    const allSelectedInGroup = allMetricIdsInGroup.every(id => selectedFeatureColumns.includes(id));
+
+    if (allSelectedInGroup) { // If all selected, deselect them
+        setSelectedFeatureColumns(prev => prev.filter(id => !allMetricIdsInGroup.includes(id)));
+    } else { // Otherwise, select all (add without duplicates)
+        setSelectedFeatureColumns(prev => [...new Set([...prev, ...allMetricIdsInGroup])]);
+    }
+  };
+
+
+  const handleRuleEnabledChange = (ruleName: string, checked: boolean) => {
+    setConfiguredCleaningRules(prev =>
+      prev.map(rule => (rule.name === ruleName ? { ...rule, enabled: checked } : rule))
+    );
+  };
+
+  const handleRuleParamChange = (ruleName: string, paramName: string, value: any) => {
+    setConfiguredCleaningRules(prev =>
+      prev.map(rule =>
+        rule.name === ruleName
+          ? { ...rule, userParams: { ...rule.userParams, [paramName]: value } }
+          : rule
+      )
+    );
+  };
+
+  const validateStep1 = () => {
+    if (!repositoryId) {
+      setFormError("Please select a repository."); return false;
+    }
+    if (!datasetName.trim()) {
+      setFormError("Dataset name is required."); return false;
+    }
+    setFormError(null); return true;
+  };
+
+  const validateStep2 = () => {
+    if (selectedFeatureColumns.length === 0) {
+      setFormError("Please select at least one feature column."); return false;
+    }
+    if (!selectedTargetColumn) {
+      setFormError("Please select a target column."); return false;
+    }
+    setFormError(null); return true;
+  };
+  
+  const validateStep3 = () => {
+    // Add any validation for cleaning rule params if necessary
+    setFormError(null); return true;
+  };
+
 
   const handleNextStep = () => {
-    if (step === 1) {
-      // Validate step 1
-      if (!formData.repositoryId || !formData.name) {
-        toast({
-          title: "Missing information",
-          description: "Please select a repository and provide a dataset name",
-          variant: "destructive",
-        })
-        return
-      }
-    } else if (step === 2) {
-      // Validate step 2
-      if (formData.selectedMetrics.length === 0) {
-        toast({
-          title: "No features selected",
-          description: "Please select at least one feature for your dataset",
-          variant: "destructive",
-        })
-        return
-      }
-    }
-
-    setStep((prev) => prev + 1)
-  }
+    if (currentStep === 1 && !validateStep1()) return;
+    if (currentStep === 2 && !validateStep2()) return;
+    if (currentStep === 3 && !validateStep3()) return; // Though step 3 usually doesn't block next
+    setCurrentStep(prev => prev + 1);
+  };
 
   const handlePreviousStep = () => {
-    setStep((prev) => prev - 1)
-  }
+    setCurrentStep(prev => prev - 1);
+  };
 
-  const handleSubmit = () => {
-    // In a real app, this would be an API call to create the dataset
-    console.log("Creating dataset with data:", formData)
+  const handleSubmit = async () => {
+    if (!validateStep1() || !validateStep2() || !validateStep3()) {
+      toast({ title: "Validation Error", description: formError || "Please check the form for errors.", variant: "destructive" });
+      return;
+    }
 
-    toast({
-      title: "Dataset creation started",
-      description: "Your dataset is being generated. You'll be notified when it's ready.",
-    })
+    setIsSubmitting(true);
+    setFormError(null);
 
-    // Redirect to datasets page
-    router.push("/datasets")
-  }
+    const payloadConfigCleaningRules: BackendCleaningRuleConfig[] = configuredCleaningRules
+      .filter(rule => rule.enabled)
+      .map(rule => ({
+        name: rule.name,
+        enabled: rule.enabled,
+        params: rule.userParams,
+      }));
 
-  const getSelectedRepository = () => {
-    return mockRepositories.find((repo) => repo.id === formData.repositoryId)
-  }
+    const payload: DatasetCreatePayload = {
+      name: datasetName,
+      description: datasetDescription || undefined,
+      config: {
+        feature_columns: selectedFeatureColumns,
+        target_column: selectedTargetColumn,
+        cleaning_rules: payloadConfigCleaningRules,
+      },
+    };
+
+    try {
+      const response = await apiService.createDataset(repositoryId, payload);
+      toast({
+        title: "Dataset Creation Task Submitted",
+        description: `Dataset "${datasetName}" (ID: ${response.dataset_id}) is being generated. Task ID: ${response.task_id}`,
+      });
+      router.push(`/datasets/${response.dataset_id}`);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setFormError(err.message);
+      } else {
+        handleApiError(err, "Failed to create dataset");
+        setFormError("An unexpected error occurred during dataset creation.");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+  
+  const filteredMetrics = STATIC_AVAILABLE_METRICS.filter(metric => 
+    metric.name.toLowerCase().includes(searchTermFeatures.toLowerCase()) ||
+    metric.id.toLowerCase().includes(searchTermFeatures.toLowerCase()) ||
+    metric.group.toLowerCase().includes(searchTermFeatures.toLowerCase())
+  );
+
+  const groupedMetrics = useMemo(() => {
+    return filteredMetrics.reduce((acc, metric) => {
+      (acc[metric.group] = acc[metric.group] || []).push(metric);
+      return acc;
+    }, {} as Record<MetricDefinition['group'], MetricDefinition[]>);
+  }, [filteredMetrics]);
+
 
   return (
     <MainLayout>
-      <div className="container mx-auto py-6 space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" onClick={() => router.back()}>
+      <PageContainer>
+        <div className="flex items-center gap-4 mb-6">
+          <Button variant="outline" size="icon" onClick={() => currentStep === 1 ? router.back() : handlePreviousStep()}>
             <ArrowLeft className="h-4 w-4" />
             <span className="sr-only">Back</span>
           </Button>
-          <h1 className="text-3xl font-bold tracking-tight">Create Dataset</h1>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Create Dataset</h1>
         </div>
 
-        <div className="flex justify-between items-center">
+        <div className="flex justify-between items-center mb-6">
           <div className="flex space-x-2">
-            <div
-              className={`flex h-8 w-8 items-center justify-center rounded-full ${step >= 1 ? "bg-primary text-primary-foreground" : "border"}`}
-            >
-              1
-            </div>
-            <div
-              className={`flex h-8 w-8 items-center justify-center rounded-full ${step >= 2 ? "bg-primary text-primary-foreground" : "border"}`}
-            >
-              2
-            </div>
-            <div
-              className={`flex h-8 w-8 items-center justify-center rounded-full ${step >= 3 ? "bg-primary text-primary-foreground" : "border"}`}
-            >
-              3
-            </div>
+            {[1, 2, 3].map(stepNum => (
+              <div key={stepNum}
+                className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium transition-all
+                            ${currentStep === stepNum ? "bg-primary text-primary-foreground scale-110" : 
+                            currentStep > stepNum ? "bg-primary/80 text-primary-foreground" : "border bg-muted text-muted-foreground"}`}
+              >
+                {currentStep > stepNum ? <CheckmarkIcon className="h-4 w-4"/> : stepNum}
+              </div>
+            ))}
           </div>
-          <div className="text-sm text-muted-foreground">Step {step} of 3</div>
+          <div className="text-sm text-muted-foreground">Step {currentStep} of 3</div>
         </div>
 
-        {step === 1 && (
+        {formError && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{formError}</AlertDescription>
+          </Alert>
+        )}
+
+        {currentStep === 1 && (
           <Card>
-            <CardHeader>
-              <CardTitle>Basic Information</CardTitle>
-              <CardDescription>Select a repository and provide basic information for your dataset</CardDescription>
-            </CardHeader>
+            <CardHeader><CardTitle>Basic Information</CardTitle><CardDescription>Select a repository and provide general details for your dataset.</CardDescription></CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="repositoryId">Repository</Label>
-                <select
-                  id="repositoryId"
-                  name="repositoryId"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  value={formData.repositoryId}
-                  onChange={handleInputChange}
-                >
-                  <option value="">Select a repository</option>
-                  {mockRepositories.map((repo) => (
-                    <option key={repo.id} value={repo.id}>
-                      {repo.name}
-                    </option>
-                  ))}
-                </select>
+                <Label htmlFor="repositoryId">Repository *</Label>
+                {isLoadingRepos ? <Skeleton className="h-10 w-full" /> : availableRepositories.length === 0 ? (
+                  <Alert variant="default"><Info className="h-4 w-4" /><AlertDescription>No repositories found. <Link href="/repositories" className="underline">Add a repository first.</Link></AlertDescription></Alert>
+                ) : (
+                  <Select value={repositoryId} onValueChange={setRepositoryId} required>
+                    <SelectTrigger id="repositoryId"><SelectValue placeholder="Select a repository..." /></SelectTrigger>
+                    <SelectContent>
+                      {availableRepositories.map(repo => <SelectItem key={repo.id} value={repo.id.toString()}>{repo.name} (ID: {repo.id})</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="name">Dataset Name</Label>
-                <Input
-                  id="name"
-                  name="name"
-                  placeholder="e.g., frontend-app-dataset-1"
-                  value={formData.name}
-                  onChange={handleInputChange}
-                />
+                <Label htmlFor="datasetName">Dataset Name *</Label>
+                <Input id="datasetName" value={datasetName} onChange={e => setDatasetName(e.target.value)} placeholder="e.g., My Project - Commit Defects Dataset" required />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="description">Description (Optional)</Label>
-                <Textarea
-                  id="description"
-                  name="description"
-                  placeholder="Describe the purpose and contents of this dataset"
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  rows={3}
-                />
+                <Label htmlFor="datasetDescription">Description (Optional)</Label>
+                <Textarea id="datasetDescription" value={datasetDescription} onChange={e => setDatasetDescription(e.target.value)} placeholder="A brief description of this dataset's purpose and scope." rows={3} />
               </div>
             </CardContent>
             <CardFooter className="flex justify-end">
-              <Button onClick={handleNextStep}>
-                Next
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
+              <Button onClick={handleNextStep} disabled={isLoadingRepos || !repositoryId || !datasetName.trim()}>Next <ArrowRight className="ml-2 h-4 w-4" /></Button>
             </CardFooter>
           </Card>
         )}
 
-        {step === 2 && (
+        {currentStep === 2 && (
           <Card>
-            <CardHeader>
-              <CardTitle>Feature Selection</CardTitle>
-              <CardDescription>Select the features to include in your dataset and the target column</CardDescription>
-            </CardHeader>
+            <CardHeader><CardTitle>Feature & Target Selection</CardTitle><CardDescription>Choose the features and the target variable for your dataset.</CardDescription></CardHeader>
             <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="feature-search">Search Features</Label>
+                <Input id="feature-search" placeholder="Type to filter features..." value={searchTermFeatures} onChange={(e) => setSearchTermFeatures(e.target.value)} />
+              </div>
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-medium">Features</h3>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        selectedMetrics:
-                          prev.selectedMetrics.length === availableMetrics.length
-                            ? []
-                            : availableMetrics.map((m) => m.id),
-                      }))
-                    }
-                  >
-                    {formData.selectedMetrics.length === availableMetrics.length ? "Deselect All" : "Select All"}
-                  </Button>
+                 <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-lg font-medium">Available Features ({selectedFeatureColumns.length} selected) *</h3>
+                    <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={() => handleSelectAllFeatures()}>
+                           {STATIC_AVAILABLE_METRICS.every(m => selectedFeatureColumns.includes(m.id)) ? "Deselect All" : "Select All"}
+                        </Button>
+                        {Object.keys(groupedMetrics).map(groupName => (
+                            <Button key={groupName} variant="outline" size="sm" onClick={() => handleSelectAllFeatures(groupName as MetricDefinition['group'])}>
+                                {groupedMetrics[groupName as MetricDefinition['group']].every(m => selectedFeatureColumns.includes(m.id)) ? `Deselect ${groupName}` : `Select ${groupName}`}
+                            </Button>
+                        ))}
+                    </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {availableMetrics.map((metric) => (
-                    <div key={metric.id} className="flex items-start space-x-2">
-                      <Checkbox
-                        id={`metric-${metric.id}`}
-                        checked={formData.selectedMetrics.includes(metric.id)}
-                        onCheckedChange={() => handleMetricToggle(metric.id)}
-                      />
-                      <div className="grid gap-1.5 leading-none">
-                        <label
-                          htmlFor={`metric-${metric.id}`}
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                        >
-                          {metric.name}
-                        </label>
-                        <p className="text-sm text-muted-foreground">{metric.description}</p>
+                <ScrollArea className="h-[400px] rounded-md border p-4">
+                  {Object.entries(groupedMetrics).map(([groupName, metricsInGroup]) => (
+                    <div key={groupName} className="mb-4">
+                      <h4 className="text-md font-semibold mb-2 sticky top-0 bg-background/95 py-1 z-10">{groupName} ({metricsInGroup.filter(m => selectedFeatureColumns.includes(m.id)).length}/{metricsInGroup.length})</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-3">
+                        {metricsInGroup.map(metric => (
+                          <div key={metric.id} className="flex items-start space-x-2">
+                            <Checkbox id={`metric-${metric.id}`} checked={selectedFeatureColumns.includes(metric.id)} onCheckedChange={() => handleFeatureToggle(metric.id)} />
+                            <div className="grid gap-1.5 leading-none">
+                              <Label htmlFor={`metric-${metric.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer">{metric.name}</Label>
+                              <p className="text-xs text-muted-foreground">{metric.description}</p>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ))}
-                </div>
+                </ScrollArea>
               </div>
-
               <Separator />
-
               <div className="space-y-4">
-                <h3 className="text-lg font-medium">Target Column</h3>
-                <div className="space-y-2">
-                  <Label htmlFor="targetColumn">Select Target</Label>
-                  <select
-                    id="targetColumn"
-                    name="targetColumn"
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    value={formData.targetColumn}
-                    onChange={handleInputChange}
-                  >
-                    {availableTargets.map((target) => (
-                      <option key={target.id} value={target.id}>
-                        {target.name}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {availableTargets.find((t) => t.id === formData.targetColumn)?.description}
-                  </p>
-                </div>
+                <h3 className="text-lg font-medium">Target Column *</h3>
+                <Select value={selectedTargetColumn} onValueChange={setSelectedTargetColumn} required>
+                  <SelectTrigger><SelectValue placeholder="Select target variable..." /></SelectTrigger>
+                  <SelectContent>
+                    {STATIC_AVAILABLE_TARGETS.map(target => <SelectItem key={target.id} value={target.id}>{target.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground">{STATIC_AVAILABLE_TARGETS.find(t => t.id === selectedTargetColumn)?.description}</p>
               </div>
             </CardContent>
             <CardFooter className="flex justify-between">
-              <Button variant="outline" onClick={handlePreviousStep}>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Previous
-              </Button>
-              <Button onClick={handleNextStep}>
-                Next
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
+              <Button variant="outline" onClick={handlePreviousStep}><ArrowLeft className="mr-2 h-4 w-4" /> Previous</Button>
+              <Button onClick={handleNextStep} disabled={selectedFeatureColumns.length === 0 || !selectedTargetColumn}>Next <ArrowRight className="ml-2 h-4 w-4" /></Button>
             </CardFooter>
           </Card>
         )}
 
-        {step === 3 && (
+        {currentStep === 3 && (
           <Card>
             <CardHeader>
-              <CardTitle>Cleaning Rules</CardTitle>
-              <CardDescription>Configure data cleaning rules to prepare your dataset</CardDescription>
+              <CardTitle>Data Cleaning Rules</CardTitle>
+              <CardDescription>Configure rules to preprocess and clean your dataset.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {formData.cleaningRules.map((rule) => (
-                <div key={rule.id} className="space-y-4">
-                  <div className="flex items-start space-x-3">
-                    <Checkbox
-                      id={`rule-${rule.id}`}
-                      checked={rule.enabled}
-                      onCheckedChange={(checked) => handleRuleToggle(rule.id, checked === true)}
-                    />
-                    <div className="grid gap-1.5 leading-none">
-                      <div className="flex items-center space-x-2">
-                        <label
-                          htmlFor={`rule-${rule.id}`}
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                        >
-                          {rule.name}
-                        </label>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Info className="h-4 w-4 text-muted-foreground" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>{rule.description}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </div>
-                      <p className="text-sm text-muted-foreground">{rule.description}</p>
-                    </div>
-                  </div>
-
-                  {rule.enabled && rule.parameters.length > 0 && (
-                    <div className="ml-7 pl-4 border-l space-y-4">
-                      {rule.parameters.map((param) => (
-                        <div key={param.id} className="space-y-2">
-                          <div className="flex items-center space-x-2">
-                            <Label htmlFor={`${rule.id}-${param.id}`} className="text-sm">
-                              {param.name}
-                            </Label>
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>{param.description}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
-
-                          {param.type === "select" && (
-                            <select
-                              id={`${rule.id}-${param.id}`}
-                              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                              value={param.value}
-                              onChange={(e) => handleParameterChange(rule.id, param.id, e.target.value)}
-                            >
-                              {param.options?.map((option) => (
-                                <option key={option} value={option}>
-                                  {option}
-                                </option>
-                              ))}
-                            </select>
-                          )}
-
-                          {param.type === "number" && (
-                            <Input
-                              id={`${rule.id}-${param.id}`}
-                              type="number"
-                              value={param.value}
-                              onChange={(e) =>
-                                handleParameterChange(rule.id, param.id, Number.parseFloat(e.target.value))
-                              }
-                              className="h-9"
-                            />
-                          )}
-
-                          {param.type === "checkbox" && (
-                            <Checkbox
-                              id={`${rule.id}-${param.id}`}
-                              checked={param.value}
-                              onCheckedChange={(checked) => handleParameterChange(rule.id, param.id, checked === true)}
-                            />
-                          )}
+              {isLoadingRules ? (
+                <Skeleton className="h-40 w-full" />
+              ) : availableRuleDefinitions.length === 0 ? (
+                <Alert variant="default">
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>No cleaning rules available from the backend.</AlertDescription>
+                </Alert>
+              ) : (
+                configuredCleaningRules.map((rule, ruleIndex) => (
+                  <div key={rule.name} className="space-y-3 pt-4 border-t first:border-t-0 first:pt-0">
+                    {/* Rule Name, Description, and Enable Toggle */}
+                    <div className="flex items-start space-x-3">
+                      <Checkbox
+                        id={`rule-${rule.name}`}
+                        checked={rule.enabled}
+                        onCheckedChange={(checked) => handleRuleEnabledChange(rule.name, Boolean(checked))}
+                        aria-labelledby={`rule-label-${rule.name}`}
+                        className="mt-1" // Align checkbox with the label
+                      />
+                      <div className="flex-grow grid gap-1.5 leading-none">
+                        <div className="flex items-center justify-between">
+                           <Label
+                            htmlFor={`rule-${rule.name}`}
+                            id={`rule-label-${rule.name}`}
+                            className="text-base font-semibold leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                           >
+                            {rule.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                           </Label>
+                           <TooltipProvider delayDuration={100}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-6 w-6 opacity-60 hover:opacity-100">
+                                  <Info className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">
+                                <p className="font-medium mb-1">{rule.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</p>
+                                <p>{rule.description}</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Batch Safe: {rule.is_batch_safe ? "Yes" : "No"}
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </div>
-                      ))}
+                        <p className="text-sm text-muted-foreground">{rule.description}</p>
+                      </div>
                     </div>
-                  )}
 
-                  <Separator />
-                </div>
-              ))}
+                    {/* Parameters for the rule (if enabled and parameters exist) */}
+                    {rule.enabled && rule.parameters && rule.parameters.length > 0 && (
+                      <div className="ml-7 pl-4 border-l space-y-4 py-3">
+                        {rule.parameters.map((paramDef, paramIndex) => (
+                          <div key={paramDef.name} className="space-y-1.5">
+                            <div className="flex items-center space-x-2">
+                              <Label htmlFor={`${rule.name}-${paramDef.name}`} className="text-sm">
+                                {paramDef.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                {paramDef.required && <span className="text-destructive ml-1">*</span>}
+                              </Label>
+                              <TooltipProvider delayDuration={100}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-xs">
+                                    <p>{paramDef.description}</p>
+                                    {paramDef.default !== undefined && (
+                                      <p className="text-xs mt-1">Default: {String(paramDef.default)}</p>
+                                    )}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
+                            {/* Input rendering logic based on paramDef.type */}
+                            {paramDef.type === "select" && paramDef.options ? (
+                              <Select
+                                value={String(rule.userParams[paramDef.name] ?? paramDef.default ?? '')}
+                                onValueChange={(value) => handleRuleParamChange(rule.name, paramDef.name, value)}
+                              >
+                                <SelectTrigger className="h-9">
+                                  <SelectValue placeholder={`Select ${paramDef.name}...`} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {paramDef.options.map(opt => (
+                                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : paramDef.type === "boolean" ? (
+                              <div className="flex items-center space-x-2 pt-1">
+                                <Switch
+                                  id={`${rule.name}-${paramDef.name}`}
+                                  checked={Boolean(rule.userParams[paramDef.name] ?? paramDef.default ?? false)}
+                                  onCheckedChange={(checked) => handleRuleParamChange(rule.name, paramDef.name, checked)}
+                                />
+                                <Label htmlFor={`${rule.name}-${paramDef.name}`} className="text-xs text-muted-foreground">
+                                  Enable
+                                </Label>
+                              </div>
+                            ) : (
+                              <Input
+                                id={`${rule.name}-${paramDef.name}`}
+                                type={paramDef.type === "integer" || paramDef.type === "float" ? "number" : "text"}
+                                value={String(rule.userParams[paramDef.name] ?? paramDef.default ?? '')}
+                                onChange={(e) => {
+                                  let val: string | number = e.target.value;
+                                  if (paramDef.type === "integer") val = parseInt(e.target.value) || 0;
+                                  else if (paramDef.type === "float") val = parseFloat(e.target.value) || 0.0;
+                                  handleRuleParamChange(rule.name, paramDef.name, val);
+                                }}
+                                step={paramDef.type === "float" ? "any" : undefined}
+                                className="h-9"
+                                placeholder={paramDef.default !== undefined ? `Default: ${paramDef.default}` : ''}
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
             </CardContent>
             <CardFooter className="flex justify-between">
-              <Button variant="outline" onClick={handlePreviousStep}>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Previous
+              <Button variant="outline" onClick={handlePreviousStep}><ArrowLeft className="mr-2 h-4 w-4" /> Previous</Button>
+              <Button onClick={handleSubmit} disabled={isSubmitting}>
+                {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Submitting...</> : "Create & Generate Dataset"}
               </Button>
-              <Button onClick={handleSubmit}>Create & Generate Dataset</Button>
             </CardFooter>
           </Card>
         )}
-      </div>
+      </PageContainer>
     </MainLayout>
-  )
+  );
 }
 
-export default function CreateDatasetPage() { // New wrapper component
+// Helper Icon
+function CheckmarkIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+
+export default function CreateDatasetPage() {
   return (
     <Suspense fallback={<PageLoader message="Loading dataset creation form..." />}>
       <CreateDatasetPageContent />

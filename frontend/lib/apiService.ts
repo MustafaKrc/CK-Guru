@@ -1,5 +1,14 @@
 // frontend/lib/apiService.ts
-import { toast } from "@/hooks/use-toast"; // Assuming useToast is available for error notifications
+import { toast } from "@/hooks/use-toast";
+
+// Centralized API Types
+import {
+  PaginatedRepositoryRead, // Assuming this is already defined
+  DatasetCreatePayload,
+  DatasetTaskResponse,
+  RuleDefinition, // Assuming this is defined in a new file or dataset.ts
+  PaginatedDatasetRead // For getDatasets (used in other parts, good to have)
+} from "@/types/api"; // Assuming types are in @/types/api/*
 
 const API_BASE_URL =  `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/api/v1`;
 
@@ -10,8 +19,8 @@ export interface ValidationErrorDetail {
 }
 
 export interface ApiErrorResponse {
-  detail?: string | ValidationErrorDetail[] | string[]; // FastAPI error format
-  message?: string; // Generic message
+  detail?: string | ValidationErrorDetail[] | string[];
+  message?: string;
 }
 
 export class ApiError extends Error {
@@ -34,7 +43,6 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers: {
       'Content-Type': 'application/json',
       Accept: 'application/json',
-      // Authorization: `Bearer ${getToken()}` // Example for future auth
       ...options.headers,
     },
   };
@@ -45,28 +53,25 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     if (!response.ok) {
       let errorData: ApiErrorResponse = { message: `HTTP error! status: ${response.status}` };
       try {
-        // Try to parse error response from backend
         const parsedError = await response.json();
         if (parsedError && (parsedError.detail || parsedError.message)) {
           errorData = parsedError;
         }
       } catch (e) {
-        // If parsing fails, use the status text or a generic message
         errorData.message = response.statusText || errorData.message;
       }
       
-      // Construct a user-friendly error message
       let userMessage = "An API error occurred.";
       if (typeof errorData.detail === 'string') {
         userMessage = errorData.detail;
       } else if (Array.isArray(errorData.detail) && errorData.detail.length > 0) {
-        // Handle FastAPI validation errors which now have a typed loc
         const firstError = errorData.detail[0];
         if (
           typeof firstError === 'object' &&
           firstError !== null &&
           'msg' in firstError &&
-          'loc' in firstError
+          'loc' in firstError &&
+          Array.isArray(firstError.loc) // Ensure 'loc' is an array
         ) {
           userMessage = `Validation Error: ${firstError.loc.join(' -> ')} - ${firstError.msg}`;
         } else if (typeof firstError === 'string') {
@@ -80,20 +85,19 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       throw new ApiError(userMessage, response.status, errorData);
     }
 
-    if (response.status === 204) { // No Content
-      return null as T; // Or undefined, depending on how you want to handle it
+    if (response.status === 204) {
+      return null as T;
     }
 
     return response.json() as Promise<T>;
   } catch (error) {
     if (error instanceof ApiError) {
-      throw error; // Re-throw ApiError instances
+      throw error;
     }
-    // Handle network errors or other fetch-related issues
     console.error("Network or unexpected error in API request:", { url, error });
     throw new ApiError(
       "A network error occurred. Please check your connection and try again.", 
-      0, // 0 for network or unknown errors
+      0, 
       { message: (error as Error).message }
     );
   }
@@ -112,16 +116,59 @@ export const apiService = {
   delete: async <TResponse>(endpoint: string, options?: RequestInit): Promise<TResponse> => {
     return request<TResponse>(endpoint, { ...options, method: 'DELETE' });
   },
+
+  // --- Repositories ---
+  getRepositories: async (params?: { skip?: number; limit?: number }): Promise<PaginatedRepositoryRead> => {
+    const queryParams = new URLSearchParams();
+    if (params?.skip !== undefined) queryParams.append('skip', String(params.skip));
+    if (params?.limit !== undefined) queryParams.append('limit', String(params.limit));
+    return apiService.get<PaginatedRepositoryRead>(`/repositories?${queryParams.toString()}`);
+  },
+  
+  // --- Datasets ---
+  getAvailableCleaningRules: async (): Promise<RuleDefinition[]> => {
+    return apiService.get<RuleDefinition[]>('/datasets/available-cleaning-rules');
+  },
+  createDataset: async (repoId: string | number, payload: DatasetCreatePayload): Promise<DatasetTaskResponse> => {
+    return apiService.post<DatasetTaskResponse, DatasetCreatePayload>(`/repositories/${repoId}/datasets`, payload);
+  },
+  getDatasets: async (params?: { skip?: number; limit?: number; status?: string; repository_id?: string | number }): Promise<PaginatedDatasetRead> => {
+    const queryParams = new URLSearchParams();
+    if (params?.skip !== undefined) queryParams.append('skip', String(params.skip));
+    if (params?.limit !== undefined) queryParams.append('limit', String(params.limit));
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.repository_id !== undefined) queryParams.append('repository_id', String(params.repository_id)); // Add repo_id if provided
+    return apiService.get<PaginatedDatasetRead>(`/datasets?${queryParams.toString()}`);
+  },
+  // Add other dataset-related API calls (getDatasetById, downloadDataset, etc.) here as needed
 };
 
-// --- Dedicated API Service Functions ---
-// Import types from the centralized location. Assuming `~/types/api` resolves correctly.
+// Utility to show toast notifications for API errors
+export const handleApiError = (
+  error: any,
+  customTitle: string = "Operation Failed"
+) => {
+  let description = "An unexpected error occurred. Please try again.";
+  if (error instanceof ApiError) {
+    description = error.message;
+  } else if (error instanceof Error) {
+    description = error.message;
+  }
+
+  toast({
+    title: customTitle,
+    description: description,
+    variant: "destructive",
+  });
+};
+
+// --- Dedicated API Service Functions (already present in your file, keep them) ---
 import {
   PaginatedInferenceJobRead,
   InferenceJobRead,
   XAIResultRead,
   XAITriggerResponse,
-} from "@/types/api"; // This path should work if tsconfig paths are set up
+} from "@/types/api";
 
 import { JobStatusEnum } from "@/types/api/enums";
 
@@ -129,8 +176,7 @@ export interface GetInferenceJobsParams {
   skip?: number;
   limit?: number;
   ml_model_id?: number;
-  status?: JobStatusEnum | string; // Allow string for flexibility if enum isn't strictly used in query
-  // Add other query parameters as needed, e.g., search_query, sort_by
+  status?: JobStatusEnum | string;
 }
 
 export const getInferenceJobs = async (params?: GetInferenceJobsParams): Promise<PaginatedInferenceJobRead> => {
@@ -155,24 +201,4 @@ export const getXAIResultsForJob = async (inferenceJobId: string | number): Prom
 
 export const triggerXAIProcessing = async (inferenceJobId: string | number): Promise<XAITriggerResponse> => {
   return apiService.post<XAITriggerResponse>(`/xai/inference-jobs/${inferenceJobId}/xai-results/trigger`, {});
-};
-
-
-// Utility to show toast notifications for API errors
-export const handleApiError = (
-  error: any,
-  customTitle: string = "Operation Failed"
-) => {
-  let description = "An unexpected error occurred. Please try again.";
-  if (error instanceof ApiError) {
-    description = error.message; // Use the user-friendly message from ApiError
-  } else if (error instanceof Error) {
-    description = error.message;
-  }
-
-  toast({
-    title: customTitle,
-    description: description,
-    variant: "destructive",
-  });
 };

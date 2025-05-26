@@ -58,7 +58,7 @@ export default function DatasetsPage() {
   const fetchRepositoriesForFilter = useCallback(async () => {
     setIsLoadingRepositories(true);
     try {
-      const response = await apiService.get<PaginatedRepositoryRead>(`/repositories?limit=500`); // Assuming paginated
+      const response = await apiService.get<PaginatedRepositoryRead>(`/repositories?limit=200`); // Assuming paginated
       setRepositories(response.items || []);
     } catch (err) {
       handleApiError(err, "Failed to fetch repositories for filter");

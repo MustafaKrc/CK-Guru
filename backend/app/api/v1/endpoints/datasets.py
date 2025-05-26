@@ -230,6 +230,7 @@ async def delete_dataset_endpoint(
         )
 
     storage_uri_to_delete = db_dataset.storage_path
+    background_uri_to_delete = db_dataset.background_data_path
     repo_id_log = db_dataset.repository_id
 
     # Delete DB record first
@@ -273,6 +274,27 @@ async def delete_dataset_endpoint(
             f"Dataset {dataset_id} had no valid storage path '{storage_uri_to_delete}', skipping object deletion task."
         )
 
+    # Queue deletion for background data file
+    if background_uri_to_delete and background_uri_to_delete.startswith("s3://"):
+        try:
+            backend_celery_app.send_task(
+                task_name,
+                args=[background_uri_to_delete],
+                queue="dataset",
+            )
+            logger.info(
+                f"Queued task '{task_name}' to delete background data object: {background_uri_to_delete}"
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to queue deletion task for background data object {background_uri_to_delete}: {e}",
+                exc_info=True,
+            )
+    else:
+        logger.debug( # Changed to debug as it's common for background data to not exist
+            f"Dataset {dataset_id} had no valid background storage path '{background_uri_to_delete}', skipping object deletion task."
+        )
+        
     return None  # Return No Content (HTTP 204)
 
 
