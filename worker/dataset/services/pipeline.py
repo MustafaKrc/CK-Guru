@@ -68,7 +68,7 @@ class PipelineRunner:
                 )
 
                 # Update overall progress based on step completion
-                runner_progress = int(100 * ((i + 1) / total_steps))
+                runner_progress = min(99, int(100 * ((i + 1) / total_steps)))
                 if context.task_instance:
                     await context.task_instance.update_task_state( 
                         state=JobStatusEnum.RUNNING.value,

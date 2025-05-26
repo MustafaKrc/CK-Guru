@@ -57,7 +57,9 @@ async def _generate_dataset_task_async(self: EventPublishingTask, dataset_id: in
         initial_context = DatasetContext(
             dataset_id=dataset_id,
             task_instance=self,
-            # Other fields will be populated by LoadConfigurationStep
+            event_job_type="dataset_generation", 
+            event_entity_type="Dataset",         
+            event_entity_id=dataset_id,
         )
 
         # --- Execute Pipeline ---
@@ -72,15 +74,15 @@ async def _generate_dataset_task_async(self: EventPublishingTask, dataset_id: in
             f"Dataset generation complete. Rows written: {final_context.rows_written}."
         )
         # Update Celery state one last time to ensure SUCCESS state and final message
-        self.update_state(
-            state=JobStatusEnum.SUCCESS,
-            meta={
-                "progress": 100,
-                "step": "Completed",
-                "message": success_message,
-                "path": final_context.output_storage_uri,
-            },
+        await initial_context.task_instance.update_task_state(
+            state=JobStatusEnum.SUCCESS.value,
+            progress=100,
+            status_message=success_message,
+            job_type=initial_context.event_job_type,
+            entity_id=initial_context.event_entity_id,
+            entity_type=initial_context.event_entity_type,
         )
+
         logger.info(f"Task {task_id}: Final State: SUCCESS. {success_message}")
         return {  # Return final status payload
             "dataset_id": final_context.dataset_id,

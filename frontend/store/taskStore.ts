@@ -51,16 +51,20 @@ export const useTaskStore = create<TaskStoreState>()(
         sseEventSourceInstance: null,
         
         setTaskStatus: (payload) => {
-         // console.log(`Zustand: Setting status for task ${payload.task_id}`, payload);
-          set((state) => ({
-            taskStatuses: {
-              ...state.taskStatuses,
-              [payload.task_id]: {
-                 ...(state.taskStatuses[payload.task_id] || {}), // Merge with existing if any
-                 ...payload, // Apply new updates
-              }
-            },
-          }));
+          console.log(`Zustand: Setting status for task ${payload.task_id}`, payload);
+          set((state) => {
+            const newState = {
+              taskStatuses: {
+                ...state.taskStatuses,
+                [payload.task_id]: {
+                   ...(state.taskStatuses[payload.task_id] || {}), // Merge with existing if any
+                   ...payload, // Apply new updates
+                }
+              },
+            };
+            console.log('Zustand: New state after update:', newState);
+            return newState;
+          });
         },
 
         removeTaskStatus: (taskId) =>
@@ -99,8 +103,9 @@ export const useTaskStore = create<TaskStoreState>()(
             try {
               if (typeof event.data === 'string') {
                 const data: TaskStatusUpdatePayload = JSON.parse(event.data);
-               //  console.log("SSE 'task_update' received:", data);
+                console.log("SSE 'task_update' received:", data);
                 get().setTaskStatus(data);
+                console.log("Updated task statuses:", get().taskStatuses);
               } else {
                 console.warn("Received non-string data for 'task_update' event:", event.data);
               }
