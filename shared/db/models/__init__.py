@@ -10,6 +10,7 @@ from .ml_model import MLModel
 from .repository import Repository
 from .training_job import JobStatusEnum, TrainingJob
 from .xai_result import XAIResult
+from .ml_model_type_definition import MLModelTypeDefinitionDB
 
 __all__ = [
     "BotPattern",
@@ -26,4 +27,5 @@ __all__ = [
     "Repository",
     "TrainingJob",
     "XAIResult",
+    "MLModelTypeDefinitionDB",
 ]

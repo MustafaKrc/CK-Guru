@@ -1,6 +1,6 @@
 # worker/ml/services/strategies/lightgbm_strategy.py
 import logging
-from typing import Any, Dict, Optional, Type  # Added Optional
+from typing import Any, Dict, List, Optional, Type  # Added Optional
 
 import lightgbm as lgb  # Import LightGBM
 import pandas as pd
@@ -9,6 +9,7 @@ from sklearn.preprocessing import LabelEncoder
 
 from services.interfaces.i_artifact_service import IArtifactService
 from shared.schemas.enums import ModelTypeEnum
+from shared.schemas.ml_model_type_definition import HyperparameterDefinitionSchema
 
 from .base_strategy import BaseModelStrategy, TrainResult
 
@@ -27,6 +28,25 @@ class LightGBMStrategy(BaseModelStrategy):
     ):
         super().__init__(model_type, model_config, job_config, artifact_service)
         self.label_encoder: Optional[LabelEncoder] = None
+
+    @staticmethod
+    def get_supported_model_types_with_schemas() -> Dict[ModelTypeEnum, List[HyperparameterDefinitionSchema]]:
+        lgbm_schema = [
+            HyperparameterDefinitionSchema(name="boosting_type", type="text_choice", default_value="gbdt", options=[{"value":"gbdt", "label":"Gradient Boosting Decision Tree"}, {"value":"dart", "label":"DART"}, {"value":"goss", "label":"Gradient-based One-Side Sampling"}, {"value":"rf", "label":"Random Forest"}], description="Type of boosting algorithm."),
+            HyperparameterDefinitionSchema(name="num_leaves", type="integer", default_value=31, description="Maximum tree leaves for base learners.", range={"min":2, "max":200}),
+            HyperparameterDefinitionSchema(name="learning_rate", type="float", default_value=0.1, description="Boosting learning rate.", range={"min":0.001, "max":1.0}, log=True),
+            HyperparameterDefinitionSchema(name="n_estimators", type="integer", default_value=100, description="Number of boosted trees to fit.", range={"min":10, "max":1000, "step":10}),
+            HyperparameterDefinitionSchema(name="max_depth", type="integer", default_value=-1, description="Maximum tree depth for base learners, -1 means no limit.", range={"min":-1, "max":50}),
+            HyperparameterDefinitionSchema(name="min_child_samples", type="integer", default_value=20, alias="min_data_in_leaf", description="Minimum number of data needed in a child (leaf).", range={"min":1, "max":100}),
+            HyperparameterDefinitionSchema(name="subsample", type="float", default_value=1.0, alias="bagging_fraction", description="Subsample ratio of the training instance.", range={"min":0.1, "max":1.0}),
+            HyperparameterDefinitionSchema(name="colsample_bytree", type="float", default_value=1.0, alias="feature_fraction", description="Subsample ratio of columns when constructing each tree.", range={"min":0.1, "max":1.0}),
+            HyperparameterDefinitionSchema(name="reg_alpha", type="float", default_value=0.0, alias="lambda_l1", description="L1 regularization term on weights.", range={"min":0.0, "max":1.0}),
+            HyperparameterDefinitionSchema(name="reg_lambda", type="float", default_value=0.0, alias="lambda_l2", description="L2 regularization term on weights.", range={"min":0.0, "max":1.0}),
+            HyperparameterDefinitionSchema(name="is_unbalance", type="boolean", default_value=False, alias="scale_pos_weight_for_unbalanced", description="Set to true if training data is unbalanced. For binary classification, it sets scale_pos_weight to (#neg_samples/#pos_samples)."), # Note: LightGBM can also take scale_pos_weight directly as float
+        ]
+        return {
+            ModelTypeEnum.LIGHTGBM_CLASSIFIER: lgbm_schema,
+        }
 
     def _initialize_model_internals(self):
         if "objective" not in self.model_config:

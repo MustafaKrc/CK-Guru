@@ -1,10 +1,11 @@
 # backend/app/api/v1/endpoints/ml_jobs.py
 import logging
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session as SyncSession
 
 from app import crud
 from app.core.celery_app import backend_celery_app
@@ -18,10 +19,50 @@ from shared.schemas.enums import (
     JobStatusEnum,
 )
 
+from sqlalchemy.ext.asyncio import AsyncSession
+from shared.db_session import get_async_db_session # Ensure using async session for API
+from shared.repositories import MLModelTypeDefinitionRepository # Async version if exists, or adapt
+from shared.schemas.ml_model_type_definition import AvailableModelTypeResponse # For API response
+
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
 
 router = APIRouter()
+
+# TODO: Implement proper implementation with repository...
+@router.get(
+    "/model-types",
+    response_model=List[AvailableModelTypeResponse],
+    summary="List Available Model Types for Training",
+    description="Retrieves a list of all enabled model types that can be used for new training jobs, including their hyperparameter schemas.",
+)
+async def list_available_model_types(
+    db: AsyncSession = Depends(get_async_db_session),
+):
+    logger.info("API: Fetching available model types.")
+    
+    def get_types_sync(session: SyncSession):
+        repo = MLModelTypeDefinitionRepository(lambda: session)
+        db_model_types = repo.get_all_enabled(limit=200)
+        # Convert each DB model to response schema properly
+        response_list = []
+        for mt in db_model_types:
+            response_list.append(AvailableModelTypeResponse(
+                type_name=mt.type_name.value if hasattr(mt.type_name, 'value') else str(mt.type_name),
+                display_name=mt.display_name,
+                description=mt.description,
+                hyperparameter_schema=mt.hyperparameter_schema
+            ))
+        return response_list
+
+    try:
+        response_data = await db.run_sync(get_types_sync)
+        logger.info(f"API: Returning {len(response_data)} available model types.")
+        return response_data
+    except Exception as e:
+        logger.error(f"API: Error fetching model types: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to retrieve model types.")
+
 
 # === Training Jobs ===
 

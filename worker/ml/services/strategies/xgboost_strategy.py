@@ -1,6 +1,6 @@
 # worker/ml/services/strategies/xgboost_strategy.py
 import logging
-from typing import Any, Dict, Optional, Type
+from typing import Any, Dict, List, Optional, Type
 
 import pandas as pd
 import xgboost as xgb  # Import XGBoost
@@ -8,7 +8,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder  # For handling string labels if any
 
 from services.interfaces.i_artifact_service import IArtifactService
-from shared.schemas.enums import ModelTypeEnum  # Though model_type is passed
+from shared.schemas.enums import ModelTypeEnum
+from shared.schemas.ml_model_type_definition import HyperparameterDefinitionSchema  # Though model_type is passed
 
 from .base_strategy import BaseModelStrategy, TrainResult
 
@@ -29,6 +30,26 @@ class XGBoostStrategy(BaseModelStrategy):
         self.label_encoder: Optional[LabelEncoder] = (
             None  # For target variable encoding
         )
+
+    @staticmethod
+    def get_supported_model_types_with_schemas() -> Dict[ModelTypeEnum, List[HyperparameterDefinitionSchema]]:
+        xgb_schema = [
+            HyperparameterDefinitionSchema(name="n_estimators", type="integer", default_value=100, description="Number of gradient boosted trees. Equivalent to number of boosting rounds.", range={"min":10, "max":1000, "step":10}),
+            HyperparameterDefinitionSchema(name="learning_rate", type="float", default_value=0.1, alias="eta", description="Step size shrinkage used in update to prevents overfitting.", range={"min":0.001, "max":1.0}, log=True),
+            HyperparameterDefinitionSchema(name="max_depth", type="integer", default_value=6, description="Maximum depth of a tree.", range={"min":1, "max":20}),
+            HyperparameterDefinitionSchema(name="min_child_weight", type="integer", default_value=1, description="Minimum sum of instance weight (hessian) needed in a child.", range={"min":0, "max":100}), # Can be float too
+            HyperparameterDefinitionSchema(name="gamma", type="float", default_value=0, alias="min_split_loss", description="Minimum loss reduction required to make a further partition on a leaf node of the tree.", range={"min":0.0, "max":10.0}),
+            HyperparameterDefinitionSchema(name="subsample", type="float", default_value=1, description="Subsample ratio of the training instances.", range={"min":0.1, "max":1.0}),
+            HyperparameterDefinitionSchema(name="colsample_bytree", type="float", default_value=1, description="Subsample ratio of columns when constructing each tree.", range={"min":0.1, "max":1.0}),
+            HyperparameterDefinitionSchema(name="reg_alpha", type="float", default_value=0, alias="alpha", description="L1 regularization term on weights.", range={"min":0.0, "max":1.0}),
+            HyperparameterDefinitionSchema(name="reg_lambda", type="float", default_value=1, alias="lambda", description="L2 regularization term on weights.", range={"min":0.0, "max":1.0}),
+            HyperparameterDefinitionSchema(name="scale_pos_weight", type="float", default_value=1, description="Control the balance of positive and negative weights, useful for unbalanced classes.", range={"min":0.0, "max":100.0}),
+            # objective is often set by _initialize_model_internals based on task
+            # eval_metric is also important but might be passed to fit
+        ]
+        return {
+            ModelTypeEnum.XGBOOST_CLASSIFIER: xgb_schema,
+        }
 
     def _initialize_model_internals(self):
         # XGBoost specific initializations, if any, could go here.
