@@ -7,7 +7,12 @@ import {
   DatasetCreatePayload,
   DatasetTaskResponse,
   RuleDefinition, // Assuming this is defined in a new file or dataset.ts
-  PaginatedDatasetRead // For getDatasets (used in other parts, good to have)
+  PaginatedDatasetRead, // For getDatasets (used in other parts, good to have)
+  MLModelRead, 
+  PaginatedMLModelRead,
+  TrainingJobCreatePayload, 
+  TrainingJobSubmitResponse,
+  TrainingJobRead,
 } from "@/types/api"; // Assuming types are in @/types/api/*
 
 const API_BASE_URL =  `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/api/v1`;
@@ -140,7 +145,40 @@ export const apiService = {
     if (params?.repository_id !== undefined) queryParams.append('repository_id', String(params.repository_id)); // Add repo_id if provided
     return apiService.get<PaginatedDatasetRead>(`/datasets?${queryParams.toString()}`);
   },
-  // Add other dataset-related API calls (getDatasetById, downloadDataset, etc.) here as needed
+  // --- ML Models ---
+  getModels: async (params?: {
+    skip?: number;
+    limit?: number;
+    model_name?: string;
+    model_type?: string;
+    dataset_id?: number;
+    repository_id?: number; // Add if backend supports listing models by repo
+  }): Promise<PaginatedMLModelRead> => {
+    const queryParams = new URLSearchParams();
+    if (params) {
+        if (params.skip !== undefined) queryParams.append('skip', String(params.skip));
+        if (params.limit !== undefined) queryParams.append('limit', String(params.limit));
+        if (params.model_name) queryParams.append('model_name', params.model_name);
+        if (params.model_type) queryParams.append('model_type', params.model_type);
+        if (params.dataset_id !== undefined) queryParams.append('dataset_id', String(params.dataset_id));
+        if (params.repository_id !== undefined) queryParams.append('repository_id', String(params.repository_id));
+    }
+    return apiService.get<PaginatedMLModelRead>(`/ml/models?${queryParams.toString()}`);
+  },
+
+  getModelDetails: async (modelId: number): Promise<MLModelRead> => {
+    // This endpoint MUST return hyperparameter_schema for dynamic form generation
+    return apiService.get<MLModelRead>(`/ml/models/${modelId}`);
+  },
+
+  // --- Training Jobs ---
+  submitTrainingJob: async (payload: TrainingJobCreatePayload): Promise<TrainingJobSubmitResponse> => {
+    return apiService.post<TrainingJobSubmitResponse, TrainingJobCreatePayload>('/ml/train', payload);
+  },
+
+  getTrainingJobDetails: async (jobId: string | number): Promise<TrainingJobRead> => {
+    return apiService.get<TrainingJobRead>(`/ml/train/${jobId}`);
+  },
 };
 
 // Utility to show toast notifications for API errors
@@ -162,7 +200,7 @@ export const handleApiError = (
   });
 };
 
-// --- Dedicated API Service Functions (already present in your file, keep them) ---
+// --- Dedicated API Service Functions ---
 import {
   PaginatedInferenceJobRead,
   InferenceJobRead,

@@ -54,7 +54,7 @@ export default function ModelsPage() {
   const fetchDatasetsForFilter = useCallback(async () => {
     setIsLoadingDatasets(true);
     try {
-      const response = await apiService.get<PaginatedDatasetRead>(`/datasets?limit=500&status=ready`);
+      const response = await apiService.get<PaginatedDatasetRead>(`/datasets?limit=200&status=ready`);
       setDatasets(response.items || []);
     } catch (err) {
       handleApiError(err, "Failed to fetch datasets for filter");
