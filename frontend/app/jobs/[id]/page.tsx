@@ -24,7 +24,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { KeyValueDisplay } from "@/components/ui/KeyValueDisplay";
 
 import { apiService, handleApiError } from "@/lib/apiService";
-import { TrainingJobRead, TrainingConfig } from "@/types/api/training-job";
+import { TrainingJobRead, TrainingRunConfig } from "@/types/api/training-job";
 import { HPSearchJobRead, HPSearchConfig, HPSuggestion } from "@/types/api/hp-search-job";
 import { TaskResponse } from "@/types/api/task";
 import { useTaskStore, TaskStatusUpdatePayload } from "@/store/taskStore";

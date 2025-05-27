@@ -13,6 +13,9 @@ import {
   TrainingJobCreatePayload, 
   TrainingJobSubmitResponse,
   TrainingJobRead,
+  DatasetRead,
+  Repository,
+  AvailableModelType,
 } from "@/types/api"; // Assuming types are in @/types/api/*
 
 const API_BASE_URL =  `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/api/v1`;
@@ -146,6 +149,10 @@ export const apiService = {
     return apiService.get<PaginatedDatasetRead>(`/datasets?${queryParams.toString()}`);
   },
   // --- ML Models ---
+
+  getAvailableModelTypes: async (): Promise<AvailableModelType[]> => {
+    return request<AvailableModelType[]>('/ml/model-types');
+  },
   getModels: async (params?: {
     skip?: number;
     limit?: number;

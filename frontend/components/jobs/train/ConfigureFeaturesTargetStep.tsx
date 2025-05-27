@@ -34,11 +34,11 @@ export const ConfigureFeaturesTargetStep: React.FC<ConfigureFeaturesTargetStepPr
       if (formData.selectedFeatures.length === 0) { // Only initialize if not already set
         updateFormData({ selectedFeatures: [...formData.datasetFeatureSpace] });
       }
-      if (!formData.targetColumn && formData.datasetTargetColumn) { // Only initialize if not already set and dataset has one
-        updateFormData({ targetColumn: formData.datasetTargetColumn });
+      if (!formData.trainingTargetColumn && formData.datasetTargetColumn) { // Only initialize if not already set and dataset has one
+        updateFormData({ trainingTargetColumn: formData.datasetTargetColumn });
       }
     }
-  }, [formData.datasetFeatureSpace, formData.datasetTargetColumn, formData.selectedFeatures.length, formData.targetColumn, updateFormData]);
+  }, [formData.datasetFeatureSpace, formData.datasetTargetColumn, formData.selectedFeatures.length, formData.trainingTargetColumn, updateFormData]);
 
 
   const handleFeatureToggle = (featureName: string) => {
@@ -57,7 +57,7 @@ export const ConfigureFeaturesTargetStep: React.FC<ConfigureFeaturesTargetStepPr
   };
 
   const handleTargetColumnChange = (newTarget: string) => {
-    updateFormData({ targetColumn: newTarget });
+    updateFormData({ trainingTargetColumn: newTarget });
   };
 
   const filteredAvailableFeatures = useMemo(() => {
@@ -156,7 +156,7 @@ export const ConfigureFeaturesTargetStep: React.FC<ConfigureFeaturesTargetStepPr
         <CardContent className="space-y-2">
           <Label htmlFor="target-column-select">Target Column *</Label>
           <Select
-            value={formData.targetColumn || ""}
+            value={formData.trainingTargetColumn || ""}
             onValueChange={handleTargetColumnChange}
             disabled={potentialTargetColumns.length === 0}
           >
@@ -175,15 +175,15 @@ export const ConfigureFeaturesTargetStep: React.FC<ConfigureFeaturesTargetStepPr
               ))}
             </SelectContent>
           </Select>
-          {formData.targetColumn && formData.datasetTargetColumn && formData.targetColumn !== formData.datasetTargetColumn && (
+          {formData.trainingTargetColumn && formData.datasetTargetColumn && formData.trainingTargetColumn !== formData.datasetTargetColumn && (
              <Alert variant="default" className="mt-2 text-xs p-2">
                 <HelpCircle className="h-3.5 w-3.5"/>
                 <AlertDescription>
-                    You have selected a different target column (<strong>{formData.targetColumn}</strong>) than the one configured during dataset creation (<strong>{formData.datasetTargetColumn}</strong>). Ensure this is intentional.
+                    You have selected a different target column (<strong>{formData.trainingTargetColumn}</strong>) than the one configured during dataset creation (<strong>{formData.datasetTargetColumn}</strong>). Ensure this is intentional.
                 </AlertDescription>
             </Alert>
           )}
-           {!formData.targetColumn && (
+           {!formData.trainingTargetColumn && (
              <p className="text-xs text-muted-foreground pt-1">
                 Please select the column the model should predict.
             </p>

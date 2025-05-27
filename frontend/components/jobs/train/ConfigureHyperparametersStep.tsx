@@ -152,7 +152,7 @@ export const ConfigureHyperparametersStep: React.FC<ConfigureHyperparametersStep
   }, [formData.modelHyperparametersSchema, formData.configuredHyperparameters, updateFormData]);
 
 
-  if (!formData.modelId || !formData.modelName) {
+  if (!formData.modelType) {
     return (
       <Alert variant="default">
         <AlertDescription>
@@ -166,7 +166,7 @@ export const ConfigureHyperparametersStep: React.FC<ConfigureHyperparametersStep
     return (
       <Alert variant="default">
         <AlertDescription>
-          No configurable hyperparameters defined for the selected model ({formData.modelName}).
+          No configurable hyperparameters defined for the selected model ({formData.modelType}).
           The model will be trained with its default settings.
         </AlertDescription>
       </Alert>
@@ -179,18 +179,18 @@ export const ConfigureHyperparametersStep: React.FC<ConfigureHyperparametersStep
         <CardHeader>
           <CardTitle className="flex items-center"><Settings2 className="mr-2 h-5 w-5 text-primary"/>Hyperparameter Configuration</CardTitle>
           <CardDescription>
-            Adjust hyperparameters for the selected model: <strong>{formData.modelName}</strong> (Type: {formData.modelType}).
+            Adjust hyperparameters for the selected model: <strong>{formData.modelType}</strong> (Type: {formData.modelType}).
             Values set here will override model defaults.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <ScrollArea className="max-h-[calc(100vh-450px)] pr-3"> {/* Adjust max-h as needed */}
             <div className="space-y-6">
-              {formData.modelHyperparametersSchema.map((hpDef) => (
-                <div key={hpDef.name} className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2 items-start">
+              {formData.modelHyperparametersSchema.map((hpDef, index) => (
+                <div key={hpDef.name || `hp-${index}`} className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2 items-start">
                   <div className="md:col-span-1 flex items-center space-x-1 pt-1.5">
-                    <Label htmlFor={hpDef.name} className="text-sm font-medium whitespace-nowrap">
-                      {hpDef.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    <Label htmlFor={hpDef.name || `hp-${index}`} className="text-sm font-medium whitespace-nowrap">
+                      {hpDef.name ? hpDef.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : `Parameter ${index + 1}`}
                       {hpDef.required && <span className="text-destructive ml-1">*</span>}
                     </Label>
                     {hpDef.description && (
@@ -215,8 +215,8 @@ export const ConfigureHyperparametersStep: React.FC<ConfigureHyperparametersStep
                   <div className="md:col-span-2">
                     <HyperparameterInputFactory
                       definition={hpDef}
-                      currentValue={formData.configuredHyperparameters[hpDef.name]}
-                      onChange={(value) => handleHyperparameterChange(hpDef.name, value)}
+                      currentValue={formData.configuredHyperparameters[hpDef.name || `hp-${index}`]}
+                      onChange={(value) => handleHyperparameterChange(hpDef.name || `hp-${index}`, value)}
                     />
                   </div>
                 </div>

@@ -67,7 +67,7 @@ from .repository import (
 from .rule_definition import RuleDefinition, RuleParamDefinition
 from .task import TaskResponse, TaskStatusEnum, TaskStatusResponse
 from .training_job import (
-    TrainingConfig,
+    TrainingRunConfig,
     TrainingJobBase,
     TrainingJobCreate,
     TrainingJobRead,
@@ -136,7 +136,7 @@ __all__ = [
     "TrainingJobCreate",
     "TrainingJobRead",
     "TrainingJobUpdate",
-    "TrainingConfig",
+    "TrainingRunConfig",
     "TrainingJobSubmitResponse",
     "PaginatedTrainingJobRead",  
     "HPSearchJobBase",

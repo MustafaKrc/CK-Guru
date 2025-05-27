@@ -11,10 +11,10 @@ export interface HyperparameterDefinition {
   name: string;
   type: "integer" | "float" | "string" | "boolean" | "enum" | "text_choice";
   description?: string;
-  default_value?: any; // Default value for the hyperparameter
-  example_value?: any; // Example value (can be same as default or different)
-  options?: Array<{ value: string | number; label: string }>; // For enum or text_choice
-  range?: { min?: number; max?: number; step?: number }; // For numeric types
+  default_value?: any; 
+  example_value?: any; 
+  options?: Array<{ value: string | number | boolean; label: string }>; // Value can be boolean for boolean type with choices
+  range?: { min?: number; max?: number; step?: number };
   required?: boolean;
 }
 
@@ -26,26 +26,25 @@ export interface TrainingJobFormData {
   repositoryId: number | null;
   repositoryName?: string; // For display purposes
   datasetId: number | null;
-  datasetName?: string; // For display purposes
-  datasetFeatureSpace: string[]; // Available features from the selected dataset
-  datasetTargetColumn?: string | null; // Target column from dataset config (often fixed)
+  datasetName?: string; 
+  datasetFeatureSpace: string[]; 
+  datasetTargetColumn?: string | null; // The target column defined in the dataset's config
 
-  // Step 2: Model Selection
-  modelId: number | null;
-  modelType: ModelTypeEnum | null; // Use the enum from your API types
-  modelName: string | null;
-  modelHyperparametersSchema: HyperparameterDefinition[]; // Schema for the selected model's HPs
+  // Step 2: Model Type Selection
+  modelType: ModelTypeEnum | null; 
+  modelDisplayName?: string; 
+  modelHyperparametersSchema: HyperparameterDefinition[];
 
   // Step 3: Hyperparameter Configuration
   configuredHyperparameters: Record<string, any>;
 
-  // Step 4: Feature & Target Configuration (Refinement)
+  // Step 4: Feature & Target Configuration (Training Specific)
   selectedFeatures: string[];
-  targetColumn: string | null; // Final target column selection for training
+  trainingTargetColumn: string | null; // The target column to be used for this specific training run
 
   // Step 5: Job Naming & Review
-  trainingJobName: string;
-  // Any other job-specific settings like description can be added here
+  trainingJobName: string; // Name for the TrainingJobDB record
+  modelBaseName: string;   // Base name for the MLModelDB record (backend will add version)
   trainingJobDescription?: string;
 
   randomSeed?: number | null; // Optional random seed for reproducibility
@@ -63,19 +62,20 @@ export const initialTrainingJobFormData: TrainingJobFormData = {
   datasetFeatureSpace: [],
   datasetTargetColumn: null,
 
-  modelId: null,
   modelType: null,
-  modelName: null,
+  modelDisplayName: undefined,
   modelHyperparametersSchema: [],
 
   configuredHyperparameters: {},
 
   selectedFeatures: [],
-  targetColumn: null, // Default to null, will be populated from dataset or selected
+  trainingTargetColumn: null,
 
   trainingJobName: "",
+  modelBaseName: "",
   trainingJobDescription: "",
 };
+
 
 // Types for the "Create Dataset" modal/sub-flow within the wizard
 export interface NewDatasetWizardData {
@@ -83,5 +83,5 @@ export interface NewDatasetWizardData {
   description?: string;
   feature_columns: string[];
   target_column: string;
-  cleaning_rules: CleaningRuleConfig[]; // Re-use from api/dataset.ts
+  cleaning_rules: CleaningRuleConfig[];
 }

@@ -1,7 +1,7 @@
 // frontend/app/jobs/train/page.tsx
 "use client";
 
-import React, { useState, useCallback, Suspense } from "react";
+import React, { useState, useCallback, Suspense, useMemo } from "react";
 import { useRouter } // , useSearchParams // if needed for initial params
 from "next/navigation";
 import { MainLayout } from "@/components/main-layout";
@@ -22,7 +22,7 @@ import { ConfigureFeaturesTargetStep } from "@/components/jobs/train/ConfigureFe
 import { ReviewAndSubmitStep } from "@/components/jobs/train/ReviewAndSubmitStep";
 
 import { apiService, handleApiError, ApiError } from "@/lib/apiService";
-import { TrainingJobCreatePayload, TrainingJobSubmitResponse } from "@/types/api/training-job";
+import { TrainingJobCreatePayload, TrainingRunConfig, TrainingJobSubmitResponse } from "@/types/api/training-job";
 
 
 const WIZARD_STEPS = [
@@ -48,25 +48,6 @@ function CreateTrainingJobPageContent() {
     setFormData((prev) => ({ ...prev, ...updates }));
   }, []);
 
-  const validateStep = (step: number): boolean => {
-    // Basic validation logic for each step
-    // More detailed validation should happen within each step component or on "Next"
-    switch (step) {
-      case 1: // Repository & Dataset
-        return !!formData.repositoryId && !!formData.datasetId;
-      case 2: // Model
-        return !!formData.modelId && !!formData.modelType && !!formData.modelName;
-      case 3: // Hyperparameters
-        // Validation can be complex here, e.g., ensuring required HPs are set if schema indicates
-        return true; // For now, assume valid or validated within step
-      case 4: // Features & Target
-        return formData.selectedFeatures.length > 0 && !!formData.targetColumn;
-      case 5: // Review & Submit (Job Name)
-        return formData.trainingJobName.trim() !== "";
-      default:
-        return false;
-    }
-  };
   
   const handleStepNavigation = (stepNumber: number) => {
     if (stepNumber <= maxCompletedStep + 1 && stepNumber <= TOTAL_STEPS && stepNumber >= 1) {
@@ -80,13 +61,67 @@ function CreateTrainingJobPageContent() {
     }
   };
 
+  const validateStep = (step: number): boolean => {
+    switch (step) {
+      case 1: // Repository & Dataset
+        if (!formData.repositoryId || !formData.datasetId) {
+          toast({ title: "Missing Information", description: "Please select both a repository and a dataset.", variant: "destructive" });
+          return false;
+        }
+        return true;
+      case 2: // Model Type
+        if (!formData.modelType) {
+          toast({ title: "Missing Information", description: "Please select a model type.", variant: "destructive" });
+          return false;
+        }
+        return true;
+      case 3: // Hyperparameters
+        return true; // For now, assume HPs are optional or defaults are fine
+      case 4: // Features & Target
+        if (formData.selectedFeatures.length === 0) {
+          toast({ title: "Missing Features", description: "Please select at least one feature for training.", variant: "destructive" });
+          return false;
+        }
+        if (!formData.trainingTargetColumn) {
+          toast({ title: "Missing Target", description: "Please select a target column for training.", variant: "destructive" });
+          return false;
+        }
+        return true;
+      case 5: // Review & Submit (Job Name & Model Base Name)
+        if (!formData.trainingJobName.trim()) {
+          toast({ title: "Job Name Required", description: "Please provide a name for this training job.", variant: "destructive" });
+          return false;
+        }
+        if (!formData.modelBaseName.trim()) {
+          toast({ title: "Model Name Required", description: "Please provide a base name for the new model.", variant: "destructive" });
+          return false;
+        }
+        return true;
+      default:
+        return false;
+    }
+  };
+
+  // Validation function without side effects for determining disabled state
+  const isStepValid = useMemo(() => {
+    switch (currentStep) {
+      case 1:
+        return !!(formData.repositoryId && formData.datasetId);
+      case 2:
+        return !!formData.modelType;
+      case 3:
+        return true;
+      case 4:
+        return formData.selectedFeatures.length > 0 && !!formData.trainingTargetColumn;
+      case 5:
+        return !!(formData.trainingJobName.trim() && formData.modelBaseName.trim());
+      default:
+        return false;
+    }
+  }, [currentStep, formData]);
+
   const handleNext = () => {
     if (!validateStep(currentStep)) {
-      toast({
-        title: "Validation Error",
-        description: WIZARD_STEPS[currentStep - 1].description + " is not fully configured.",
-        variant: "destructive",
-      });
       return;
     }
     if (currentStep < TOTAL_STEPS) {
@@ -105,24 +140,30 @@ function CreateTrainingJobPageContent() {
   };
 
   const handleSubmitTrainingJob = async () => {
-    if (!validateStep(TOTAL_STEPS)) {
-        toast({ title: "Validation Error", description: "Please provide a name for the training job.", variant: "destructive" });
-        return;
-    }
+    // Final validation before submission (redundant if handleNext already does it, but good for safety)
+    if (!validateStep(TOTAL_STEPS)) return; 
+
     setIsSubmitting(true);
     setSubmissionError(null);
 
+    // Construct the TrainingRunConfig part
+    const trainingRunConfig: TrainingRunConfig = {
+        model_name: formData.modelBaseName!, // Use model_name instead of model_base_name
+        model_type: formData.modelType!,
+        hyperparameters: formData.configuredHyperparameters,
+        feature_columns: formData.selectedFeatures,
+        target_column: formData.trainingTargetColumn!,
+        // Defaulting these, or they could be part of formData if made configurable in UI
+        random_seed: 42, 
+        eval_test_split_size: 0.2,
+    };
+    
+    // Construct the final payload
     const payload: TrainingJobCreatePayload = {
-      dataset_id: formData.datasetId!, // Assert non-null as validated
+      dataset_id: formData.datasetId!, 
       training_job_name: formData.trainingJobName,
       training_job_description: formData.trainingJobDescription || null,
-      model_base_name: formData.modelName!, // Backend will handle versioning
-      model_type: formData.modelType!,
-      hyperparameters: formData.configuredHyperparameters,
-      feature_columns: formData.selectedFeatures,
-      target_column: formData.targetColumn!,
-      random_seed: formData.randomSeed ?? 42, // Default if not in formData.config
-      eval_test_split_size: formData.evalTestSplitSize ?? 0.2, // Default if not in formData.config
+      config: trainingRunConfig, // Nest the training run config
     };
     
     try {
@@ -141,7 +182,7 @@ function CreateTrainingJobPageContent() {
     } catch (error) {
       const errorMsg = error instanceof ApiError ? error.message : "Failed to submit training job.";
       setSubmissionError(errorMsg);
-      handleApiError(error, "Training Job Submission Failed");
+      handleApiError(error, "Training Job Submission Failed"); // This will also show a toast
     } finally {
       setIsSubmitting(false);
     }
@@ -188,7 +229,7 @@ function CreateTrainingJobPageContent() {
           <Button variant="outline" onClick={handlePrevious} disabled={currentStep === 1 || isSubmitting}>
             <ArrowLeft className="mr-2 h-4 w-4" /> Previous
           </Button>
-          <Button onClick={handleNext} disabled={isSubmitting || !validateStep(currentStep)}>
+          <Button onClick={handleNext} disabled={isSubmitting || !isStepValid}>
             {isSubmitting && currentStep === TOTAL_STEPS ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : currentStep === TOTAL_STEPS ? (
