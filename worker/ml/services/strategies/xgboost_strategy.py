@@ -1,5 +1,6 @@
 # worker/ml/services/strategies/xgboost_strategy.py
 import logging
+import time
 from typing import Any, Dict, List, Optional, Type
 
 import pandas as pd
@@ -143,6 +144,7 @@ class XGBoostStrategy(BaseModelStrategy):
             X_train, y_train = X, y_processed
             # X_test, y_test remain empty if no split
 
+        training_time_seconds = 0.0
         try:
             self.model = self._get_model_instance()  # Get a fresh configured instance
             logger.info(f"Fitting {self.model.__class__.__name__}...")
@@ -164,7 +166,11 @@ class XGBoostStrategy(BaseModelStrategy):
                     f"Using early stopping with {fit_params['early_stopping_rounds']} rounds."
                 )
 
+            start_time = time.perf_counter()
             self.model.fit(X_train, y_train, **fit_params)
+            end_time = time.perf_counter()
+            training_time_seconds = round(end_time - start_time, 3)
+
             logger.info("XGBoost model fitting complete.")
         except Exception as e:
             logger.error(f"Error during XGBoost model fitting: {e}", exc_info=True)
@@ -183,6 +189,8 @@ class XGBoostStrategy(BaseModelStrategy):
             )
             metrics_train = self.evaluate(X_train, y_train)
             metrics = {f"train_{k}": v for k, v in metrics_train.items()}
+
+        metrics["training_time_seconds"] = training_time_seconds
 
         return TrainResult(model=self.model, metrics=metrics)
 

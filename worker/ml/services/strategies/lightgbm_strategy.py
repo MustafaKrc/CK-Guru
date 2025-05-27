@@ -1,5 +1,6 @@
 # worker/ml/services/strategies/lightgbm_strategy.py
 import logging
+import time
 from typing import Any, Dict, List, Optional, Type  # Added Optional
 
 import lightgbm as lgb  # Import LightGBM
@@ -116,6 +117,7 @@ class LightGBMStrategy(BaseModelStrategy):
             )
             X_train, y_train = X, y_processed
 
+        training_time_seconds = 0.0
         try:
             self.model = self._get_model_instance()
             logger.info(f"Fitting {self.model.__class__.__name__}...")
@@ -140,7 +142,11 @@ class LightGBMStrategy(BaseModelStrategy):
                     f"Using LightGBM early stopping with {self.model_config['early_stopping_rounds']} rounds."
                 )
 
+            start_time = time.perf_counter()
             self.model.fit(X_train, y_train, **fit_params)
+            end_time = time.perf_counter()
+            training_time_seconds = round(end_time - start_time, 3)
+
             logger.info("LightGBM model fitting complete.")
         except Exception as e:
             logger.error(f"Error during LightGBM model fitting: {e}", exc_info=True)
@@ -156,6 +162,8 @@ class LightGBMStrategy(BaseModelStrategy):
             )
             metrics_train = self.evaluate(X_train, y_train)
             metrics = {f"train_{k}": v for k, v in metrics_train.items()}
+
+        metrics["training_time_seconds"] = training_time_seconds
 
         return TrainResult(model=self.model, metrics=metrics)
 

@@ -1,5 +1,6 @@
 # worker/ml/services/strategies/sklearn_strategy.py
 import logging
+import time
 from typing import Any, Dict, List, Type
 
 import pandas as pd
@@ -248,10 +249,16 @@ class SklearnStrategy(BaseModelStrategy):
             X_train, y_train = X, y
             # X_test, y_test remain empty
 
+        training_time_seconds = 0.0
         try:
             current_model_instance = self._get_model_instance()  # Get a fresh instance
             logger.info(f"Fitting {current_model_instance.__class__.__name__}...")
+
+            start_time = time.perf_counter()
             current_model_instance.fit(X_train, y_train)
+            end_time = time.perf_counter()
+            training_time_seconds = round(end_time - start_time, 3)
+
             self.model = current_model_instance  # Assign fitted model to self.model
             logger.info("Model fitting complete.")
         except Exception as e:
@@ -267,6 +274,8 @@ class SklearnStrategy(BaseModelStrategy):
             # Optionally evaluate on training data, but be cautious interpreting these
             # metrics_train = self.evaluate(X_train, y_train)
             # metrics = {f"train_{k}": v for k, v in metrics_train.items()}
+
+        metrics["training_time_seconds"] = training_time_seconds
 
         return TrainResult(model=self.model, metrics=metrics)
 

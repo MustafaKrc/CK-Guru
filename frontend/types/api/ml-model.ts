@@ -5,6 +5,19 @@ import { TrainingJobRead } from "./training-job";
 import { HPSearchJobRead } from "./hp-search-job"; 
 import { HyperparameterDefinition } from "@/types/jobs"; // Corrected import path
 
+export interface ModelPerformanceMetrics {
+  accuracy?: number;
+  precision_weighted?: number;
+  recall_weighted?: number;
+  f1_weighted?: number;
+  roc_auc?: number;        // Keep
+  log_loss?: number;       // Keep
+  training_time_seconds?: number; // Keep
+  inference_latency_ms?: number; // Keep this, even if not populated by training
+                                  // It might be populated by other means later.
+  [key: string]: any; 
+}
+
 // Existing MLModelRead for trained models
 export interface MLModelRead {
   id: number;

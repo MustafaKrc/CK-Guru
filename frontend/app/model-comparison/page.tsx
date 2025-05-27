@@ -1,737 +1,599 @@
+// frontend/app/model-comparison/page.tsx
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import React, { useState, useEffect, useMemo, useCallback, Suspense } from "react"
+import Link from "next/link"
+import { useRouter } from "next/navigation" // For navigation actions
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Download, Info, Search, X } from "lucide-react"
+import { Download, Info, Search, X, BarChart2, CheckSquare, Layers, Maximize2, Minimize2, RefreshCw, AlertTriangle } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Input } from "@/components/ui/input"
-import { MainLayout } from "@/components/main-layout"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Checkbox } from "@/components/ui/checkbox"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Label } from "@/components/ui/label"
+import { PageLoader } from "@/components/ui/page-loader"
+import { toast } from "@/hooks/use-toast"
 
-interface ModelData {
-  id: string
-  name: string
-  type: string
-  accuracy: number
-  precision: number
-  recall: number
-  f1Score: number
-  auc: number
-  trainingTime: number
-  inferenceTime: number
-  lastUpdated: string
-  size: number
+import { MainLayout } from "@/components/main-layout"
+import { PageContainer } from "@/components/ui/page-container"
+
+import { apiService, handleApiError } from "@/lib/apiService"
+import { MLModelRead, PaginatedMLModelRead, ModelPerformanceMetrics } from "@/types/api/ml-model"
+
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip, // Alias to avoid conflict with shadcn Tooltip
+  Legend as RechartsLegend, // Alias
+  RadarChart,
+  Radar,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Cell, // For custom bar colors if needed
+} from "recharts"
+import { ChartContainer, ChartTooltipContent, ChartLegendContent } from "@/components/ui/chart" // shadcn/ui chart components
+
+
+const MAX_SELECTED_MODELS = 5; // Allow up to 5 models for comparison visualization
+
+// Define a more specific type for chart data to ensure consistency
+interface ChartModelData {
+  id: string;
+  name: string; // Short name for chart labels
+  version: number;
+  model_type: string;
+  metrics: ModelPerformanceMetrics & { // Flattened metrics for easier access
+    training_time_seconds?: number;
+    inference_latency_ms?: number;
+  };
 }
 
-const models: ModelData[] = [
-  {
-    id: "model1",
-    name: "CodeQuality-GPT",
-    type: "Transformer",
-    accuracy: 0.92,
-    precision: 0.89,
-    recall: 0.94,
-    f1Score: 0.91,
-    auc: 0.95,
-    trainingTime: 4.5,
-    inferenceTime: 0.12,
-    lastUpdated: "2023-09-15",
-    size: 1.2,
-  },
-  {
-    id: "model2",
-    name: "BugDetector-XGBoost",
-    type: "Gradient Boosting",
-    accuracy: 0.88,
-    precision: 0.92,
-    recall: 0.85,
-    f1Score: 0.88,
-    auc: 0.91,
-    trainingTime: 2.1,
-    inferenceTime: 0.05,
-    lastUpdated: "2023-09-10",
-    size: 0.4,
-  },
-  {
-    id: "model3",
-    name: "CodeReviewer-BERT",
-    type: "Transformer",
-    accuracy: 0.9,
-    precision: 0.87,
-    recall: 0.92,
-    f1Score: 0.89,
-    auc: 0.93,
-    trainingTime: 5.2,
-    inferenceTime: 0.15,
-    lastUpdated: "2023-09-05",
-    size: 1.5,
-  },
-  {
-    id: "model4",
-    name: "StyleChecker-RandomForest",
-    type: "Ensemble",
-    accuracy: 0.85,
-    precision: 0.84,
-    recall: 0.86,
-    f1Score: 0.85,
-    auc: 0.88,
-    trainingTime: 1.8,
-    inferenceTime: 0.04,
-    lastUpdated: "2023-08-28",
-    size: 0.3,
-  },
-  {
-    id: "model5",
-    name: "SecurityAnalyzer-CNN",
-    type: "Neural Network",
-    accuracy: 0.91,
-    precision: 0.9,
-    recall: 0.89,
-    f1Score: 0.9,
-    auc: 0.94,
-    trainingTime: 6.2,
-    inferenceTime: 0.18,
-    lastUpdated: "2023-09-20",
-    size: 2.1,
-  },
-  {
-    id: "model6",
-    name: "PerformancePredictor-LightGBM",
-    type: "Gradient Boosting",
-    accuracy: 0.87,
-    precision: 0.86,
-    recall: 0.88,
-    f1Score: 0.87,
-    auc: 0.9,
-    trainingTime: 1.9,
-    inferenceTime: 0.06,
-    lastUpdated: "2023-09-12",
-    size: 0.5,
-  },
-  {
-    id: "model7",
-    name: "DependencyAnalyzer-SVM",
-    type: "SVM",
-    accuracy: 0.83,
-    precision: 0.82,
-    recall: 0.84,
-    f1Score: 0.83,
-    auc: 0.86,
-    trainingTime: 1.2,
-    inferenceTime: 0.03,
-    lastUpdated: "2023-08-25",
-    size: 0.2,
-  },
-  {
-    id: "model8",
-    name: "CodeComplexity-RNN",
-    type: "Neural Network",
-    accuracy: 0.89,
-    precision: 0.88,
-    recall: 0.9,
-    f1Score: 0.89,
-    auc: 0.92,
-    trainingTime: 5.8,
-    inferenceTime: 0.14,
-    lastUpdated: "2023-09-08",
-    size: 1.8,
-  },
-]
+// Metrics for Radar Chart
+const RADAR_CHART_METRICS: Array<{ key: keyof ModelPerformanceMetrics; label: string; range: [number, number] }> = [
+  { key: "accuracy", label: "Accuracy", range: [0, 1] },
+  { key: "f1_weighted", label: "F1 (Weighted)", range: [0, 1] },
+  { key: "precision_weighted", label: "Precision (W)", range: [0, 1] },
+  { key: "recall_weighted", label: "Recall (W)", range: [0, 1] },
+  { key: "roc_auc", label: "AUC", range: [0, 1] },
+];
 
-// Model types for filtering
-const modelTypes = ["Transformer", "Gradient Boosting", "Ensemble", "Neural Network", "SVM"]
+// Metrics available for Bar Chart comparison
+const BAR_CHART_METRIC_OPTIONS: Array<{ value: keyof ChartModelData['metrics']; label: string }> = [
+  { value: "accuracy", label: "Accuracy" },
+  { value: "f1_weighted", label: "F1 Score (Weighted)" },
+  { value: "precision_weighted", label: "Precision (Weighted)" },
+  { value: "recall_weighted", label: "Recall (Weighted)" },
+  { value: "roc_auc", label: "ROC AUC" },
+  { value: "log_loss", label: "Log Loss" },
+  { value: "training_time_seconds", label: "Training Time (s)" },
+  { value: "inference_latency_ms", label: "Inference Latency (ms)" },
+];
 
-export default function ModelComparisonPage() {
-  const [selectedModels, setSelectedModels] = useState<string[]>([])
-  const [comparisonMetric, setComparisonMetric] = useState<string>("accuracy")
-  const [searchQuery, setSearchQuery] = useState("")
-  const [typeFilter, setTypeFilter] = useState("all")
-  const [activeTab, setActiveTab] = useState("comparison")
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const radarCanvasRef = useRef<HTMLCanvasElement>(null)
 
-  // Effect to redraw charts when tab changes or models are selected
+
+function ModelComparisonPageContent() {
+  const router = useRouter();
+
+  // --- State ---
+  const [allModels, setAllModels] = useState<MLModelRead[]>([]);
+  const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
+  
+  const [comparisonMetricKey, setComparisonMetricKey] = useState<keyof ChartModelData['metrics']>("accuracy");
+  
+  const [searchQuerySelection, setSearchQuerySelection] = useState("");
+  const [typeFilterSelection, setTypeFilterSelection] = useState("all");
+  
+  const [searchQueryTable, setSearchQueryTable] = useState("");
+  const [typeFilterTable, setTypeFilterTable] = useState("all");
+
+  const [activeTab, setActiveTab] = useState("comparison");
+  
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [availableModelTypes, setAvailableModelTypes] = useState<string[]>([]);
+
+  // --- Data Fetching ---
+  const fetchAllModels = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      // Fetch a large number of models, assuming comparison page benefits from seeing many.
+      // Backend pagination can be added later if performance becomes an issue.
+      const response = await apiService.getModels({ limit: 200 }); 
+      const fetchedModels = response.items || [];
+      setAllModels(fetchedModels);
+
+      const types = Array.from(new Set(fetchedModels.map(m => m.model_type))).sort();
+      setAvailableModelTypes(types);
+
+    } catch (err) {
+      handleApiError(err, "Failed to load models");
+      setError(err instanceof Error ? err.message : "Could not load models.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    if (selectedModels.length > 0) {
-      if (activeTab === "comparison") {
-        drawComparisonChart()
-        drawRadarChart()
-      }
-    }
-  }, [selectedModels, comparisonMetric, activeTab])
+    fetchAllModels();
+  }, [fetchAllModels]);
 
-  const toggleModelSelection = (modelId: string) => {
-    setSelectedModels((prev) => {
+  const filteredModelsForSelectionList = useMemo(() => {
+    return allModels.filter(model => {
+      const nameMatch = model.name.toLowerCase().includes(searchQuerySelection.toLowerCase()) ||
+                        model.version.toString().includes(searchQuerySelection.toLowerCase());
+      const typeMatch = typeFilterSelection === "all" || model.model_type === typeFilterSelection;
+      return nameMatch && typeMatch;
+    });
+  }, [allModels, searchQuerySelection, typeFilterSelection]);
+
+  const filteredModelsForTable = useMemo(() => {
+    return allModels.filter(model => {
+      const nameMatch = model.name.toLowerCase().includes(searchQueryTable.toLowerCase()) ||
+                        model.version.toString().includes(searchQueryTable.toLowerCase());
+      const typeMatch = typeFilterTable === "all" || model.model_type === typeFilterTable;
+      return nameMatch && typeMatch;
+    });
+  }, [allModels, searchQueryTable, typeFilterTable]);
+  
+  const selectedModelsData = useMemo<ChartModelData[]>(() => {
+    return selectedModelIds.map(id => {
+      const model = allModels.find(m => m.id.toString() === id);
+      if (!model) return null;
+      // Ensure performance_metrics exists before trying to spread it
+      const perfMetrics = model.performance_metrics || {};
+      return {
+        id: model.id.toString(),
+        name: `${model.name} v${model.version}`, // This will be used for dataKeys in radar
+        version: model.version,
+        model_type: model.model_type,
+        metrics: { 
+          ...perfMetrics, // Spread existing metrics
+          // Explicitly map known metrics to ensure they are numbers or undefined
+          accuracy: typeof perfMetrics.accuracy === 'number' ? perfMetrics.accuracy : undefined,
+          precision_weighted: typeof perfMetrics.precision_weighted === 'number' ? perfMetrics.precision_weighted : undefined,
+          recall_weighted: typeof perfMetrics.recall_weighted === 'number' ? perfMetrics.recall_weighted : undefined,
+          f1_weighted: typeof perfMetrics.f1_weighted === 'number' ? perfMetrics.f1_weighted : undefined,
+          roc_auc: typeof perfMetrics.roc_auc === 'number' ? perfMetrics.roc_auc : undefined,
+          log_loss: typeof perfMetrics.log_loss === 'number' ? perfMetrics.log_loss : undefined,
+          training_time_seconds: typeof perfMetrics.training_time_seconds === 'number' ? perfMetrics.training_time_seconds : undefined,
+          inference_latency_ms: typeof perfMetrics.inference_latency_ms === 'number' ? perfMetrics.inference_latency_ms : undefined,
+        }
+      };
+    }).filter(Boolean) as ChartModelData[];
+  }, [selectedModelIds, allModels]);
+
+  const radarChartFormattedData = useMemo(() => {
+    if (selectedModelsData.length === 0) return [];
+    
+    return RADAR_CHART_METRICS.map(metricInfo => {
+      const radarPoint: { subject: string; fullMark: number; [modelName: string]: string | number } = {
+        subject: metricInfo.label,
+        fullMark: metricInfo.range[1], // Use the max of the range as fullMark
+      };
+      selectedModelsData.forEach(model => {
+        // Use model.name as the key, which is unique (`ModelName vVersion`)
+        radarPoint[model.name] = model.metrics[metricInfo.key] ?? 0; 
+      });
+      return radarPoint;
+    });
+  }, [selectedModelsData]);
+
+  const barChartData = useMemo(() => {
+    return selectedModelsData.map(model => ({
+      name: model.name, // This is `${model.name} v${model.version}`
+      [comparisonMetricKey]: model.metrics[comparisonMetricKey] ?? 0 
+    }));
+  }, [selectedModelsData, comparisonMetricKey]);
+
+  // --- Event Handlers ---
+  const handleToggleModelSelection = (modelId: string) => {
+    setSelectedModelIds(prev => {
       if (prev.includes(modelId)) {
-        return prev.filter((id) => id !== modelId)
+        return prev.filter(id => id !== modelId);
       } else {
-        // Limit to max 4 models for better visualization
-        if (prev.length >= 4) {
-          return [...prev.slice(1), modelId]
+        if (prev.length >= MAX_SELECTED_MODELS) {
+          toast({
+            title: "Selection Limit Reached",
+            description: `You can select up to ${MAX_SELECTED_MODELS} models for comparison.`,
+            variant: "default"
+          });
+          // Option 1: Replace oldest, Option 2: Prevent adding
+          // For now, prevent adding more:
+          return prev; 
+          // Or replace oldest: return [...prev.slice(1), modelId];
         }
-        return [...prev, modelId]
+        return [...prev, modelId];
       }
-    })
-  }
+    });
+  };
 
-  const clearModelSelection = () => {
-    setSelectedModels([])
-  }
+  const handleClearSelection = () => setSelectedModelIds([]);
 
-  const filteredModels = models.filter((model) => {
-    const matchesSearch = searchQuery ? model.name.toLowerCase().includes(searchQuery.toLowerCase()) : true
-    const matchesType = typeFilter === "all" ? true : model.type === typeFilter
-    return matchesSearch && matchesType
-  })
-
-  const drawComparisonChart = () => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-
-    const ctx = canvas.getContext("2d")
-    if (!ctx) return
-
-    // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-
-    const filteredModels = models.filter((model) => selectedModels.includes(model.id))
-    const metricValues = filteredModels.map((model) => model[comparisonMetric as keyof ModelData] as number)
-    const maxValue = Math.max(...metricValues) * 1.2
-    const barWidth = canvas.width / (filteredModels.length * 2)
-    const colors = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444"]
-
-    // Draw bars
-    filteredModels.forEach((model, index) => {
-      const value = model[comparisonMetric as keyof ModelData] as number
-      const barHeight = (value / maxValue) * (canvas.height - 60)
-      const x = index * (barWidth * 2) + barWidth / 2
-      const y = canvas.height - barHeight - 30
-
-      // Draw bar
-      ctx.fillStyle = colors[index % colors.length]
-      ctx.fillRect(x, y, barWidth, barHeight)
-
-      // Draw model name
-      ctx.fillStyle = "#888888"
-      ctx.font = "12px Arial"
-      ctx.textAlign = "center"
-      ctx.fillText(model.name.split("-")[0], x + barWidth / 2, canvas.height - 10)
-
-      // Draw value
-      ctx.fillStyle = "#000000"
-      ctx.font = "14px Arial"
-      ctx.textAlign = "center"
-      ctx.fillText(value.toFixed(2), x + barWidth / 2, y - 5)
-    })
-
-    // Draw y-axis
-    ctx.strokeStyle = "#cccccc"
-    ctx.beginPath()
-    ctx.moveTo(20, 20)
-    ctx.lineTo(20, canvas.height - 30)
-    ctx.stroke()
-
-    // Draw x-axis
-    ctx.beginPath()
-    ctx.moveTo(20, canvas.height - 30)
-    ctx.lineTo(canvas.width - 20, canvas.height - 30)
-    ctx.stroke()
-  }
-
-  const drawRadarChart = () => {
-    const canvas = radarCanvasRef.current
-    if (!canvas) return
-
-    const ctx = canvas.getContext("2d")
-    if (!ctx) return
-
-    // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-
-    const filteredModels = models.filter((model) => selectedModels.includes(model.id))
-    if (filteredModels.length === 0) return
-
-    const metrics = ["accuracy", "precision", "recall", "f1Score", "auc"]
-    const centerX = canvas.width / 2
-    const centerY = canvas.height / 2
-    const radius = Math.min(centerX, centerY) - 50
-    const angleStep = (Math.PI * 2) / metrics.length
-    const colors = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444"]
-
-    // Draw radar background
-    ctx.strokeStyle = "#cccccc"
-    ctx.fillStyle = "rgba(240, 240, 240, 0.5)"
-
-    // Draw radar rings with value indicators
-    for (let r = 0.2; r <= 1; r += 0.2) {
-      ctx.beginPath()
-      for (let i = 0; i < metrics.length; i++) {
-        const angle = i * angleStep - Math.PI / 2
-        const x = centerX + radius * r * Math.cos(angle)
-        const y = centerY + radius * r * Math.sin(angle)
-        if (i === 0) {
-          ctx.moveTo(x, y)
-        } else {
-          ctx.lineTo(x, y)
-        }
-      }
-      ctx.closePath()
-      ctx.stroke()
-
-      // Add value indicators for each ring
-      ctx.fillStyle = "#888888"
-      ctx.font = "10px Arial"
-      ctx.textAlign = "right"
-      ctx.fillText(r.toFixed(1), centerX - 5, centerY - radius * r + 3)
+  const handleCompareSelectedFromTable = () => {
+    if (selectedModelIds.length < 1) { // Allow comparing even 1 model initially in charts
+      toast({ title: "No Models Selected", description: "Please select models from the table to compare.", variant: "default" });
+      return;
     }
+    setActiveTab("comparison");
+    // selectedModelIds is already updated, so the Comparison tab will reflect this.
+  };
 
-    // Draw radar axes
-    for (let i = 0; i < metrics.length; i++) {
-      const angle = i * angleStep - Math.PI / 2
-      const x = centerX + radius * Math.cos(angle)
-      const y = centerY + radius * Math.sin(angle)
-
-      ctx.beginPath()
-      ctx.moveTo(centerX, centerY)
-      ctx.lineTo(x, y)
-      ctx.stroke()
-
-      // Draw metric labels
-      const labelX = centerX + (radius + 20) * Math.cos(angle)
-      const labelY = centerY + (radius + 20) * Math.sin(angle)
-
-      ctx.fillStyle = "#000000"
-      ctx.font = "14px Arial"
-      ctx.textAlign = "center"
-      ctx.textBaseline = "middle"
-      ctx.fillText(metrics[i], labelX, labelY)
-
-      // Add value indicators along each axis
-      for (let r = 0.2; r <= 1; r += 0.2) {
-        const indicatorX = centerX + radius * r * Math.cos(angle)
-        const indicatorY = centerY + radius * r * Math.sin(angle)
-
-        // Draw small tick marks
-        ctx.beginPath()
-        ctx.moveTo(indicatorX, indicatorY)
-        const tickLength = 5
-        const perpAngle = angle + Math.PI / 2
-        ctx.lineTo(indicatorX + tickLength * Math.cos(perpAngle), indicatorY + tickLength * Math.sin(perpAngle))
-        ctx.stroke()
-
-        // Add value text for the first axis only to avoid clutter
-        if (i === 0) {
-          ctx.fillStyle = "#666666"
-          ctx.font = "10px Arial"
-          ctx.textAlign = "center"
-          ctx.fillText(r.toFixed(1), indicatorX, indicatorY - 10)
-        }
-      }
+  const handleExportReport = () => { // Placeholder
+    toast({ title: "Export Report", description: "This feature is coming soon!" });
+  };
+  
+  const formatMetricValue = (value: any): string => {
+    if (typeof value === 'number') {
+        // Heuristic for deciding decimal places
+        if (Math.abs(value) < 0.0001 && value !== 0) return value.toExponential(2);
+        if (Math.abs(value) < 1) return value.toFixed(3);
+        if (Math.abs(value) < 100) return value.toFixed(2);
+        return value.toFixed(0);
     }
+    return String(value ?? 'N/A');
+  };
 
-    // Draw model data
-    filteredModels.forEach((model, modelIndex) => {
-      ctx.strokeStyle = colors[modelIndex % colors.length]
-      ctx.fillStyle = colors[modelIndex % colors.length] + "40" // Add transparency
-
-      ctx.beginPath()
-      for (let i = 0; i < metrics.length; i++) {
-        const metric = metrics[i] as keyof ModelData
-        const value = model[metric] as number
-        const angle = i * angleStep - Math.PI / 2
-        const x = centerX + radius * value * Math.cos(angle)
-        const y = centerY + radius * value * Math.sin(angle)
-
-        if (i === 0) {
-          ctx.moveTo(x, y)
-        } else {
-          ctx.lineTo(x, y)
-        }
-      }
-      ctx.closePath()
-      ctx.stroke()
-      ctx.fill()
-
-      // Draw data points with values
-      for (let i = 0; i < metrics.length; i++) {
-        const metric = metrics[i] as keyof ModelData
-        const value = model[metric] as number
-        const angle = i * angleStep - Math.PI / 2
-        const x = centerX + radius * value * Math.cos(angle)
-        const y = centerY + radius * value * Math.sin(angle)
-
-        // Draw point
-        ctx.beginPath()
-        ctx.arc(x, y, 4, 0, Math.PI * 2)
-        ctx.fillStyle = colors[modelIndex % colors.length]
-        ctx.fill()
-
-        // Draw value text
-        ctx.fillStyle = "#000000"
-        ctx.font = "10px Arial"
-        ctx.textAlign = "center"
-        ctx.fillText(value.toFixed(2), x, y - 10)
-      }
-    })
-
-    // Draw legend
-    const legendY = canvas.height - 30
-    filteredModels.forEach((model, index) => {
-      const x = 50 + index * 150
-
-      ctx.fillStyle = colors[index % colors.length]
-      ctx.fillRect(x, legendY, 15, 15)
-
-      ctx.fillStyle = "#000000"
-      ctx.font = "14px Arial"
-      ctx.textAlign = "left"
-      ctx.fillText(model.name, x + 25, legendY + 12)
-    })
+  // --- Loading and Error UI (moved after all hooks) ---
+  if (isLoading && allModels.length === 0) {
+    return <PageLoader message="Loading models for comparison..." />;
   }
 
+  if (error) {
+    return (
+        <MainLayout>
+            <PageContainer title="Error Loading Models" description={error}>
+                <Alert variant="destructive" className="mb-4">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Loading Failed</AlertTitle>
+                <AlertDescription>{error}</AlertDescription>
+                </Alert>
+                <Button onClick={() => fetchAllModels()}><RefreshCw className="mr-2 h-4 w-4"/>Try Again</Button>
+            </PageContainer>
+        </MainLayout>
+    );
+  }
+
+  const RECHARTS_COLORS = ["#8884d8", "#82ca9d", "#ffc658", "#ff7300", "#00C49F", "#FFBB28", "#FF8042"];
+
+  // --- Render JSX ---
   return (
     <MainLayout>
-      <div className="container mx-auto py-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Model Comparison</h1>
-            <p className="text-muted-foreground">Compare performance metrics across different ML models</p>
-          </div>
-          <Button variant="outline">
-            <Download className="mr-2 h-4 w-4" />
-            Export Report
-          </Button>
-        </div>
-
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="comparison">Comparison</TabsTrigger>
-            <TabsTrigger value="models">Models</TabsTrigger>
+      <PageContainer
+        title="Model Comparison"
+        description="Select and compare machine learning models based on their performance metrics and characteristics."
+        actions={<Button variant="outline" onClick={handleExportReport}><Download className="mr-2 h-4 w-4" />Export Report</Button>}
+      >
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "comparison" | "models")} className="space-y-6">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="comparison">Visual Comparison</TabsTrigger>
+            <TabsTrigger value="models">Model List & Selection</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="comparison" className="space-y-4">
+          {/* Comparison Tab */}
+          <TabsContent value="comparison" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Model Selection</CardTitle>
+                <CardTitle>Model Selection for Visual Comparison</CardTitle>
                 <CardDescription>
-                  Select up to 4 models to compare (currently selected: {selectedModels.length})
+                  Select up to {MAX_SELECTED_MODELS} models. Currently selected: {selectedModelIds.length}.
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="flex flex-col space-y-4">
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {selectedModels.length > 0 ? (
-                      <>
-                        {models
-                          .filter((model) => selectedModels.includes(model.id))
-                          .map((model) => (
-                            <Badge key={model.id} variant="secondary" className="px-3 py-1 flex items-center gap-1">
-                              {model.name}
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-4 w-4 ml-1 p-0"
-                                onClick={() => toggleModelSelection(model.id)}
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
-                            </Badge>
-                          ))}
-                        <Button variant="outline" size="sm" className="h-7" onClick={clearModelSelection}>
-                          Clear All
-                        </Button>
-                      </>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        No models selected. Select models from the list below.
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="flex flex-col md:flex-row gap-4">
-                    <div className="w-full md:w-1/2">
-                      <div className="relative">
-                        <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          placeholder="Search models..."
-                          className="pl-8"
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <div className="w-full md:w-1/2">
-                      <Select value={typeFilter} onValueChange={setTypeFilter}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Filter by model type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Types</SelectItem>
-                          {modelTypes.map((type) => (
-                            <SelectItem key={type} value={type}>
-                              {type}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="border rounded-md">
-                    <ScrollArea className="h-[200px]">
-                      <div className="p-4 space-y-2">
-                        {filteredModels.length === 0 ? (
-                          <p className="text-center py-4 text-muted-foreground">
-                            No models found matching your criteria
-                          </p>
-                        ) : (
-                          filteredModels.map((model) => (
-                            <div
-                              key={model.id}
-                              className={`flex items-center justify-between p-2 rounded-md hover:bg-accent cursor-pointer ${
-                                selectedModels.includes(model.id) ? "bg-accent/50" : ""
-                              }`}
-                              onClick={() => toggleModelSelection(model.id)}
-                            >
-                              <div className="flex items-center gap-3">
-                                <Checkbox
-                                  checked={selectedModels.includes(model.id)}
-                                  onCheckedChange={() => toggleModelSelection(model.id)}
-                                  id={`model-${model.id}`}
-                                />
-                                <div>
-                                  <p className="font-medium">{model.name}</p>
-                                  <p className="text-xs text-muted-foreground">
-                                    Type: {model.type} | Accuracy: {model.accuracy.toFixed(2)}
-                                  </p>
-                                </div>
-                              </div>
-                              <Badge variant="outline">{model.lastUpdated}</Badge>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </ScrollArea>
-                  </div>
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {selectedModelsData.length > 0 ? (
+                    <>
+                      {selectedModelsData.map(model => (
+                        <Badge key={model.id} variant="secondary" className="text-xs px-2 py-1">
+                          {model.name}
+                          <button onClick={() => handleToggleModelSelection(model.id.toString())} className="ml-1.5 text-muted-foreground hover:text-foreground">
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                      <Button variant="ghost" size="sm" onClick={handleClearSelection} className="h-6 px-2 text-xs">Clear All</Button>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No models selected. Choose from the "Model List & Selection" tab or below.</p>
+                  )}
                 </div>
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="relative flex-grow">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search models by name/version..."
+                      value={searchQuerySelection}
+                      onChange={(e) => setSearchQuerySelection(e.target.value)}
+                      className="h-9 pl-10"
+                    />
+                  </div>
+                  <Select value={typeFilterSelection} onValueChange={setTypeFilterSelection} disabled={availableModelTypes.length === 0}>
+                    <SelectTrigger className="h-9 w-full sm:w-[200px]">
+                      <SelectValue placeholder="All Model Types" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Model Types</SelectItem>
+                      {availableModelTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <ScrollArea className="h-48 rounded-md border p-2">
+                  {filteredModelsForSelectionList.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">No models match filters.</p>
+                  ) : (
+                    filteredModelsForSelectionList.map(model => (
+                      <div key={model.id} className="flex items-center space-x-3 p-1.5 hover:bg-accent rounded-md">
+                        <Checkbox
+                          id={`select-comp-${model.id}`}
+                          checked={selectedModelIds.includes(model.id.toString())}
+                          onCheckedChange={() => handleToggleModelSelection(model.id.toString())}
+                        />
+                        <Label htmlFor={`select-comp-${model.id}`} className="text-sm font-normal cursor-pointer flex-grow">
+                          {model.name} v{model.version} <Badge variant="outline" className="text-xs ml-1">{model.model_type}</Badge>
+                        </Label>
+                      </div>
+                    ))
+                  )}
+                </ScrollArea>
               </CardContent>
             </Card>
 
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              <Card className="col-span-2">
-                <CardHeader>
-                  <CardTitle>Performance Comparison</CardTitle>
-                  <CardDescription>Compare selected models by specific metrics</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center gap-4 mb-6">
-                    <span className="text-sm font-medium">Compare by:</span>
-                    <Select value={comparisonMetric} onValueChange={setComparisonMetric}>
-                      <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="Select metric" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="accuracy">Accuracy</SelectItem>
-                        <SelectItem value="precision">Precision</SelectItem>
-                        <SelectItem value="recall">Recall</SelectItem>
-                        <SelectItem value="f1Score">F1 Score</SelectItem>
-                        <SelectItem value="auc">AUC</SelectItem>
-                        <SelectItem value="trainingTime">Training Time</SelectItem>
-                        <SelectItem value="inferenceTime">Inference Time</SelectItem>
-                        <SelectItem value="size">Model Size</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {selectedModels.length > 0 ? (
-                    <div className="h-[300px] w-full">
-                      <canvas ref={canvasRef} width={800} height={300} className="w-full h-full"></canvas>
+            {selectedModelsData.length > 0 ? (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <Card className="lg:col-span-2">
+                  <CardHeader>
+                    <CardTitle>Performance Metric Comparison</CardTitle>
+                    <div className="flex items-center mt-1">
+                        <Label htmlFor="comparison-metric-select" className="mr-2 text-sm text-muted-foreground">Metric:</Label>
+                        <Select value={comparisonMetricKey as string} onValueChange={(val) => setComparisonMetricKey(val as keyof ChartModelData['metrics'])}>
+                            <SelectTrigger id="comparison-metric-select" className="h-8 text-xs w-auto sm:w-[220px]">
+                                <SelectValue placeholder="Select metric" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {BAR_CHART_METRIC_OPTIONS.map(opt => (
+                                    <SelectItem key={opt.value} value={opt.value as string} className="text-xs">{opt.label}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
-                  ) : (
-                    <div className="flex items-center justify-center h-[300px] border rounded-md border-dashed">
-                      <p className="text-muted-foreground">Select models above to compare</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                  </CardHeader>
+                  <CardContent>
+                    {/* give the container a positive height so RC can measure itself */}
+                    <div className="w-full h-[300px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={barChartData}
+                          layout="vertical"
+                          margin={{ top: 5, right: 20, bottom: 20, left: 20 }}
+                          barCategoryGap="20%"
+                        >
+                          <CartesianGrid strokeDasharray="3 3" opacity={0.5} />
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Model Stats</CardTitle>
-                  <CardDescription>Key statistics for selected models</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {selectedModels.length > 0 ? (
-                    <div className="space-y-4">
-                      {models
-                        .filter((model) => selectedModels.includes(model.id))
-                        .map((model) => (
-                          <div key={model.id} className="space-y-2">
-                            <h3 className="font-medium">{model.name}</h3>
-                            <div className="grid grid-cols-2 gap-2 text-sm">
-                              <div>Type:</div>
-                              <div className="font-medium">{model.type}</div>
-                              <div>Size:</div>
-                              <div className="font-medium">{model.size} GB</div>
-                              <div>Training Time:</div>
-                              <div className="font-medium">{model.trainingTime} hours</div>
-                              <div>Inference Time:</div>
-                              <div className="font-medium">{model.inferenceTime} ms</div>
-                              <div>Last Updated:</div>
-                              <div className="font-medium">{model.lastUpdated}</div>
+                          <XAxis
+                            type="number"
+                            domain={['auto', 'auto']}
+                            tickFormatter={formatMetricValue}
+                            allowDecimals
+                            style={{ fontSize: "0.7rem" }}
+                          />
+
+                          <YAxis
+                            dataKey="name"
+                            type="category"
+                            width={120}
+                            interval={0}
+                            style={{ fontSize: "0.7rem" }}
+                            tickFormatter={(v) => (v.length > 15 ? v.slice(0, 13) + "…" : v)}
+                          />
+
+                          <RechartsTooltip
+                            cursor={{ fill: "hsl(var(--accent))", fillOpacity: 0.3 }}
+                            contentStyle={{
+                              backgroundColor: "hsl(var(--background))",
+                              border: "1px solid hsl(var(--border))",
+                              borderRadius: "var(--radius)",
+                            }}
+                            labelStyle={{ color: "hsl(var(--foreground))", fontWeight: "bold" }}
+                            itemStyle={{ color: "hsl(var(--foreground))" }}
+                            formatter={(v: number) => formatMetricValue(v)}
+                          />
+
+                          <Bar
+                            dataKey={comparisonMetricKey}
+                            radius={[0, 4, 4, 0]}
+                            barSize={Math.max(15, 40 - selectedModelsData.length * 3)}
+                          >
+                            {barChartData.map((_, i) => (
+                              <Cell
+                                key={`cell-${i}`}
+                                fill={RECHARTS_COLORS[i % RECHARTS_COLORS.length]}
+                              />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* ... Model Stats Card ... (no changes needed here unless `model_size_mb` was displayed) ... */}
+                <Card className="lg:col-span-1">
+                  <CardHeader><CardTitle>Selected Model Stats</CardTitle></CardHeader>
+                  <CardContent>
+                    <ScrollArea className="max-h-[320px]">
+                        <div className="space-y-4">
+                        {selectedModelsData.map(model => (
+                            <div key={model.id} className="text-xs p-2 border rounded-md">
+                            <h4 className="font-semibold text-sm mb-1">{model.name}</h4>
+                            <p>Type: <Badge variant="outline" className="text-xs">{model.model_type}</Badge></p>
+                            <p>Training Time: {formatMetricValue(model.metrics.training_time_seconds)} s</p>
+                            <p>Inference Latency: {formatMetricValue(model.metrics.inference_latency_ms)} ms</p>
                             </div>
-                          </div>
                         ))}
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-center h-[200px]">
-                      <p className="text-muted-foreground">No models selected</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                        </div>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+                
+                <Card className="lg:col-span-full">
+                  <CardHeader><CardTitle>Overall Metrics Radar</CardTitle></CardHeader>
+                  <CardContent>
+                    {radarChartFormattedData.length > 0 ? (
+                        <ChartContainer config={{}} className="min-h-[400px] aspect-video">
+                          <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarChartFormattedData}>
+                            <PolarGrid opacity={0.5}/>
+                            <PolarAngleAxis dataKey="subject" tick={{ fontSize: 10 }}/>
+                            <PolarRadiusAxis angle={30} domain={[0, 1]} tickFormatter={(tick) => tick.toFixed(1)} style={{ fontSize: '0.6rem' }}/>
+                            {selectedModelsData.map((model, index) => ( // Loop through selected models to create a Radar for each
+                                <Radar 
+                                    key={model.id}
+                                    name={model.name} // This name will appear in Legend and Tooltip
+                                    dataKey={model.name} // The key in radarChartFormattedData that holds this model's values
+                                    stroke={RECHARTS_COLORS[index % RECHARTS_COLORS.length]}
+                                    fill={RECHARTS_COLORS[index % RECHARTS_COLORS.length]}
+                                    fillOpacity={0.25} 
+                                />
+                            ))}
+                            <RechartsLegend wrapperStyle={{ fontSize: '0.75rem', paddingTop: '20px' }}/>
+                            <RechartsTooltip 
+                                contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}}
+                                labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 'bold' }}
+                                itemStyle={{ color: 'hsl(var(--foreground))' }}
+                                formatter={(value: number, name: string, entry: any) => {
+                                    // 'name' here is the dataKey of the Radar (e.g., model.name)
+                                    // 'value' is the metric value for that model on the current axis
+                                    // 'entry.payload.subject' is the metric name (e.g., "Accuracy")
+                                    return `${formatMetricValue(value)} (${entry.payload.subject})`;
+                                }}
+                            />
+                          </RadarChart>
+                        </ChartContainer>
+                    ) : (
+                         <div className="flex items-center justify-center h-[400px] border rounded-md border-dashed">
+                            <p className="text-muted-foreground">Select models to view radar comparison.</p>
+                        </div>
+                    )}
+                  </CardContent>
+                </Card>
 
-              <Card className="col-span-3">
-                <CardHeader>
-                  <CardTitle>Radar Comparison</CardTitle>
-                  <CardDescription>Compare multiple metrics across selected models</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {selectedModels.length > 0 ? (
-                    <div className="h-[500px] w-full">
-                      <canvas ref={radarCanvasRef} width={1000} height={500} className="w-full h-full"></canvas>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-center h-[500px] border rounded-md border-dashed">
-                      <p className="text-muted-foreground">Select models above to compare</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
+              </div>
+            ) : (
+              // ... Alert when no models selected for comparison ...
+              <Alert variant="default" className="mt-6">
+                <Info className="h-4 w-4" />
+                <AlertTitle>No Models Selected for Comparison</AlertTitle>
+                <AlertDescription>
+                  Please select models from the "Model List & Selection" tab or use the quick selection panel above to see comparison charts.
+                </AlertDescription>
+              </Alert>
+            )}
           </TabsContent>
 
-          <TabsContent value="models">
+          {/* Models Tab - Update Table Columns */}
+          <TabsContent value="models" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Available Models</CardTitle>
-                <CardDescription>All machine learning models available for comparison</CardDescription>
+                <CardTitle>All Available Models</CardTitle>
+                <CardDescription>Select models from this list to add them to the comparison.</CardDescription>
+                 <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                  <Input
+                    placeholder="Search models by name/version..."
+                    value={searchQueryTable}
+                    onChange={(e) => setSearchQueryTable(e.target.value)}
+                    className="h-9 flex-grow"
+                  />
+                  <Select value={typeFilterTable} onValueChange={setTypeFilterTable} disabled={availableModelTypes.length === 0}>
+                    <SelectTrigger className="h-9 w-full sm:w-[200px]">
+                      <SelectValue placeholder="All Model Types" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Model Types</SelectItem>
+                      {availableModelTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="flex flex-col md:flex-row gap-4 mb-4">
-                  <div className="w-full md:w-1/2">
-                    <div className="relative">
-                      <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        placeholder="Search models..."
-                        className="pl-8"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="w-full md:w-1/2">
-                    <Select value={typeFilter} onValueChange={setTypeFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Filter by model type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Types</SelectItem>
-                        {modelTypes.map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {type}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-12">
-                        <span className="sr-only">Select</span>
-                      </TableHead>
-                      <TableHead>Model Name</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Accuracy</TableHead>
-                      <TableHead>F1 Score</TableHead>
-                      <TableHead>Size</TableHead>
-                      <TableHead>Last Updated</TableHead>
-                      <TableHead></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredModels.length === 0 ? (
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-4 text-muted-foreground">
-                          No models found matching your criteria
-                        </TableCell>
+                        <TableHead className="w-12"><CheckSquare className="h-4 w-4"/></TableHead>
+                        <TableHead>Name & Version</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Accuracy</TableHead>
+                        <TableHead>F1 (Weighted)</TableHead>
+                        <TableHead>ROC AUC</TableHead> {/* Added ROC AUC */}
+                        <TableHead>Training Time (s)</TableHead>
+                        <TableHead>Last Updated</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
-                    ) : (
-                      filteredModels.map((model) => (
-                        <TableRow key={model.id}>
-                          <TableCell>
-                            <Checkbox
-                              checked={selectedModels.includes(model.id)}
-                              onCheckedChange={() => toggleModelSelection(model.id)}
-                              id={`table-model-${model.id}`}
-                            />
-                          </TableCell>
-                          <TableCell className="font-medium">{model.name}</TableCell>
-                          <TableCell>{model.type}</TableCell>
-                          <TableCell>{model.accuracy.toFixed(2)}</TableCell>
-                          <TableCell>{model.f1Score.toFixed(2)}</TableCell>
-                          <TableCell>{model.size} GB</TableCell>
-                          <TableCell>{model.lastUpdated}</TableCell>
-                          <TableCell>
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button variant="ghost" size="icon">
-                                    <Info className="h-4 w-4" />
-                                    <span className="sr-only">Model details</span>
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>View detailed model information</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-
-                {selectedModels.length > 0 && (
-                  <div className="mt-6 flex justify-between items-center">
-                    <div className="text-sm text-muted-foreground">
-                      {selectedModels.length} model{selectedModels.length !== 1 ? "s" : ""} selected
-                    </div>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={clearModelSelection}>
-                        Clear Selection
-                      </Button>
-                      <Button size="sm" onClick={() => setActiveTab("comparison")}>
-                        View Comparison
-                      </Button>
-                    </div>
-                  </div>
-                )}
+                    </TableHeader>
+                    <TableBody>
+                      {filteredModelsForTable.length === 0 ? (
+                        <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No models found.</TableCell></TableRow> // Adjusted colSpan
+                      ) : (
+                        filteredModelsForTable.map(model => (
+                          <TableRow key={model.id} className={selectedModelIds.includes(model.id.toString()) ? "bg-accent/50 dark:bg-accent/20" : ""}>
+                            <TableCell>
+                              <Checkbox
+                                id={`table-select-${model.id}`}
+                                checked={selectedModelIds.includes(model.id.toString())}
+                                onCheckedChange={() => handleToggleModelSelection(model.id.toString())}
+                              />
+                            </TableCell>
+                            <TableCell className="font-medium text-sm">
+                                <Link href={`/models/${model.id}`} className="hover:underline">{model.name}</Link>
+                                <span className="block text-xs text-muted-foreground">v{model.version}</span>
+                            </TableCell>
+                            <TableCell><Badge variant="outline" className="text-xs">{model.model_type}</Badge></TableCell>
+                            <TableCell className="text-xs">{formatMetricValue(model.performance_metrics?.accuracy)}</TableCell>
+                            <TableCell className="text-xs">{formatMetricValue(model.performance_metrics?.f1_weighted)}</TableCell>
+                            <TableCell className="text-xs">{formatMetricValue(model.performance_metrics?.roc_auc)}</TableCell> {/* Display ROC AUC */}
+                            <TableCell className="text-xs">{formatMetricValue(model.performance_metrics?.training_time_seconds)}</TableCell>
+                            <TableCell className="text-xs">{new Date(model.updated_at).toLocaleDateString()}</TableCell>
+                            <TableCell className="text-right">
+                                <Button variant="ghost" size="sm" asChild>
+                                    <Link href={`/models/${model.id}`}>Details</Link>
+                                </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
               </CardContent>
+              <CardFooter className="justify-end">
+                  <Button onClick={handleCompareSelectedFromTable} disabled={selectedModelIds.length === 0}>
+                    <BarChart2 className="mr-2 h-4 w-4" /> View Comparison ({selectedModelIds.length})
+                  </Button>
+              </CardFooter>
             </Card>
           </TabsContent>
         </Tabs>
-      </div>
+      </PageContainer>
     </MainLayout>
-  )
+  );
+}
+
+export default function ModelComparisonPage() {
+  return (
+    <Suspense fallback={<PageLoader message="Loading model comparison..." />}>
+      <ModelComparisonPageContent />
+    </Suspense>
+  );
 }
