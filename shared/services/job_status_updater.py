@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional, Type, Union
 
+from sqlalchemy import update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -15,8 +16,8 @@ from shared.db.models import (  # Add Dataset
     InferenceJob,
     TrainingJob,
 )
+from shared.db.models.dataset import DatasetStatusEnum
 from shared.schemas.enums import (  # Add DatasetStatusEnum
-    DatasetStatusEnum,
     JobStatusEnum,
 )
 from shared.services.interfaces import IJobStatusUpdater, JobModel
@@ -221,6 +222,7 @@ class JobStatusUpdater(IJobStatusUpdater):
                     updates["background_data_path"] = results.get(
                         "background_data_path"
                     )
+                    updates["num_rows"] = results.get("num_rows")
             elif model_class == InferenceJob and status == JobStatusEnum.FAILED:
                 # Store error in prediction_result for inference jobs on failure
                 updates["prediction_result"] = {"error": message[:500]}

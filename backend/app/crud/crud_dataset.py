@@ -140,13 +140,20 @@ async def update_dataset_status(
     status: DatasetStatusEnum,
     status_message: Optional[str] = None,
     storage_path: Optional[str] = None,
+    background_data_path: Optional[str] = None,
+    num_rows: Optional[int] = None,
 ) -> Optional[Dataset]:
-    """Update the status, message, and storage path of a dataset."""
+    """Update the status, message, storage path, background data path, and num_rows of a dataset."""
     values_to_update: Dict[str, Any] = {"status": status}
     if status_message is not None:
         values_to_update["status_message"] = status_message
     if storage_path is not None:
         values_to_update["storage_path"] = storage_path
+    if background_data_path is not None:
+        values_to_update["background_data_path"] = background_data_path
+    if num_rows is not None:
+        values_to_update["num_rows"] = num_rows
+        
     if not values_to_update:
         return await get_dataset(db, dataset_id)  # Nothing to update
 
@@ -161,14 +168,11 @@ async def update_dataset_status(
     updated_dataset = result.scalar_one_or_none()
 
     if updated_dataset:
-        logger.info(f"Updated status for dataset ID {dataset_id} to {status.value}")
+        logger.info(f"Updated status for dataset ID {dataset_id} to {status.value} with {num_rows or 'unknown'} rows")
     else:
         logger.warning(
             f"Attempted to update status for non-existent dataset ID {dataset_id}"
         )
-
-    # Optionally refresh relationships if needed after update
-    # if updated_dataset: await db.refresh(updated_dataset, attribute_names=['repository'])
 
     return updated_dataset
 

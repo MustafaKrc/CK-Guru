@@ -330,8 +330,7 @@ async def get_valid_dataset_uri(dataset_id: int, db: AsyncSession) -> str:
     "/datasets/{dataset_id}/view",
     response_model=List[Dict[str, Any]],
     summary="View Dataset Content (Paginated from Object Storage)",
-    description="Reads rows from the generated Parquet dataset object with pagination. May be slow for large datasets.",
-    # ... (responses remain similar) ...
+    description="Reads rows from the generated Parquet dataset object with pagination. Uses dataset's num_rows for better performance when available.",
 )
 async def view_dataset_content(
     dataset_id: int,
@@ -342,26 +341,54 @@ async def view_dataset_content(
     ),
 ):
     """Reads dataset rows from object storage using PyArrow iteration."""
-    object_storage_uri = await get_valid_dataset_uri(dataset_id, db)
-    storage_options = settings.s3_storage_options
+    # Get dataset info first to check num_rows
+    db_dataset = await crud.crud_dataset.get_dataset(db, dataset_id=dataset_id)
+    if db_dataset is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found"
+        )
+    if db_dataset.status != DatasetStatusEnum.READY:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Dataset is not ready. Current status: {db_dataset.status.value}",
+        )
+    
+    # Check if skip is beyond available rows
+    if db_dataset.num_rows is not None and skip >= db_dataset.num_rows:
+        logger.info(f"Skip ({skip}) is beyond dataset size ({db_dataset.num_rows}), returning empty result")
+        return []
+    
+    object_storage_uri = db_dataset.storage_path
+    if not object_storage_uri or not object_storage_uri.startswith("s3://"):
+        logger.error(
+            f"Dataset ID {dataset_id} is READY but has invalid/missing storage path: {object_storage_uri}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Dataset is marked ready but its storage path is missing or invalid.",
+        )
 
+    storage_options = settings.s3_storage_options
     rows_collected = []
+    
     try:
         # Use fsspec filesystem object with pyarrow
         fs = s3fs.S3FileSystem(**storage_options)
-        # Need to strip s3:// prefix for path argument in pq.ParquetFile with filesystem
         s3_path = object_storage_uri.replace("s3://", "")
 
-        with fs.open(s3_path, "rb") as f:  # Open file handle via fsspec
+        with fs.open(s3_path, "rb") as f:
             parquet_file = pq.ParquetFile(f)
-            logger.info(
-                f"Total rows in dataset {dataset_id} object: {parquet_file.metadata.num_rows}"
-            )
+            total_rows_in_file = parquet_file.metadata.num_rows
+            
+            # Log discrepancy if any
+            if db_dataset.num_rows is not None and db_dataset.num_rows != total_rows_in_file:
+                logger.warning(
+                    f"Dataset {dataset_id} num_rows in DB ({db_dataset.num_rows}) doesn't match file ({total_rows_in_file})"
+                )
+            
+            logger.info(f"Reading dataset {dataset_id}: DB reports {db_dataset.num_rows} rows, file has {total_rows_in_file} rows")
 
-            # --- Pagination Logic (needs careful implementation for streaming) ---
-            # Simple approach: Read desired range if possible, or iterate batches
-            # Reading specific row groups might be more efficient if skip is large
-            # For now, stick to iterating batches and slicing in memory for simplicity:
+            # Pagination logic remains the same
             total_rows_seen = 0
             for batch in parquet_file.iter_batches(batch_size=65536):
                 if not rows_collected and total_rows_seen + batch.num_rows <= skip:
@@ -386,9 +413,7 @@ async def view_dataset_content(
         )
         return rows_collected
 
-    except (
-        FileNotFoundError
-    ):  # If fs.exists failed or object deleted between check and read
+    except FileNotFoundError:
         raise HTTPException(
             status_code=404, detail="Dataset object not found in storage."
         )

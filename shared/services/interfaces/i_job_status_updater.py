@@ -75,6 +75,7 @@ class IJobStatusUpdater(ABC):
         message: str,
         storage_path: Optional[str] = None,
         background_data_path: Optional[str] = None,
+        num_rows: Optional[int] = None,
     ) -> bool:
         """Convenience method to update final Dataset status and paths."""
         pass
