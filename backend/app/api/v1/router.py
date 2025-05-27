@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
     bot_patterns,
+    dashboard,
     datasets,
     ml_jobs,
     repositories,
@@ -11,6 +12,9 @@ from app.api.v1.endpoints import (
 )
 
 api_router = APIRouter()
+
+# Include the dashboard router for summary statistics
+api_router.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
 
 # Include routers from endpoint files
 api_router.include_router(

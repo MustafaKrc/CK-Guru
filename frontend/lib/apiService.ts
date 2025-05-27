@@ -16,6 +16,9 @@ import {
   DatasetRead,
   Repository,
   AvailableModelType,
+  DashboardSummaryStats,
+  PaginatedTrainingJobRead,
+  PaginatedHPSearchJobRead,
 } from "@/types/api"; // Assuming types are in @/types/api/*
 
 const API_BASE_URL =  `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/api/v1`;
@@ -125,6 +128,11 @@ export const apiService = {
     return request<TResponse>(endpoint, { ...options, method: 'DELETE' });
   },
 
+  // --- Dashboard ---
+  getDashboardSummaryStats: async (): Promise<DashboardSummaryStats> => {
+    return apiService.get<DashboardSummaryStats>('/dashboard/stats');
+  },
+
   // --- Repositories ---
   getRepositories: async (params?: { skip?: number; limit?: number }): Promise<PaginatedRepositoryRead> => {
     const queryParams = new URLSearchParams();
@@ -186,6 +194,47 @@ export const apiService = {
   getTrainingJobDetails: async (jobId: string | number): Promise<TrainingJobRead> => {
     return apiService.get<TrainingJobRead>(`/ml/train/${jobId}`);
   },
+
+  getTrainingJobs: async (params?: { 
+    skip?: number; limit?: number; dataset_id?: number; status?: JobStatusEnum, q?: string 
+  }): Promise<PaginatedTrainingJobRead> => {
+    const queryParams = new URLSearchParams();
+    if (params) {
+        if (params.skip !== undefined) queryParams.append('skip', String(params.skip));
+        if (params.limit !== undefined) queryParams.append('limit', String(params.limit));
+        if (params.dataset_id !== undefined) queryParams.append('dataset_id', String(params.dataset_id));
+        if (params.status) queryParams.append('status', params.status);
+        if (params.q) queryParams.append('q', params.q);
+    }
+    return apiService.get<PaginatedTrainingJobRead>(`/ml/train?${queryParams.toString()}`);
+  },
+
+  getHpSearchJobs: async (params?: { 
+    skip?: number; limit?: number; dataset_id?: number; status?: JobStatusEnum; study_name?: string 
+  }): Promise<PaginatedHPSearchJobRead> => {
+    const queryParams = new URLSearchParams();
+    if (params) {
+        if (params.skip !== undefined) queryParams.append('skip', String(params.skip));
+        if (params.limit !== undefined) queryParams.append('limit', String(params.limit));
+        if (params.dataset_id !== undefined) queryParams.append('dataset_id', String(params.dataset_id));
+        if (params.status) queryParams.append('status', params.status);
+        if (params.study_name) queryParams.append('study_name', params.study_name);
+    }
+    return apiService.get<PaginatedHPSearchJobRead>(`/ml/search?${queryParams.toString()}`);
+  },
+
+  getInferenceJobs: async (params?: GetInferenceJobsParams): Promise<PaginatedInferenceJobRead> => {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      if (params.skip !== undefined) queryParams.append('skip', String(params.skip));
+      if (params.limit !== undefined) queryParams.append('limit', String(params.limit));
+      if (params.ml_model_id !== undefined) queryParams.append('ml_model_id', String(params.ml_model_id));
+      if (params.status !== undefined) queryParams.append('status', params.status);
+    }
+    const endpoint = `/ml/infer?${queryParams.toString()}`;
+    return apiService.get<PaginatedInferenceJobRead>(endpoint);
+  },
+  
 };
 
 // Utility to show toast notifications for API errors

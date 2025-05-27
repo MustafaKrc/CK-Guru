@@ -93,6 +93,7 @@ from .xai import (
     SHAPResultData,
 )
 from .xai_job import XAIResultBase, XAIResultCreate, XAIResultRead, XAIResultUpdate
+from .dashboard import DashboardSummaryStats, DatasetsByStatus
 
 __all__ = [
     # Enums
@@ -178,4 +179,6 @@ __all__ = [
     "XAIResultRead",
     "XAIResultUpdate",
     "PaginatedDatasetRead",
+    "DashboardSummaryStats",
+    "DatasetsByStatus",
 ]

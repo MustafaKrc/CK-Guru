@@ -10,4 +10,4 @@ export * from "./inference-job";
 export * from "./xai";
 export * from "./rule";
 export * from "./ml-model";
-// Add other schema types as they are created
+export * from "./dashboard";
