@@ -280,9 +280,8 @@ function DatasetDetailPageContent() {
     }
     
     return { text: displayMessage, badgeVariant, icon };
-  }, [dataset, datasetError, isLoadingDataset, liveDatasetStatus]); // Added dependencies
+  }, [dataset, datasetError, isLoadingDataset, liveDatasetStatus]);
 
-  // --- REGULAR VARIABLE ASSIGNMENTS (that are not hooks but might use hook values) ---
   const displayDatasetStatus = getDisplayDatasetStatusInfo();
   const isDatasetProcessing = displayDatasetStatus.icon?.type === RefreshCw || displayDatasetStatus.icon?.type === Loader2;
   
@@ -367,7 +366,6 @@ function DatasetDetailPageContent() {
     </div>
   );
 
-  // --- JSX RETURN ---
   return (
     <MainLayout>
       <PageContainer
@@ -390,9 +388,10 @@ function DatasetDetailPageContent() {
         actions={pageActions}
         className="px-4 md:px-6 lg:px-8"
       >
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column: Metadata & Actions */}
-          <div className="lg:col-span-1 space-y-6">
+        {/* Primary content area: Config and Preview side-by-side on large screens */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6"> {/* Added mb-6 for spacing */}
+          {/* Left Column: Configuration */}
+          <div className="lg:col-span-1 space-y-6"> {/* Retains its space-y-6 for internal spacing */}
             <Card>
               <CardHeader><CardTitle className="flex items-center"><Settings className="mr-2 h-5 w-5 text-primary" />Configuration</CardTitle><CardDescription>Details of how this dataset was generated.</CardDescription></CardHeader>
               <CardContent className="text-sm space-y-3">
@@ -421,32 +420,18 @@ function DatasetDetailPageContent() {
                 </Button>
               </CardFooter>
             </Card>
-
-            <Card>
-                <CardHeader className="pb-3"><CardTitle className="flex items-center text-base"><Puzzle className="mr-2 h-4 w-4 text-primary"/>Models Trained</CardTitle><CardDescription className="text-xs">ML models trained using this dataset.</CardDescription></CardHeader>
-                <CardContent>
-                    {isLoadingModels ? <Skeleton className="h-20 w-full" /> : 
-                     modelsTrained.length === 0 ? <p className="text-sm text-muted-foreground py-3 text-center">No models trained with this dataset.</p> :
-                     <ScrollArea className="h-24"><ul className="space-y-1 pr-2">{modelsTrained.map(model => (<li key={model.id} className="text-sm flex justify-between items-center py-1 border-b last:border-b-0"><Link href={`/models/${model.id}`} className="font-medium hover:underline truncate pr-2" title={model.name}>{model.name} (v{model.version})</Link><Badge variant="secondary" className="text-xs">{model.model_type}</Badge></li>))}</ul></ScrollArea>}
-                </CardContent>
-                 {isDatasetEffectivelyReady && (
-                    <CardFooter className="pt-2">
-                        <Button size="sm" className="w-full" asChild><Link href={`/jobs/train?datasetId=${datasetId}`}><Plus className="mr-2 h-4 w-4" /> Train New Model</Link></Button>
-                    </CardFooter>
-                )}
-            </Card>
-             {isDatasetEffectivelyReady && (
-                 <Card>
-                    <CardHeader className="pb-3"><CardTitle className="text-base flex items-center"><Wand2 className="mr-2 h-4 w-4 text-primary"/>Hyperparameter Search</CardTitle></CardHeader>
-                    <CardFooter>
-                        <Button size="sm" className="w-full" asChild><Link href={`/jobs/hp-search?datasetId=${datasetId}`}><Plus className="mr-2 h-4 w-4"/>New HP Search Job</Link></Button>
-                    </CardFooter>
-                 </Card>
+            {isDatasetEffectivelyReady && (
+              <Card>
+                <CardHeader className="pb-3"><CardTitle className="text-base flex items-center"><Wand2 className="mr-2 h-4 w-4 text-primary"/>Hyperparameter Search</CardTitle><CardDescription className="text-xs">Optimize model performance for this dataset.</CardDescription></CardHeader>
+                <CardFooter className="pt-3"> {/* Added pt-3 for a bit more space above button */}
+                    <Button size="sm" className="w-full" asChild><Link href={`/jobs/hp-search?datasetId=${datasetId}`}><Plus className="mr-2 h-4 w-4"/>New HP Search Job</Link></Button>
+                </CardFooter>
+              </Card>
              )}
           </div>
 
           {/* Right Column: Data Preview */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 space-y-6">
             <Card>
               <CardHeader>
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
@@ -459,7 +444,7 @@ function DatasetDetailPageContent() {
                     </Button>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex-grow"> {/* Added flex-grow to allow content to expand */}
                 {isLoadingPreview && (<div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>)}
                 
                 {previewError && !isLoadingPreview && (
@@ -508,6 +493,21 @@ function DatasetDetailPageContent() {
                   </>
                 )}
               </CardContent>
+            </Card>
+            <Card>
+                <CardHeader className="pb-3"><CardTitle className="flex items-center text-base"><Puzzle className="mr-2 h-4 w-4 text-primary"/>Models Trained</CardTitle><CardDescription className="text-xs">ML models trained using this dataset.</CardDescription></CardHeader>
+                <CardContent>
+                    {isLoadingModels ? <Skeleton className="h-20 w-full" /> : 
+                    modelsTrained.length === 0 ? <p className="text-sm text-muted-foreground py-3 text-center">No models trained with this dataset.</p> :
+                    <ScrollArea className="h-32"> {/* Increased height slightly */}
+                        <ul className="space-y-1 pr-2">{modelsTrained.map(model => (<li key={model.id} className="text-sm flex justify-between items-center py-1.5 border-b last:border-b-0"><Link href={`/models/${model.id}`} className="font-medium hover:underline truncate pr-2" title={model.name}>{model.name} (v{model.version})</Link><Badge variant="secondary" className="text-xs">{model.model_type}</Badge></li>))}</ul>
+                    </ScrollArea>}
+                </CardContent>
+                {isDatasetEffectivelyReady && (
+                    <CardFooter className="pt-2">
+                        <Button size="sm" className="w-full" asChild><Link href={`/jobs/train?datasetId=${datasetId}`}><Plus className="mr-2 h-4 w-4" /> Train New Model</Link></Button>
+                    </CardFooter>
+                )}
             </Card>
           </div>
         </div>
