@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from shared.core.config import settings
 from shared.repositories.ck_metric_repository import CKMetricRepository
+from shared.repositories.commit_details_repository import CommitDetailsRepository
 from shared.repositories.commit_guru_metric_repository import CommitGuruMetricRepository
 from shared.repositories.github_issue_repository import GitHubIssueRepository
 from shared.repositories.repository_repository import RepositoryRepository
@@ -24,6 +25,12 @@ class RepositoryFactory:
         self._ck_repo = None
         self._issue_repo = None
         self._repo_repo = None
+        self._commit_details_repo = None
+
+    def get_commit_details_repo(self) -> CommitDetailsRepository:
+        if not self._commit_details_repo:
+            self._commit_details_repo = CommitDetailsRepository(self.session_factory)
+        return self._commit_details_repo
 
     def get_commit_guru_repo(self) -> CommitGuruMetricRepository:
         # logger.warning("Placeholder: get_commit_guru_repo() called - Returning None")

@@ -31,6 +31,7 @@ from .crud_inference_job import (
     get_inference_jobs,
     get_inference_jobs_by_repository,
     update_inference_job,
+    get_all_for_commit,
 )
 from .crud_ml_model import (
     create_ml_model,
@@ -57,6 +58,14 @@ from .crud_xai_result import (
     get_xai_result,
     get_xai_results_by_job_id,
     update_xai_result,
+)
+
+from .crud_commit_details import (
+    get_by_hash,
+    get_by_id,
+    create_placeholder,
+    set_ingestion_task,
+    list_commits_paginated,
 )
 
 __all__ = [
@@ -108,4 +117,10 @@ __all__ = [
     "get_hp_search_jobs_by_repository",
     "get_inference_jobs_by_repository",
     "get_ml_models_by_repository",
+    "get_by_hash",
+    "get_by_id",
+    "create_placeholder",
+    "set_ingestion_task",
+    "list_commits_paginated",
+    "get_all_for_commit",
 ]

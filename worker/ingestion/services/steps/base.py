@@ -21,7 +21,7 @@ class IngestionContext:
 
     # Input Parameters
     repository_id: int
-    git_url: str
+    git_url: Optional[str] # optional as it might not be needed if repo_object is present
     repo_local_path: Path
 
     # Task Management
@@ -56,6 +56,9 @@ class IngestionContext:
     final_combined_features: Optional[List[Dict[str, Any]]] = (
         None  # Changed from Dict to List[Dict]
     )
+
+    commit_details_payloads: Dict[str, Dict] # To hold extracted details. keyed by commit_hash
+    commits_to_process: List[str] # A definitive list of hashes this pipeline run should process.
 
     # Event Context
     event_job_type: Optional[str]
@@ -92,6 +95,7 @@ class IngestionContext:
         self.final_combined_features = final_combined_features
         self.warnings = []
         self.repo_object = None
+
         # Initialize with correct empty types
         self.raw_commit_guru_data: List[CommitGuruMetricPayload] = []
         self.commit_hash_to_db_id_map = {}
@@ -101,6 +105,13 @@ class IngestionContext:
         self.inserted_guru_metrics_count = 0
         self.inserted_ck_metrics_count = 0
         self.parent_metrics_processed = False
+
+        # ADDED
+        self.parent_commit_hash = None # Will be resolved by a step
+        self.commit_details_payloads = {}
+        self.commits_to_process = []
+
+        # Event Context
         self.event_job_type = event_job_type
         self.event_entity_id = event_entity_id
         self.event_entity_type = event_entity_type

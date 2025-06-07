@@ -28,6 +28,8 @@ from services.steps.persist_ck import PersistCKMetricsStep
 from services.steps.persist_guru import PersistCommitGuruMetricsStep
 from services.steps.prepare_repo import PrepareRepositoryStep
 from services.steps.resolve_commit_hashes import ResolveCommitHashesStep
+from services.steps.extract_commit_details import ExtractCommitDetailsStep
+from services.steps.persist_commit_details import PersistCommitDetailsStep
 from shared.core.config import settings
 
 # from services.gitlab_client import GitLabClient # Hypothetical future client
@@ -180,6 +182,9 @@ class DependencyProvider:
             deps["git_service"] = self._get_git_service(context)
         elif step_type == ResolveCommitHashesStep:
             deps["git_service"] = self._get_git_service(context)
+            deps["guru_repo"] = self.repo_factory.get_commit_guru_repo()
+        elif step_type in [ExtractCommitDetailsStep, PersistCommitDetailsStep]:
+            deps["commit_details_repo"] = self.repo_factory.get_commit_details_repo()
 
         logger.debug(
             f"Providing dependencies for step {step.__class__.__name__}: {list(deps.keys())}"

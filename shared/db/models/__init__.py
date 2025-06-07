@@ -11,6 +11,8 @@ from .repository import Repository
 from .training_job import JobStatusEnum, TrainingJob
 from .xai_result import XAIResult
 from .ml_model_type_definition import MLModelTypeDefinitionDB
+from .commit_details import CommitDetails
+from .commit_file_diff import CommitFileDiff
 
 __all__ = [
     "BotPattern",
@@ -28,4 +30,6 @@ __all__ = [
     "TrainingJob",
     "XAIResult",
     "MLModelTypeDefinitionDB",
+    "CommitDetails",
+    "CommitFileDiff",
 ]

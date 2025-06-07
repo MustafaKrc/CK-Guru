@@ -1,6 +1,6 @@
 # backend/app/crud/crud_inference_job.py
 import logging
-from typing import Any, Dict, Optional, Sequence, Tuple  # Add Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple  # Add Tuple
 
 from sqlalchemy import func, select  # Add func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -164,3 +164,22 @@ async def get_inference_jobs_by_repository(
     total = result_total.scalar_one_or_none() or 0
 
     return items, total
+
+async def get_all_for_commit(
+    db: AsyncSession, repo_id: int, commit_hash: str
+) -> List[InferenceJob]:
+    """
+    Retrieves all inference jobs associated with a specific commit hash.
+    It checks the input_reference JSON field.
+    """
+    stmt = (
+        select(InferenceJob)
+        .options(selectinload(InferenceJob.ml_model))
+        .filter(
+            InferenceJob.input_reference["repo_id"].as_integer() == repo_id,
+            InferenceJob.input_reference["commit_hash"].as_string() == commit_hash,
+        )
+        .order_by(InferenceJob.created_at.desc())
+    )
+    result = await db.execute(stmt)
+    return result.scalars().all()

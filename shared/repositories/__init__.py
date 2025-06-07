@@ -13,6 +13,7 @@ from .repository_repository import RepositoryRepository
 from .training_job_repository import TrainingJobRepository
 from .xai_result_repository import XaiResultRepository
 from .ml_model_type_definition_repository import MLModelTypeDefinitionRepository
+from .commit_details_repository import CommitDetailsRepository
 
 __all__ = [
     "BaseRepository",
@@ -29,4 +30,5 @@ __all__ = [
     "TrainingJobRepository",
     "HPSearchJobRepository",
     "MLModelTypeDefinitionRepository",
+    "CommitDetailsRepository",
 ]

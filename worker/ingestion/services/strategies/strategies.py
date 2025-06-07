@@ -10,6 +10,8 @@ from services.steps.fetch_link_issues import FetchAndLinkIssuesStep
 from services.steps.link_bugs import LinkBugsStep
 from services.steps.persist_ck import PersistCKMetricsStep
 from services.steps.persist_guru import PersistCommitGuruMetricsStep
+from services.steps.extract_commit_details import ExtractCommitDetailsStep
+from services.steps.persist_commit_details import PersistCommitDetailsStep
 
 # Import step base class for type hinting if needed, but preferably use keys
 # from services.steps.base import IngestionStep
@@ -29,6 +31,8 @@ STEP_CALCULATE_CK = CalculateCKMetricsStep
 STEP_PERSIST_CK = PersistCKMetricsStep
 STEP_RESOLVE_HASHES = ResolveCommitHashesStep
 STEP_ENSURE_COMMITS = EnsureCommitsExistLocallyStep
+STEP_EXTRACT_DETAILS = ExtractCommitDetailsStep
+STEP_PERSIST_DETAILS = PersistCommitDetailsStep
 
 if TYPE_CHECKING:
     from services.steps.base import IngestionStep  # Import for type hinting only
@@ -52,6 +56,10 @@ class FullHistoryIngestionStrategy(IngestionStrategy):
         logger.debug("Using FullHistoryIngestionStrategy")
         return [
             STEP_PREPARE_REPO,
+            STEP_RESOLVE_HASHES,
+            STEP_ENSURE_COMMITS,
+            STEP_EXTRACT_DETAILS,
+            STEP_PERSIST_DETAILS,
             STEP_CALCULATE_GURU,
             STEP_PERSIST_GURU,
             STEP_FETCH_LINK_ISSUES,
@@ -70,6 +78,8 @@ class SingleCommitFeatureExtractionStrategy(IngestionStrategy):
             STEP_PREPARE_REPO,
             STEP_RESOLVE_HASHES,
             STEP_ENSURE_COMMITS,
+            STEP_EXTRACT_DETAILS,
+            STEP_PERSIST_DETAILS,
             STEP_CALCULATE_GURU,
             STEP_PERSIST_GURU,
             STEP_FETCH_LINK_ISSUES,

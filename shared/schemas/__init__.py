@@ -22,6 +22,8 @@ from .enums import (
     ObjectiveMetricEnum,
     PrunerTypeEnum,
     SamplerTypeEnum,
+    CommitIngestionStatusEnum,
+    FileChangeTypeEnum,
 )
 from .hp_search_job import (
     HPSearchConfig,
@@ -95,6 +97,14 @@ from .xai import (
 from .xai_job import XAIResultBase, XAIResultCreate, XAIResultRead, XAIResultUpdate
 from .dashboard import DashboardSummaryStats, DatasetsByStatus
 
+from .commit import (
+    CommitDetailsRead,
+    CommitFileDiffRead,
+    CommitListItem,
+    CommitPageResponse,
+    PaginatedCommitList,
+)
+
 __all__ = [
     # Enums
     "JobStatusEnum",
@@ -106,6 +116,8 @@ __all__ = [
     "XAITypeEnum",
     "XAIStatusEnum",
     "TaskStatusEnum",
+    "CommitIngestionStatusEnum",
+    "FileChangeTypeEnum",
     # Schemas
     "RepositoryBase",
     "RepositoryCreate",
@@ -181,4 +193,9 @@ __all__ = [
     "PaginatedDatasetRead",
     "DashboardSummaryStats",
     "DatasetsByStatus",
+    "CommitDetailsRead",
+    "CommitFileDiffRead",
+    "CommitListItem",
+    "CommitPageResponse",
+    "PaginatedCommitList",
 ]
