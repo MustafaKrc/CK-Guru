@@ -1,18 +1,18 @@
 // frontend/app/jobs/inference/page.tsx
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { MainLayout } from "@/components/main-layout";
 import { Button } from "@/components/ui/button";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageContainer } from "@/components/ui/page-container";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -21,20 +21,12 @@ import { ArrowLeft, Play, Wand2, GitBranch, BarChart3, Loader2, AlertCircle, Che
 import { useToast } from "@/hooks/use-toast";
 
 import { apiService, handleApiError, ApiError } from "@/lib/apiService";
-import { Repository } from "@/types/api/repository";
+import { Repository, PaginatedRepositoryRead } from "@/types/api/repository";
 import { MLModelRead, PaginatedMLModelRead } from "@/types/api/ml-model";
 import { InferenceJobRead, PaginatedInferenceJobRead, ManualInferenceRequestPayload, InferenceTriggerResponse } from "@/types/api/inference-job";
-import { useTaskStore, TaskStatusUpdatePayload } from "@/store/taskStore";
+import { useTaskStore } from "@/store/taskStore";
 import { getLatestTaskForEntity } from "@/lib/taskUtils";
 import { JobStatusEnum } from "@/types/api/enums";
-
-const API_ENDPOINT_REPOSITORIES = "/repositories";
-const API_ENDPOINT_MODELS = "/ml/models";
-const API_ENDPOINT_TRIGGER_INFERENCE = "/ml/infer/manual";
-const API_ENDPOINT_LIST_INFERENCE_JOBS = "/ml/infer";
-
-const ITEMS_PER_PAGE = 5;
-
 export default function ManualInferencePage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -46,11 +38,10 @@ export default function ManualInferencePage() {
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [isLoadingRepositories, setIsLoadingRepositories] = useState(true);
   const [models, setModels] = useState<MLModelRead[]>([]);
-  const [isLoadingModels, setIsLoadingModels] = useState(false); // Initially false, load on repo select
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
 
   const [recentInferenceJobs, setRecentInferenceJobs] = useState<InferenceJobRead[]>([]);
-  const [isLoadingRecentJobs, setIsLoadingRecentJobs] = useState(false);
-  // No pagination for recent jobs list for now, keep it simple
+  const [isLoadingRecentJobs, setIsLoadingRecentJobs] = useState(true);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -60,8 +51,8 @@ export default function ManualInferencePage() {
   const fetchRepositories = useCallback(async () => {
     setIsLoadingRepositories(true);
     try {
-      const data = await apiService.get<Repository[]>(API_ENDPOINT_REPOSITORIES);
-      setRepositories(data || []);
+      const data = await apiService.getRepositories({ limit: 200 });
+      setRepositories(data.items || []);
     } catch (err) {
       handleApiError(err, "Failed to fetch repositories");
     } finally {
@@ -69,41 +60,24 @@ export default function ManualInferencePage() {
     }
   }, []);
 
-  const fetchModels = useCallback(async (repoId?: string) => {
+  const fetchModelsForRepo = useCallback(async (repoId: string) => {
     setIsLoadingModels(true);
     setModels([]); // Clear previous models
+    setSelectedModelId(""); // Reset model selection
     try {
-      let endpoint = API_ENDPOINT_MODELS;
-      // If repoId is provided, eventually filter models by those compatible with the repo
-      // For now, we fetch all models or models related to a repo if API supports `repository_id` filter for models
-      if (repoId) {
-          // Assuming /repositories/{repoId}/models endpoint exists or /ml/models?repository_id=...
-          // Let's use the existing /repositories/{repoId}/models
-          const paginatedModels = await apiService.get<PaginatedMLModelRead>(`/repositories/${repoId}/models?limit=100`);
-          setModels(paginatedModels.items || []);
-      } else {
-          const paginatedModels = await apiService.get<PaginatedMLModelRead>(`${API_ENDPOINT_MODELS}?limit=100`);
-          setModels(paginatedModels.items || []);
-      }
-
+      const paginatedModels = await apiService.get<PaginatedMLModelRead>(`/repositories/${repoId}/models?limit=200`);
+      setModels(paginatedModels.items || []);
     } catch (err) {
-      handleApiError(err, "Failed to fetch models");
+      handleApiError(err, "Failed to fetch models for repository");
     } finally {
       setIsLoadingModels(false);
     }
   }, []);
   
-  const fetchRecentInferenceJobs = useCallback(async (repoId?: string, modelId?: string) => {
+  const fetchRecentInferenceJobs = useCallback(async () => {
     setIsLoadingRecentJobs(true);
     try {
-        const params = new URLSearchParams({ limit: String(ITEMS_PER_PAGE) });
-        // Ideally, filter by repoId if possible backend-side or filter from a larger list client-side
-        // For now, let's just filter by model_id if present, and show all recent if no model/repo
-        if (modelId) params.append("model_id", modelId);
-        // If repoId is available, and your backend /ml/infer endpoint can filter by repo (indirectly via model's dataset), that's better.
-        // For now, we might just show latest overall if no repo/model specific filtering is easy.
-        
-        const response = await apiService.get<PaginatedInferenceJobRead>(`${API_ENDPOINT_LIST_INFERENCE_JOBS}?${params.toString()}`);
+        const response = await apiService.getInferenceJobs({ limit: 10 });
         setRecentInferenceJobs(response.items || []);
     } catch (err) {
         handleApiError(err, "Failed to fetch recent inference jobs");
@@ -112,45 +86,27 @@ export default function ManualInferencePage() {
     }
   }, []);
 
-
   useEffect(() => {
     fetchRepositories();
-    fetchRecentInferenceJobs(); // Fetch general recent jobs on initial load
+    fetchRecentInferenceJobs();
   }, [fetchRepositories, fetchRecentInferenceJobs]);
 
   useEffect(() => {
     if (selectedRepoId) {
-      fetchModels(selectedRepoId); // Fetch models when a repository is selected
-      // Optionally, fetch recent jobs specific to this repo if API supports
-      // fetchRecentInferenceJobs(selectedRepoId); 
+      fetchModelsForRepo(selectedRepoId);
     } else {
-      setModels([]); // Clear models if no repo is selected
+      setModels([]);
     }
-  }, [selectedRepoId, fetchModels]);
-  
-  useEffect(() => {
-    // Fetch recent jobs when repo or model selection changes to refine the list
-    fetchRecentInferenceJobs(selectedRepoId, selectedModelId);
-  }, [selectedRepoId, selectedModelId, fetchRecentInferenceJobs]);
-
+  }, [selectedRepoId, fetchModelsForRepo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
-    if (!selectedRepoId) {
-      setFormError("Please select a repository."); return;
-    }
-    if (!selectedModelId) {
-      setFormError("Please select a model."); return;
-    }
-    if (!commitHash.trim()) {
-      setFormError("Please enter a commit hash."); return;
-    }
-    if (commitHash.trim().length < 7) {
-      setFormError("Commit hash must be at least 7 characters long."); return;
-    }
-
+    if (!selectedRepoId) { setFormError("Please select a repository."); return; }
+    if (!selectedModelId) { setFormError("Please select a model."); return; }
+    if (!commitHash.trim()) { setFormError("Please enter a commit hash."); return; }
+    if (commitHash.trim().length < 7) { setFormError("Commit hash must be at least 7 characters long."); return; }
 
     setIsSubmitting(true);
     const payload: ManualInferenceRequestPayload = {
@@ -161,20 +117,20 @@ export default function ManualInferencePage() {
 
     try {
       const response = await apiService.post<InferenceTriggerResponse, ManualInferenceRequestPayload>(
-        API_ENDPOINT_TRIGGER_INFERENCE,
+        "/ml/infer/manual",
         payload
       );
       toast({
         title: "Inference Triggered",
-        description: `Inference job ${response.inference_job_id} (Task: ${response.initial_task_id}) submitted.`,
+        description: `Job ${response.inference_job_id} is processing. Task: ${response.initial_task_id}`,
         action: (
           <Button variant="outline" size="sm" asChild>
-            <Link href={`/prediction-insights/${response.inference_job_id}`}>View Insights</Link>
+            <Link href={`/prediction-insights/${response.inference_job_id}`}>View Progress</Link>
           </Button>
         ),
       });
-      setCommitHash(""); // Clear commit hash input
-      fetchRecentInferenceJobs(selectedRepoId, selectedModelId); // Refresh recent jobs
+      setCommitHash("");
+      setTimeout(() => fetchRecentInferenceJobs(), 1000); // Refresh list after a short delay
     } catch (err) {
       if (err instanceof ApiError) {
         setFormError(err.message);
@@ -186,50 +142,46 @@ export default function ManualInferencePage() {
       setIsSubmitting(false);
     }
   };
-
+  
   const formatDate = (dateString?: string | Date | null): string => {
     if (!dateString) return "N/A";
-    const date = typeof dateString === "string" ? new Date(dateString) : dateString;
-    return date.toLocaleString(undefined, {
-      year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-    });
+    const date = typeof dateString === 'string' ? new Date(dateString) : dateString;
+    return date.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
-  const renderTaskAwareStatusBadge = (taskAwareEntityStatus?: TaskStatusUpdatePayload, fallbackStaticStatus?: string) => {
-    const currentStatusToDisplay = taskAwareEntityStatus || (fallbackStaticStatus ? { status: fallbackStaticStatus } as TaskStatusUpdatePayload : undefined);
-    if (!currentStatusToDisplay || !currentStatusToDisplay.status) return <Badge variant="secondary">Unknown</Badge>;
+  const renderTaskAwareStatusBadge = (job: InferenceJobRead) => {
+    const liveTaskStatus = getLatestTaskForEntity(taskStatuses, "InferenceJob", job.id);
+    const displayStatus = liveTaskStatus?.status || job.status;
+    const displayMessage = liveTaskStatus?.status_message || job.status_message;
+    const progress = liveTaskStatus?.progress;
 
-    const { status, status_message, progress } = currentStatusToDisplay;
     let badgeVariant: "default" | "secondary" | "destructive" | "outline" = "secondary";
     let icon = null;
-    let text = status_message || status || "Unknown";
+    let text = String(displayStatus).toUpperCase();
 
-    switch (String(status).toUpperCase()) {
+    switch (displayStatus.toUpperCase()) {
       case JobStatusEnum.SUCCESS.toUpperCase(): badgeVariant = "default"; icon = <CheckCircle className="h-3 w-3 mr-1" />; text = "Success"; break;
-      case JobStatusEnum.RUNNING.toUpperCase(): case JobStatusEnum.STARTED.toUpperCase():
-        badgeVariant = "outline"; icon = <RefreshCw className="h-3 w-3 mr-1 animate-spin" />; text = `Running (${progress ?? 0}%)`; break;
+      case JobStatusEnum.RUNNING.toUpperCase():
+      case JobStatusEnum.STARTED.toUpperCase():
+      case "GENERATING": // From dataset generation tasks
+      case "EXTRACTING_FEATURES": // Custom status from task
+        badgeVariant = "outline"; icon = <RefreshCw className="h-3 w-3 mr-1 animate-spin" />; text = `${displayMessage || displayStatus} (${progress ?? 0}%)`; break;
       case JobStatusEnum.PENDING.toUpperCase():
         badgeVariant = "outline"; icon = <Loader2 className="h-3 w-3 mr-1 animate-spin" />; text = "Pending"; break;
       case JobStatusEnum.FAILED.toUpperCase():
-        badgeVariant = "destructive"; icon = <AlertCircle className="h-3 w-3 mr-1" />; text = `Failed${status_message ? ': '+status_message.substring(0,30)+'...' : ''}`; break;
+        badgeVariant = "destructive"; icon = <AlertCircle className="h-3 w-3 mr-1" />; text = "Failed"; break;
       case JobStatusEnum.REVOKED.toUpperCase():
         badgeVariant = "destructive"; icon = <AlertCircle className="h-3 w-3 mr-1" />; text = "Revoked"; break;
-      default: text = String(status).toUpperCase();
     }
-    return <Badge variant={badgeVariant} className="whitespace-nowrap text-xs px-1.5 py-0.5" title={status_message || status || ''}>{icon}{text}</Badge>;
+    return <Badge variant={badgeVariant} className="whitespace-nowrap text-xs px-1.5 py-0.5" title={displayMessage || String(displayStatus)}>{icon}{text}</Badge>;
   };
-
 
   return (
     <MainLayout>
       <PageContainer
-        title="Manual Inference Trigger"
+        title="Manual Inference"
         description="Run a trained model against a specific commit for defect prediction."
-        actions={
-          <Button variant="outline" onClick={() => router.push('/jobs')}>
-            <ArrowLeft className="mr-2 h-4 w-4" /> All Jobs
-          </Button>
-        }
+        actions={<Button variant="outline" onClick={() => router.push('/jobs')}><ArrowLeft className="mr-2 h-4 w-4" /> All Jobs</Button>}
       >
         <div className="grid md:grid-cols-3 gap-6">
           <Card className="md:col-span-1">
@@ -241,7 +193,7 @@ export default function ManualInferencePage() {
                 <div className="space-y-2">
                   <Label htmlFor="repository_id">Repository *</Label>
                   {isLoadingRepositories ? <Skeleton className="h-10 w-full" /> : (
-                    <Select value={selectedRepoId} onValueChange={(value) => {setSelectedRepoId(value); setSelectedModelId(""); /* Reset model */}}>
+                    <Select value={selectedRepoId} onValueChange={setSelectedRepoId}>
                       <SelectTrigger id="repository_id"><SelectValue placeholder="Select a repository..." /></SelectTrigger>
                       <SelectContent>
                         {repositories.map(repo => (<SelectItem key={repo.id} value={repo.id.toString()}>{repo.name}</SelectItem>))}
@@ -254,9 +206,9 @@ export default function ManualInferencePage() {
                   <Label htmlFor="ml_model_id">Model *</Label>
                   {isLoadingModels ? <Skeleton className="h-10 w-full" /> : (
                     <Select value={selectedModelId} onValueChange={setSelectedModelId} disabled={!selectedRepoId || models.length === 0}>
-                      <SelectTrigger id="ml_model_id"><SelectValue placeholder={!selectedRepoId ? "Select repository first" : (models.length === 0 ? "No models for this repo" : "Select a model...")} /></SelectTrigger>
+                      <SelectTrigger id="ml_model_id"><SelectValue placeholder={!selectedRepoId ? "Select repository first" : (models.length === 0 ? "No models for repo" : "Select a model...")} /></SelectTrigger>
                       <SelectContent>
-                        {models.map(model => (<SelectItem key={model.id} value={model.id.toString()}>{model.name} (v{model.version}) - {model.model_type}</SelectItem>))}
+                        {models.map(model => (<SelectItem key={model.id} value={model.id.toString()}>{model.name} (v{model.version})</SelectItem>))}
                       </SelectContent>
                     </Select>
                   )}
@@ -267,11 +219,9 @@ export default function ManualInferencePage() {
                   <Input id="target_commit_hash" value={commitHash} onChange={(e) => setCommitHash(e.target.value)} placeholder="Enter full or short commit SHA" required />
                 </div>
                 
-                {formError && (
-                  <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>{formError}</AlertDescription></Alert>
-                )}
+                {formError && (<Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>{formError}</AlertDescription></Alert>)}
 
-                <Button type="submit" className="w-full" disabled={isSubmitting || !selectedRepoId || !selectedModelId}>
+                <Button type="submit" className="w-full" disabled={isSubmitting || !selectedRepoId || !selectedModelId || !commitHash}>
                   {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Triggering...</> : <><Play className="mr-2 h-4 w-4" /> Trigger Inference</>}
                 </Button>
               </form>
@@ -281,31 +231,33 @@ export default function ManualInferencePage() {
           <Card className="md:col-span-2">
             <CardHeader>
               <CardTitle className="flex items-center"><BarChart3 className="mr-2 h-5 w-5 text-primary"/>Recent Inference Jobs</CardTitle>
-              <CardDescription>
-                Showing latest jobs. {selectedModelId ? `Filtered by model ${selectedModelId}.` : (selectedRepoId ? `Filtered by repository ${selectedRepoId}.`: "All repositories.")}
-              </CardDescription>
+              <CardDescription>Latest inference jobs submitted across all repositories.</CardDescription>
             </CardHeader>
             <CardContent>
-              {isLoadingRecentJobs ? (
-                <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
-              ) : recentInferenceJobs.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">No recent inference jobs to display for the current selection.</p>
-              ) : (
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader><TableRow><TableHead>Commit</TableHead><TableHead>Model</TableHead><TableHead>Status</TableHead><TableHead>Created</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
-                    <TableBody>
-                      {recentInferenceJobs.map(job => {
-                        const jobTask = getLatestTaskForEntity(taskStatuses, "InferenceJob", job.id);
-                        const commit = typeof job.input_reference === 'object' && job.input_reference.commit_hash ? String(job.input_reference.commit_hash).substring(0, 8) : "N/A";
-                        const modelUsed = models.find(m => m.id === job.ml_model_id);
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader><TableRow><TableHead>Commit</TableHead><TableHead>Model Used</TableHead><TableHead>Status</TableHead><TableHead>Created</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {isLoadingRecentJobs ? (
+                        Array.from({ length: 3 }).map((_, i) => <TableRow key={i}><TableCell colSpan={5}><Skeleton className="h-8 w-full"/></TableCell></TableRow>)
+                    ) : recentInferenceJobs.length === 0 ? (
+                        <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No recent jobs to display.</TableCell></TableRow>
+                    ) : (
+                      recentInferenceJobs.map(job => {
+                        const repo = repositories.find(r => r.id === job.input_reference.repo_id);
+                        const model = models.find(m => m.id === job.ml_model_id);
                         return (
                           <TableRow key={job.id}>
-                            <TableCell className="font-mono text-xs" title={typeof job.input_reference === 'object' && job.input_reference.commit_hash ? String(job.input_reference.commit_hash): ""}>{commit}</TableCell>
-                            <TableCell className="text-xs truncate max-w-[150px]" title={modelUsed ? `${modelUsed.name} v${modelUsed.version}`: `ID: ${job.ml_model_id}`}>
-                                {modelUsed ? <Link href={`/models/${job.ml_model_id}`} className="hover:underline">{`${modelUsed.name.substring(0,20)}... v${modelUsed.version}`}</Link> : `ID: ${job.ml_model_id}`}
+                            <TableCell className="font-mono text-xs">
+                                <Link href={`/repositories/${job.input_reference.repo_id}/commits/${job.input_reference.commit_hash}`} className="hover:underline text-primary">
+                                  {String(job.input_reference.commit_hash).substring(0, 8)}...
+                                </Link>
+                                <span className="block text-muted-foreground">{repo?.name || `Repo ${job.input_reference.repo_id}`}</span>
                             </TableCell>
-                            <TableCell>{renderTaskAwareStatusBadge(jobTask, job.status)}</TableCell>
+                            <TableCell className="text-xs truncate max-w-[150px]" title={model ? `${model.name} v${model.version}`: `ID: ${job.ml_model_id}`}>
+                                {model ? <Link href={`/models/${job.ml_model_id}`} className="hover:underline">{`${model.name.substring(0,20)}... v${model.version}`}</Link> : `ID: ${job.ml_model_id}`}
+                            </TableCell>
+                            <TableCell>{renderTaskAwareStatusBadge(job)}</TableCell>
                             <TableCell className="text-xs">{formatDate(job.created_at)}</TableCell>
                             <TableCell className="text-right">
                               {job.status === JobStatusEnum.SUCCESS ? (
@@ -318,17 +270,12 @@ export default function ManualInferencePage() {
                             </TableCell>
                           </TableRow>
                         );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
-             <CardFooter>
-                <Button variant="link" size="sm" className="mx-auto" onClick={() => fetchRecentInferenceJobs(selectedRepoId, selectedModelId)} disabled={isLoadingRecentJobs}>
-                    <RefreshCw className={`mr-2 h-3 w-3 ${isLoadingRecentJobs ? 'animate-spin' : ''}`}/>Refresh Recent Jobs
-                </Button>
-            </CardFooter>
           </Card>
         </div>
       </PageContainer>
