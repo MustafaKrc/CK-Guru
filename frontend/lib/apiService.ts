@@ -19,6 +19,9 @@ import {
   DashboardSummaryStats,
   PaginatedTrainingJobRead,
   PaginatedHPSearchJobRead,
+  PaginatedCommitList, 
+  CommitPageResponse,
+  TaskResponse,
 } from "@/types/api"; // Assuming types are in @/types/api/*
 
 const API_BASE_URL =  `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/api/v1`;
@@ -233,6 +236,21 @@ export const apiService = {
     }
     const endpoint = `/ml/infer?${queryParams.toString()}`;
     return apiService.get<PaginatedInferenceJobRead>(endpoint);
+  },
+
+  getCommits: async (repoId: number | string, params?: { skip?: number; limit?: number }): Promise<PaginatedCommitList> => {
+    const queryParams = new URLSearchParams();
+    if (params?.skip !== undefined) queryParams.append('skip', String(params.skip));
+    if (params?.limit !== undefined) queryParams.append('limit', String(params.limit));
+    return apiService.get<PaginatedCommitList>(`/repositories/${repoId}/commits?${queryParams.toString()}`);
+  },
+
+  getCommitDetails: async (repoId: number | string, commitHash: string): Promise<CommitPageResponse> => {
+    return apiService.get<CommitPageResponse>(`/repositories/${repoId}/commits/${commitHash}`);
+  },
+
+  triggerCommitIngestion: async (repoId: number | string, commitHash: string): Promise<TaskResponse> => {
+    return apiService.post<TaskResponse>(`/repositories/${repoId}/commits/${commitHash}/ingest`);
   },
   
 };

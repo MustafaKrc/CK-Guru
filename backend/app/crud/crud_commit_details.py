@@ -2,6 +2,9 @@
 import logging
 from typing import List, Optional, Sequence, Tuple
 
+from dateutil import parser as date_parser
+from datetime import datetime, timezone
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -125,11 +128,21 @@ async def list_commits_paginated(
     results = await db.execute(stmt)
     items = []
     for row in results.mappings().all():
+        # Parse the Git date format if it's a string
+        author_date = row.author_date
+        if isinstance(author_date, str):
+            try:
+                author_date = date_parser.parse(author_date)
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Failed to parse author_date '{row.author_date}' for commit {row.commit_hash}: {e}")
+                # Use a default date if parsing fails
+                author_date = datetime.fromtimestamp(0, tz=timezone.utc)
+        
         items.append(
             CommitListItem(
                 commit_hash=row.commit_hash,
                 author_name=row.author_name,
-                author_date=row.author_date, # Assuming author_date is datetime
+                author_date=author_date,
                 message_short=row.commit_message.split('\n', 1)[0],
                 ingestion_status=row.ingestion_status or CommitIngestionStatusEnum.NOT_INGESTED
             )

@@ -7,6 +7,27 @@ export enum DatasetStatusEnum {
   FAILED = "failed",
 }
 
+export enum CommitIngestionStatusEnum {
+    NOT_INGESTED = "NOT_INGESTED",
+    PENDING = "PENDING",
+    RUNNING = "RUNNING",
+    COMPLETE = "COMPLETE",
+    FAILED = "FAILED",
+}
+
+export enum FileChangeTypeEnum {
+    A = "A", // Added
+    M = "M", // Modified
+    D = "D", // Deleted
+    R = "R", // Renamed
+    C = "C", // Copied
+    T = "T", // Type change
+    U = "U", // Unmerged
+    X = "X", // Unknown
+    B = "B", // Broken
+}
+
+
 export enum JobStatusEnum {
   STARTED = "started",
   PENDING = "pending",

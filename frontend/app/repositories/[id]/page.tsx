@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, RefreshCw, Database, BarChart3, Layers, Settings, Play, Eye, AlertCircle, Loader2, Puzzle, Plus, CheckCircle } from "lucide-react";
+import { ArrowLeft, RefreshCw, Database, BarChart3, Layers, Settings, Play, Eye, AlertCircle, Loader2, Puzzle, Plus, CheckCircle, GitCommit } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageContainer } from "@/components/ui/page-container";
@@ -457,8 +457,9 @@ export default function RepositoryDetailPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-5">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-6">
             <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="commits">Commits</TabsTrigger>
             <TabsTrigger value="datasets">Datasets ({datasetsPagination.isLoading ? <Loader2 className="h-3 w-3 animate-spin"/> : datasetsPagination.totalItems})</TabsTrigger>
             <TabsTrigger value="models">Models ({modelsPagination.isLoading ? <Loader2 className="h-3 w-3 animate-spin"/> : modelsPagination.totalItems})</TabsTrigger>
             <TabsTrigger value="jobs">Jobs</TabsTrigger>
@@ -579,6 +580,26 @@ export default function RepositoryDetailPage() {
             </div>
           </TabsContent>
           
+          {/* COMMITS TAB */}
+          <TabsContent value="commits" className="space-y-4">
+            <PageContainer
+                title="Commit History"
+                description="View the detailed commit history and trigger inference on specific commits."
+                actions={<Button asChild size="sm"><Link href={`/repositories/${repoId}/commits`}><GitCommit className="mr-2 h-4 w-4"/>View All Commits</Link></Button>}
+            >
+              <Card>
+                <CardHeader>
+                  <CardTitle>What is this?</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    This section provides a detailed, paginated view of every commit in the repository's history. From the commit list, you can select individual commits to view their changes, statistics, and run defect predictions.
+                  </p>
+                </CardContent>
+              </Card>
+            </PageContainer>
+          </TabsContent>
+
           {/* DATASETS TAB with Pagination */}
           <TabsContent value="datasets" className="space-y-4">
             <PageContainer 

@@ -11,3 +11,4 @@ export * from "./xai";
 export * from "./rule";
 export * from "./ml-model";
 export * from "./dashboard";
+export * from "./commit";
