@@ -283,8 +283,8 @@ export function MainLayout({ children }: MainLayoutProps) {
               segmentName = segmentName.replace(/-/g, " ")
 
               // If it's an ID (contains only alphanumeric and hyphens), format it
-              if (/^[a-zA-Z0-9-]+$/.test(segment) && segment.length > 8) {
-                segmentName = `ID: ${segment.substring(0, 8)}...`
+              if (/^[a-zA-Z0-9-]+$/.test(segment) && segment.length > 20) {
+                segmentName = `${segment.substring(0, 20)}...`
               }
 
               // If it's the last segment, don't make it a link

@@ -45,8 +45,6 @@ function formatTaskType(task: TaskStatusUpdatePayload): string {
 
 const TaskCard: React.FC<{ task: TaskStatusUpdatePayload; onRevoke: (task: TaskStatusUpdatePayload) => void; }> = ({ task, onRevoke }) => {
   const getStatusBadge = (status: string) => {
-    console.log(`Rendering badge for status: ${status} , ${status.toUpperCase().replace("JOBSTATUSENUM", "").replace("TASKSTATUSENUM", "")}`);
-
     switch (status.toUpperCase().replace("JOBSTATUSENUM", "").replace("TASKSTATUSENUM", "").replace(".", "")) {
       case "SUCCESS":
         return <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-xs"><CheckCircle className="h-3 w-3 mr-1" />Success</Badge>;

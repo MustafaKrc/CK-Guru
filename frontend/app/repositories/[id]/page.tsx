@@ -869,12 +869,11 @@ export default function RepositoryDetailPage() {
                 <>
                   <div className="rounded-md border">
                     <Table>
-                      <TableHeader><TableRow><TableHead>Pattern</TableHead><TableHead>Type</TableHead><TableHead>Exclusion</TableHead><TableHead className="max-w-md">Description</TableHead></TableRow></TableHeader>
+                      <TableHeader><TableRow><TableHead>Pattern</TableHead><TableHead>Exclusion</TableHead><TableHead className="max-w-md">Description</TableHead></TableRow></TableHeader>
                       <TableBody>
                         {botPatterns.map((pattern) => (
                             <TableRow key={pattern.id}>
                                 <TableCell className="font-mono break-all">{pattern.pattern}</TableCell>
-                                <TableCell><Badge variant="secondary">{pattern.pattern_type}</Badge></TableCell>
                                 <TableCell>{pattern.is_exclusion ? "Yes" : "No"}</TableCell>
                                 <TableCell className="max-w-md truncate" title={pattern.description || ""}>{pattern.description || "N/A"}</TableCell>
                             </TableRow>
