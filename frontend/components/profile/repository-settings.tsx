@@ -133,7 +133,7 @@ export function RepositorySettings() {
   }
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
+    switch (status.toUpperCase().replace("JOBSTATUSENUM", "").replace("TASKSTATUSENUM", "").replace(".", "")) {
       case "Ingested":
         return <Badge className="status-badge-ready">Ingested</Badge>
       case "Ingesting":

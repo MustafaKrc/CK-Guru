@@ -134,7 +134,7 @@ const PredictionInsightDetailPage = () => {
     let variant: "default" | "destructive" | "secondary" | "outline" = "secondary";
     let text = status.charAt(0) + status.slice(1).toLowerCase();
 
-    switch (status) {
+    switch (status.toLowerCase()) {
       case XAIStatusEnum.SUCCESS: icon = <CheckCircledIcon className="mr-1 h-3 w-3" />; variant = "default"; text="Success"; break;
       case XAIStatusEnum.FAILED: icon = <ExclamationTriangleIcon className="mr-1 h-3 w-3" />; variant = "destructive"; text="Failed"; break;
       case XAIStatusEnum.PENDING: icon = <ReloadIcon className="mr-1 h-3 w-3 animate-spin" />; variant = "outline"; text="Pending"; break;
@@ -146,7 +146,7 @@ const PredictionInsightDetailPage = () => {
 
   const getJobStatusBadge = (status?: JobStatusEnum) => {
     if (!status) return <Badge variant="secondary">Unknown</Badge>;
-    switch (status) {
+    switch (status.toLowerCase()) {
       case JobStatusEnum.SUCCESS: return <Badge variant="default" className="bg-green-600 hover:bg-green-700">Success</Badge>;
       case JobStatusEnum.FAILED: return <Badge variant="destructive">Failure</Badge>;
       default: return <Badge variant="secondary">{status}</Badge>;

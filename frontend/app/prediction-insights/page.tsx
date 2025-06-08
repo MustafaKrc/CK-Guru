@@ -139,7 +139,7 @@ const PredictionInsightsPage = () => {
     let icon = null;
     let text = status_message || status || "Unknown";
 
-    switch (String(status).toUpperCase()) {
+    switch (String(status).toUpperCase().replace("JOBSTATUSENUM", "").replace("TASKSTATUSENUM", "").replace(".", "")) {
       case JobStatusEnum.SUCCESS.toUpperCase(): badgeVariant = "default"; icon = <CheckCircle className="h-3 w-3 mr-1" />; text = "Success"; break;
       case JobStatusEnum.RUNNING.toUpperCase(): case JobStatusEnum.STARTED.toUpperCase():
         badgeVariant = "outline"; icon = <RefreshCw className="h-3 w-3 mr-1 animate-spin" />; text = `${status_message || status} (${progress ?? 0}%)`; break;

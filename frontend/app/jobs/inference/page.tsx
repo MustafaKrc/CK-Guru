@@ -159,7 +159,7 @@ export default function ManualInferencePage() {
     let icon = null;
     let text = String(displayStatus).toUpperCase();
 
-    switch (displayStatus.toUpperCase()) {
+    switch (displayStatus.toUpperCase().replace("JOBSTATUSENUM", "").replace("TASKSTATUSENUM", "").replace(".", "")) {
       case JobStatusEnum.SUCCESS.toUpperCase(): badgeVariant = "default"; icon = <CheckCircle className="h-3 w-3 mr-1" />; text = "Success"; break;
       case JobStatusEnum.RUNNING.toUpperCase():
       case JobStatusEnum.STARTED.toUpperCase():

@@ -144,7 +144,7 @@ function JobDetailPageContent() {
     let icon = null;
     let text = effectiveStatusMessage || String(effectiveStatus).toUpperCase();
 
-    switch (String(effectiveStatus).toUpperCase()) {
+    switch (String(effectiveStatus).toUpperCase().replace("JOBSTATUSENUM", "").replace("TASKSTATUSENUM", "").replace(".", "")) {
       case JobStatusEnum.SUCCESS.toUpperCase():
         badgeVariant = "default"; icon = <CheckCircle className="h-3 w-3 mr-1" />; text = "Success"; break;
       case JobStatusEnum.RUNNING.toUpperCase(): case JobStatusEnum.STARTED.toUpperCase():

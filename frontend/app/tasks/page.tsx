@@ -1,4 +1,4 @@
-// app/tasks/page.tsx
+// frontend/app/tasks/page.tsx
 "use client"
 
 import React, { useState, useEffect, useMemo } from "react"
@@ -14,11 +14,9 @@ import { RefreshCw, StopCircle, AlertTriangle, CheckCircle, XCircle, Clock, Sear
 import { useToast } from "@/hooks/use-toast"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PageContainer } from "@/components/ui/page-container"
-import { Skeleton } from "@/components/ui/skeleton"
 import { useTaskStore, TaskStatusUpdatePayload } from "@/store/taskStore"
-import { TaskStatusResponse } from "@/types/api/task"
+import { TaskStatusEnum, TaskStatusResponse } from "@/types/api/task"
 import { apiService, handleApiError } from "@/lib/apiService"
-import Link from "next/link"
 
 const ACTIVE_STATUSES = ["PENDING", "RUNNING", "STARTED", "RECEIVED", "RETRY"];
 
@@ -39,12 +37,17 @@ function formatTaskType(task: TaskStatusUpdatePayload): string {
     const type = task.job_type || task.task_name || 'Unknown Task';
     return type
       .replace(/_/g, " ")
-      .replace(/\b\w/g, (c) => c.toUpperCase());
+      .toLowerCase()
+      .split('.')
+      .pop() // Get part after last dot if any
+      ?.replace(/\b\w/g, (c) => c.toUpperCase()) || "Task";
 };
 
 const TaskCard: React.FC<{ task: TaskStatusUpdatePayload; onRevoke: (task: TaskStatusUpdatePayload) => void; }> = ({ task, onRevoke }) => {
   const getStatusBadge = (status: string) => {
-    switch (status.toUpperCase()) {
+    console.log(`Rendering badge for status: ${status} , ${status.toUpperCase().replace("JOBSTATUSENUM", "").replace("TASKSTATUSENUM", "")}`);
+
+    switch (status.toUpperCase().replace("JOBSTATUSENUM", "").replace("TASKSTATUSENUM", "").replace(".", "")) {
       case "SUCCESS":
         return <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-xs"><CheckCircle className="h-3 w-3 mr-1" />Success</Badge>;
       case "RUNNING":
@@ -93,7 +96,7 @@ const TaskCard: React.FC<{ task: TaskStatusUpdatePayload; onRevoke: (task: TaskS
           <p className="text-muted-foreground italic text-xs p-2 bg-muted/50 rounded-md">{task.status_message}</p>
         )}
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-            <div><span className="text-muted-foreground">Created:</span> {formatDate(task.timestamp)}</div>
+            <div><span className="text-muted-foreground">Last Update:</span> {formatDate(task.timestamp)}</div>
         </div>
         {task.error_details && (
             <div className="space-y-1">
@@ -149,7 +152,6 @@ export default function TaskMonitorPage() {
     setManualTaskResult(null);
     try {
       const result: TaskStatusResponse = await apiService.getTaskStatus(manualTaskId);
-      // Adapt TaskStatusResponse to TaskStatusUpdatePayload
       const payload: TaskStatusUpdatePayload = {
         task_id: result.task_id,
         status: result.status,
@@ -157,10 +159,10 @@ export default function TaskMonitorPage() {
         status_message: result.status_message,
         error_details: result.error,
         result_summary: result.result,
-        timestamp: new Date().toISOString(), // Use current time for the update timestamp
+        timestamp: new Date().toISOString(),
       };
       setManualTaskResult(payload);
-      setTaskStatus(payload); // Update the global store
+      setTaskStatus(payload);
     } catch (error) {
       handleApiError(error, "Failed to fetch task status");
     } finally {

@@ -1,3 +1,4 @@
+// app/dashboard/page.tsx
 "use client"
 
 import React, { useState, useEffect, useMemo } from "react";
@@ -131,15 +132,17 @@ export default function DashboardPage() {
     let icon = null;
     let textToShow = String(displayStatus).toUpperCase(); // Default text
 
-    switch (String(displayStatus).toUpperCase()) {
-      case JobStatusEnum.SUCCESS.toUpperCase(): badgeVariant = "default"; icon = <CheckCircle className="h-3 w-3 mr-1" />; textToShow = "Success"; break;
-      case JobStatusEnum.RUNNING.toUpperCase(): case JobStatusEnum.STARTED.toUpperCase():
+    // Standardize by converting to lower case for comparison with enum values
+    switch (String(displayStatus).toLowerCase()) {
+      case JobStatusEnum.SUCCESS: badgeVariant = "default"; icon = <CheckCircle className="h-3 w-3 mr-1" />; textToShow = "Success"; break;
+      case JobStatusEnum.RUNNING:
+      case JobStatusEnum.STARTED:
         badgeVariant = "outline"; icon = <RefreshCw className="h-3 w-3 mr-1 animate-spin" />; textToShow = `${displayMessage || displayStatus} (${progress ?? 0}%)`; break;
-      case JobStatusEnum.PENDING.toUpperCase():
+      case JobStatusEnum.PENDING:
         badgeVariant = "outline"; icon = <Loader2 className="h-3 w-3 mr-1 animate-spin" />; textToShow = "Pending"; break;
-      case JobStatusEnum.FAILED.toUpperCase():
+      case JobStatusEnum.FAILED:
         badgeVariant = "destructive"; icon = <AlertCircle className="h-3 w-3 mr-1" />; textToShow = "Failed"; break;
-      case JobStatusEnum.REVOKED.toUpperCase():
+      case JobStatusEnum.REVOKED:
         badgeVariant = "destructive"; icon = <AlertCircle className="h-3 w-3 mr-1" />; textToShow = "Revoked"; break;
     }
     return <Badge variant={badgeVariant} title={displayMessage || String(displayStatus)}>{icon}{textToShow}</Badge>;
