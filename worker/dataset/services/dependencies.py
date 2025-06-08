@@ -9,6 +9,7 @@ from shared.core.config import settings
 from shared.services import JobStatusUpdater  # Shared concrete implementation
 from shared.services.interfaces import IJobStatusUpdater  # Shared interface
 from shared.utils.pipeline_logging import StepLogger
+from services.steps.feature_selection_step import FeatureSelectionStep
 
 # Import Context
 from .context import DatasetContext
@@ -53,6 +54,7 @@ class StepRegistry:
             ProcessGloballyStep,
             SelectFinalColumnsStep,
             WriteOutputStep,
+            FeatureSelectionStep
             # Include sub-steps if they needed direct instantiation/injection,
             # but currently they are instantiated within their orchestrator steps
         ]
@@ -190,7 +192,8 @@ class DependencyProvider:
             # its dependency (`ck_repo`) is provided there via the factory.
             # No need to provide directly here unless called independently.
             pass
-
+        elif step_type == FeatureSelectionStep:
+            pass
         # Add dependencies for other steps if they are added later
 
         step_logger = StepLogger(

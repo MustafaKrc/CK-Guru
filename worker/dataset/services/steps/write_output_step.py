@@ -9,6 +9,7 @@ from shared.core.config import settings  # For bucket name etc.
 from shared.schemas.enums import DatasetStatusEnum
 from shared.services.interfaces import IJobStatusUpdater
 from shared.utils.pipeline_logging import StepLogger
+from shared.db.models import Dataset # <<< IMPORT DATASET MODEL for type check
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,6 @@ class WriteOutputStep(IDatasetGeneratorStep):
             step_logger.info("Main dataset written successfully.")
 
             # --- Write Background Sample ---
-            # Configuration (could be moved to context.dataset_config)
             sample_size = 500
             min_rows_for_sampling = 50
 
@@ -105,6 +105,37 @@ class WriteOutputStep(IDatasetGeneratorStep):
             else:
                 final_message += " Background sample skipped."
 
+            # --- Update Feature Columns in Config if Changed ---
+            # Get the list of feature columns from the final DataFrame (all columns except the target)
+            final_feature_columns = [col for col in df_final.columns if col != target_column]
+            
+            # Check if the feature columns have changed from the original config
+            original_feature_columns = context.dataset_config.feature_columns
+
+            print("AAAAAAAAAA")
+            print(final_feature_columns)
+            print(original_feature_columns)
+            if set(final_feature_columns) != set(original_feature_columns):
+                step_logger.info(f"Feature columns have changed from {len(original_feature_columns)} to {len(final_feature_columns)}. Updating config in DB.")
+                
+                # Fetch the existing Dataset object to modify its config
+                dataset_repo = repo_factory.get_dataset_repo() # Assuming you have a get_dataset_repo method
+                dataset_db_obj = dataset_repo.get_by_id(context.dataset_id)
+                
+                if dataset_db_obj:
+                    # Create a new config dictionary with the updated feature columns
+                    new_config = dataset_db_obj.config.copy()
+                    new_config['feature_columns'] = final_feature_columns
+                    dataset_db_obj.config = new_config # Assign the new dictionary to trigger SQLAlchemy's change detection
+                    
+                    # The job_status_updater might not support updating arbitrary columns like `config`.
+                    # So, we'll perform a direct repository update here.
+                    dataset_repo.update_config(dataset_db_obj.id, new_config)
+                    step_logger.info("Dataset configuration updated with new feature columns.")
+                else:
+                    step_logger.error(f"Could not find dataset with ID {context.dataset_id} to update its config.")
+            
+            # --- Update Final Status ---
             updated = job_status_updater.update_dataset_completion(
                 context.dataset_id,
                 status=DatasetStatusEnum.READY,
@@ -139,7 +170,7 @@ class WriteOutputStep(IDatasetGeneratorStep):
                 output_writer.clear_existing(context.output_storage_uri)
             if context.background_sample_uri:
                 output_writer.clear_existing(context.background_sample_uri)
-            raise  # Re-raise the exception to fail the pipeline
+            raise
 
         step_logger.info("Output writing and final status update complete.")
-        return context  # Return final context
+        return context

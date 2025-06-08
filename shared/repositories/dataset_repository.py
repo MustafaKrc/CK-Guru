@@ -214,3 +214,24 @@ class DatasetRepository(BaseRepository[Dataset]):
         """Get a dataset by ID."""
         with self._session_scope() as session:
             return session.get(Dataset, dataset_id)
+        
+    def update_config(self, dataset_id: int, new_config: Dict[str, Any]) -> bool:
+        """Updates the config JSON for a specific dataset."""
+        with self._session_scope() as session:
+            try:
+                stmt = (
+                    update(Dataset)
+                    .where(Dataset.id == dataset_id)
+                    .values(config=new_config)
+                )
+                result = session.execute(stmt)
+                session.commit()
+                if result.rowcount == 0:
+                    logger.warning(f"Attempted to update config for non-existent dataset ID {dataset_id}")
+                    return False
+                logger.info(f"Successfully updated config for dataset ID {dataset_id}")
+                return True
+            except SQLAlchemyError as e:
+                logger.error(f"DB error updating config for dataset {dataset_id}: {e}", exc_info=True)
+                session.rollback()
+                raise
