@@ -1,17 +1,17 @@
-"use client"
+// app/bot-patterns/page.tsx
+"use client";
 
-import type React from "react"
-
-import { useState, Suspense } from "react"  
-import { MainLayout } from "@/components/main-layout"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Badge } from "@/components/ui/badge"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import React, { useState, useEffect, useCallback, Suspense, useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { MainLayout } from "@/components/main-layout";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -19,436 +19,286 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Plus, MoreHorizontal, Edit, Trash2 } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
-import { useSearchParams } from "next/navigation"
-import { PageLoader } from '@/components/ui/page-loader'; // Added import
+} from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, MoreHorizontal, Edit, Trash2, Check, X, Loader2, AlertCircle } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { PageLoader } from '@/components/ui/page-loader';
+import { apiService, handleApiError } from "@/lib/apiService";
+import { BotPatternRead, BotPatternCreatePayload, BotPatternUpdatePayload, Repository, PaginatedBotPatternRead } from "@/types/api";
+import { PageContainer } from "@/components/ui/page-container";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
-// Mock repositories for selection
-const mockRepositories = [
-  { id: "1", name: "frontend-app" },
-  { id: "2", name: "backend-api" },
-  { id: "3", name: "mobile-client" },
-  { id: "4", name: "shared-lib" },
-]
 
-// Mock global bot patterns
-const mockGlobalPatterns = [
-  {
-    id: "1",
-    pattern: "dependabot",
-    type: "Exact",
-    isExclusion: false,
-    description: "Dependabot automated dependency updates",
-  },
-  {
-    id: "2",
-    pattern: "*bot*",
-    type: "Wildcard",
-    isExclusion: false,
-    description: "Any commit author containing 'bot'",
-  },
-  {
-    id: "3",
-    pattern: "^\\[automated\\].*",
-    type: "Regex",
-    isExclusion: false,
-    description: "Commit messages starting with [automated]",
-  },
-  {
-    id: "4",
-    pattern: "john.doe@example.com",
-    type: "Exact",
-    isExclusion: true,
-    description: "Exclude this specific email from bot detection",
-  },
-]
+function BotPatternsPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { toast } = useToast();
 
-// Mock repository-specific patterns
-const mockRepoPatterns = {
-  "1": [
-    {
-      id: "r1-1",
-      pattern: "frontend-ci",
-      type: "Exact",
-      isExclusion: false,
-      description: "Frontend CI automation",
-    },
-  ],
-  "2": [
-    {
-      id: "r2-1",
-      pattern: "backend-deploy-*",
-      type: "Wildcard",
-      isExclusion: false,
-      description: "Backend deployment automation",
-    },
-  ],
-}
+  const preselectedRepoId = searchParams.get("repository");
 
-function BotPatternsPageContent() {  
-  const searchParams = useSearchParams()
-  const preselectedRepoId = searchParams.get("repository")
+  const [activeTab, setActiveTab] = useState(preselectedRepoId ? "repository" : "global");
+  const [selectedRepositoryId, setSelectedRepositoryId] = useState<string>(preselectedRepoId || "");
+  const [repositories, setRepositories] = useState<Repository[]>([]);
+  const [isLoadingRepos, setIsLoadingRepos] = useState(true);
 
-  const [activeTab, setActiveTab] = useState(preselectedRepoId ? "repository" : "global")
-  const [selectedRepository, setSelectedRepository] = useState(preselectedRepoId || "")
-  const [globalPatterns, setGlobalPatterns] = useState(mockGlobalPatterns)
-  const [repoPatterns, setRepoPatterns] = useState(mockRepoPatterns)
+  const [globalPatterns, setGlobalPatterns] = useState<BotPatternRead[]>([]);
+  const [repoPatterns, setRepoPatterns] = useState<BotPatternRead[]>([]);
+  const [isLoadingPatterns, setIsLoadingPatterns] = useState(false);
 
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [editingPattern, setEditingPattern] = useState<any>(null)
-  const [formData, setFormData] = useState({
-    pattern: "",
-    type: "Exact",
-    isExclusion: false,
-    description: "",
-  })
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingPattern, setEditingPattern] = useState<BotPatternRead | null>(null);
+  const [formData, setFormData] = useState<Partial<BotPatternCreatePayload>>({});
+  
+  const [dialogContext, setDialogContext] = useState<{ scope: 'global' | 'repository', repoName?: string }>({ scope: 'global' });
 
-  const { toast } = useToast()
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
-  }
-
-  const handleCheckboxChange = (checked: boolean) => {
-    setFormData((prev) => ({ ...prev, isExclusion: checked }))
-  }
-
-  const handleRepositoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedRepository(e.target.value)
-  }
-
-  const handleAddPattern = () => {
-    setEditingPattern(null)
-    setFormData({
-      pattern: "",
-      type: "Exact",
-      isExclusion: false,
-      description: "",
-    })
-    setDialogOpen(true)
-  }
-
-  const handleEditPattern = (pattern: any) => {
-    setEditingPattern(pattern)
-    setFormData({
-      pattern: pattern.pattern,
-      type: pattern.type,
-      isExclusion: pattern.isExclusion,
-      description: pattern.description,
-    })
-    setDialogOpen(true)
-  }
-
-  const handleDeletePattern = (patternId: string, isGlobal: boolean) => {
-    if (isGlobal) {
-      setGlobalPatterns((prev) => prev.filter((p) => p.id !== patternId))
-    } else {
-      if (!selectedRepository) return
-
-      setRepoPatterns((prev) => ({
-        ...prev,
-        [selectedRepository]: prev[selectedRepository]?.filter((p) => p.id !== patternId) || [],
-      }))
+  const fetchRepositories = useCallback(async () => {
+    setIsLoadingRepos(true);
+    try {
+        const response = await apiService.getRepositories({ limit: 200 });
+        setRepositories(response.items || []);
+    } catch(err) {
+        handleApiError(err, "Failed to load repositories");
+    } finally {
+        setIsLoadingRepos(false);
     }
+  }, []);
 
-    toast({
-      title: "Pattern deleted",
-      description: "The bot pattern has been deleted successfully",
-    })
-  }
+  const fetchPatterns = useCallback(async () => {
+    setIsLoadingPatterns(true);
+    try {
+      if (activeTab === 'global') {
+        const response = await apiService.getGlobalBotPatterns();
+        setGlobalPatterns(response.items);
+      } else if (activeTab === 'repository' && selectedRepositoryId) {
+        // <<< MODIFIED LINE HERE >>>
+        const response = await apiService.getRepoBotPatterns(parseInt(selectedRepositoryId), { include_global: false });
+        setRepoPatterns(response.items);
+      } else {
+        setRepoPatterns([]);
+      }
+    } catch (err) {
+      handleApiError(err, `Failed to fetch ${activeTab} patterns`);
+    } finally {
+      setIsLoadingPatterns(false);
+    }
+  }, [activeTab, selectedRepositoryId]);
 
-  const handleSubmit = () => {
-    // Validate
-    if (!formData.pattern.trim()) {
+  useEffect(() => {
+    fetchRepositories();
+  }, [fetchRepositories]);
+
+  useEffect(() => {
+    fetchPatterns();
+  }, [fetchPatterns]);
+
+  const handleOpenDialog = (pattern: BotPatternRead | null = null) => {
+    const isEditing = !!pattern;
+    const currentScope = isEditing ? (pattern.repository_id ? 'repository' : 'global') : activeTab;
+    
+    if (currentScope === 'repository' && !selectedRepositoryId && !isEditing) {
       toast({
-        title: "Missing information",
-        description: "Please enter a pattern string",
+        title: "No Repository Selected",
+        description: "Please select a repository before adding a repository-specific pattern.",
         variant: "destructive",
-      })
-      return
+      });
+      return;
     }
+    
+    const currentRepo = repositories.find(r => r.id.toString() === (pattern?.repository_id?.toString() || selectedRepositoryId));
+    
+    setDialogContext({
+      scope: currentScope as 'global' | 'repository',
+      repoName: currentRepo?.name
+    });
 
-    const newPattern = {
-      id: editingPattern ? editingPattern.id : `${Date.now()}`,
-      ...formData,
+    setEditingPattern(pattern);
+    setFormData({
+      pattern: pattern?.pattern || "",
+      is_exclusion: pattern?.is_exclusion || false,
+      description: pattern?.description || "",
+    });
+    setDialogOpen(true);
+  };
+  
+  const handleSubmit = async () => {
+    if (!formData.pattern || !formData.pattern.trim()) {
+      toast({ title: "Validation Error", description: "Pattern cannot be empty.", variant: "destructive"});
+      return;
     }
-
-    if (activeTab === "global") {
+    
+    setIsSubmitting(true);
+    try {
       if (editingPattern) {
-        setGlobalPatterns((prev) => prev.map((p) => (p.id === editingPattern.id ? newPattern : p)))
+        const payload: BotPatternUpdatePayload = {
+          pattern: formData.pattern,
+          is_exclusion: formData.is_exclusion,
+          description: formData.description,
+        };
+        await apiService.updateBotPattern(editingPattern.id, payload);
+        toast({ title: "Success", description: "Bot pattern updated successfully." });
       } else {
-        setGlobalPatterns((prev) => [...prev, newPattern])
+        const payload: BotPatternCreatePayload = {
+          pattern: formData.pattern!,
+          is_exclusion: !!formData.is_exclusion,
+          description: formData.description,
+          repository_id: dialogContext.scope === 'repository' ? parseInt(selectedRepositoryId) : undefined,
+        };
+        await apiService.createBotPattern(payload);
+        toast({ title: "Success", description: "New bot pattern created." });
       }
-    } else {
-      if (!selectedRepository) return
-
-      if (editingPattern) {
-        setRepoPatterns((prev) => ({
-          ...prev,
-          [selectedRepository]:
-            prev[selectedRepository]?.map((p) => (p.id === editingPattern.id ? newPattern : p)) || [],
-        }))
-      } else {
-        setRepoPatterns((prev) => ({
-          ...prev,
-          [selectedRepository]: [...(prev[selectedRepository] || []), newPattern],
-        }))
-      }
+      setDialogOpen(false);
+      fetchPatterns();
+    } catch (err) {
+      handleApiError(err, `Failed to ${editingPattern ? 'update' : 'create'} pattern`);
+    } finally {
+      setIsSubmitting(false);
     }
+  };
 
-    setDialogOpen(false)
-
-    toast({
-      title: editingPattern ? "Pattern updated" : "Pattern added",
-      description: `The bot pattern has been ${editingPattern ? "updated" : "added"} successfully`,
-    })
-  }
-
-  const getPatternTypeBadge = (type: string) => {
-    switch (type) {
-      case "Exact":
-        return <Badge variant="outline">Exact</Badge>
-      case "Wildcard":
-        return <Badge variant="secondary">Wildcard</Badge>
-      case "Regex":
-        return <Badge>Regex</Badge>
-      default:
-        return <Badge variant="outline">{type}</Badge>
+  const handleDelete = async (patternId: number) => {
+    try {
+      await apiService.deleteBotPattern(patternId);
+      toast({ title: "Success", description: "Bot pattern deleted." });
+      fetchPatterns();
+    } catch (err) {
+      handleApiError(err, "Failed to delete pattern");
     }
-  }
+  };
+
+  const currentPatterns = useMemo(() => activeTab === 'global' ? globalPatterns : repoPatterns, [activeTab, globalPatterns, repoPatterns]);
+  const selectedRepoName = useMemo(() => repositories.find(r => r.id.toString() === selectedRepositoryId)?.name, [repositories, selectedRepositoryId]);
+
+  const renderTable = (patterns: BotPatternRead[]) => (
+    <div className="rounded-md border">
+        <Table>
+            <TableHeader>
+            <TableRow>
+                <TableHead>Pattern (Regex)</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+            </TableHeader>
+            <TableBody>
+            {isLoadingPatterns ? (
+                Array.from({ length: 3 }).map((_, i) => (
+                <TableRow key={i}>
+                    <TableCell><Skeleton className="h-5 w-48"/></TableCell>
+                    <TableCell><Skeleton className="h-5 w-full"/></TableCell>
+                    <TableCell><Skeleton className="h-6 w-24"/></TableCell>
+                    <TableCell className="text-right"><Skeleton className="h-8 w-8"/></TableCell>
+                </TableRow>
+                ))
+            ) : patterns.length === 0 ? (
+                <TableRow>
+                    <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No patterns found for this scope.</TableCell>
+                </TableRow>
+            ) : (
+                patterns.map((pattern) => (
+                <TableRow key={pattern.id}>
+                    <TableCell className="font-mono">{pattern.pattern}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{pattern.description || "N/A"}</TableCell>
+                    <TableCell>
+                    <Badge variant={pattern.is_exclusion ? "outline" : "secondary"}>
+                        {pattern.is_exclusion ? <><X className="mr-1 h-3 w-3"/>Exclusion</> : <><Check className="mr-1 h-3 w-3"/>Inclusion</>}
+                    </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleOpenDialog(pattern)}><Edit className="mr-2 h-4 w-4"/>Edit</DropdownMenuItem>
+                        <DropdownMenuSeparator/>
+                        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDelete(pattern.id)}><Trash2 className="mr-2 h-4 w-4"/>Delete</DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                    </TableCell>
+                </TableRow>
+                ))
+            )}
+            </TableBody>
+        </Table>
+    </div>
+  );
 
   return (
     <MainLayout>
-      <div className="container mx-auto py-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold tracking-tight">Bot Patterns</h1>
-          <Button onClick={handleAddPattern}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Pattern
-          </Button>
-        </div>
-
+      <PageContainer
+        title="Bot Patterns"
+        description="Manage regex patterns to identify or exclude bot-authored commits during dataset creation."
+        actions={<Button onClick={() => handleOpenDialog()}><Plus className="mr-2 h-4 w-4"/>Add Pattern</Button>}
+      >
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList>
             <TabsTrigger value="global">Global Patterns</TabsTrigger>
-            <TabsTrigger value="repository">Repository Patterns</TabsTrigger>
+            <TabsTrigger value="repository">Repository-Specific</TabsTrigger>
           </TabsList>
-
-          <TabsContent value="global" className="space-y-4">
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Pattern</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Exclusion</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {globalPatterns.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center py-4 text-muted-foreground">
-                        No global patterns defined yet
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    globalPatterns.map((pattern) => (
-                      <TableRow key={pattern.id}>
-                        <TableCell className="font-mono">{pattern.pattern}</TableCell>
-                        <TableCell>{getPatternTypeBadge(pattern.type)}</TableCell>
-                        <TableCell>
-                          <Checkbox checked={pattern.isExclusion} disabled />
-                        </TableCell>
-                        <TableCell>{pattern.description}</TableCell>
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
-                                <MoreHorizontal className="h-4 w-4" />
-                                <span className="sr-only">Open menu</span>
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleEditPattern(pattern)}>
-                                <Edit className="mr-2 h-4 w-4" />
-                                Edit
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                className="text-destructive focus:text-destructive"
-                                onClick={() => handleDeletePattern(pattern.id, true)}
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </TabsContent>
-
+          <TabsContent value="global">{renderTable(globalPatterns)}</TabsContent>
           <TabsContent value="repository" className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="repository">Select Repository</Label>
-              <select
-                id="repository"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                value={selectedRepository}
-                onChange={handleRepositoryChange}
-              >
-                <option value="">Select a repository</option>
-                {mockRepositories.map((repo) => (
-                  <option key={repo.id} value={repo.id}>
-                    {repo.name}
-                  </option>
-                ))}
-              </select>
+                <Label htmlFor="repository-select">Select Repository</Label>
+                <Select value={selectedRepositoryId} onValueChange={setSelectedRepositoryId} disabled={isLoadingRepos}>
+                    <SelectTrigger id="repository-select"><SelectValue placeholder={isLoadingRepos ? "Loading..." : "Select a repository to view its patterns..."} /></SelectTrigger>
+                    <SelectContent>
+                        {repositories.map(repo => (<SelectItem key={repo.id} value={repo.id.toString()}>{repo.name}</SelectItem>))}
+                    </SelectContent>
+                </Select>
             </div>
-
-            {selectedRepository ? (
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Pattern</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Exclusion</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {!repoPatterns[selectedRepository] || repoPatterns[selectedRepository].length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center py-4 text-muted-foreground">
-                          No repository-specific patterns defined yet
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      repoPatterns[selectedRepository].map((pattern) => (
-                        <TableRow key={pattern.id}>
-                          <TableCell className="font-mono">{pattern.pattern}</TableCell>
-                          <TableCell>{getPatternTypeBadge(pattern.type)}</TableCell>
-                          <TableCell>
-                            <Checkbox checked={pattern.isExclusion} disabled />
-                          </TableCell>
-                          <TableCell>{pattern.description}</TableCell>
-                          <TableCell className="text-right">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon">
-                                  <MoreHorizontal className="h-4 w-4" />
-                                  <span className="sr-only">Open menu</span>
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => handleEditPattern(pattern)}>
-                                  <Edit className="mr-2 h-4 w-4" />
-                                  Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="text-destructive focus:text-destructive"
-                                  onClick={() => handleDeletePattern(pattern.id, false)}
-                                >
-                                  <Trash2 className="mr-2 h-4 w-4" />
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            ) : (
-              <div className="rounded-md border p-8 text-center text-muted-foreground">
-                Please select a repository to view or add repository-specific patterns
-              </div>
+            {selectedRepositoryId ? renderTable(repoPatterns) : (
+                <Alert variant="default" className="text-center py-8"><AlertCircle className="h-4 w-4"/><AlertDescription>Please select a repository to view or manage its specific bot patterns.</AlertDescription></Alert>
             )}
           </TabsContent>
         </Tabs>
-
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent>
+      </PageContainer>
+      
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
             <DialogHeader>
-              <DialogTitle>{editingPattern ? "Edit Bot Pattern" : "Add Bot Pattern"}</DialogTitle>
-              <DialogDescription>
-                {activeTab === "global"
-                  ? "Define a pattern to identify bot commits across all repositories"
-                  : `Define a pattern specific to the ${mockRepositories.find((r) => r.id === selectedRepository)?.name} repository`}
-              </DialogDescription>
+            <DialogTitle>{editingPattern ? 'Edit' : 'Create'} Bot Pattern</DialogTitle>
+            <DialogDescription>
+                Define a regex pattern for author names.
+                <Badge variant={dialogContext.scope === 'global' ? 'secondary' : 'default'} className="ml-2">
+                    Scope: {dialogContext.scope === 'global' ? 'Global' : `Repository (${dialogContext.repoName || '...'})`}
+                </Badge>
+            </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="pattern">Pattern String</Label>
-                <Input
-                  id="pattern"
-                  name="pattern"
-                  placeholder="e.g., dependabot or *bot*"
-                  value={formData.pattern}
-                  onChange={handleInputChange}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="type">Pattern Type</Label>
-                <select
-                  id="type"
-                  name="type"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  value={formData.type}
-                  onChange={handleInputChange}
-                >
-                  <option value="Exact">Exact</option>
-                  <option value="Wildcard">Wildcard</option>
-                  <option value="Regex">Regex</option>
-                </select>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox id="isExclusion" checked={formData.isExclusion} onCheckedChange={handleCheckboxChange} />
-                <Label htmlFor="isExclusion">
-                  Exclusion Pattern (prevents matching commits from being identified as bots)
-                </Label>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  name="description"
-                  placeholder="Describe what this pattern is intended to match"
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  rows={3}
-                />
-              </div>
+                <div className="space-y-2">
+                    <Label htmlFor="pattern">Pattern (Regex) *</Label>
+                    <Input id="pattern" value={formData.pattern || ""} onChange={(e) => setFormData(p => ({...p, pattern: e.target.value}))} placeholder="e.g., .*\[bot\].*"/>
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="description">Description</Label>
+                    <Textarea id="description" value={formData.description || ""} onChange={(e) => setFormData(p => ({...p, description: e.target.value}))} placeholder="A brief note about this pattern's purpose."/>
+                </div>
+                <div className="flex items-center space-x-2">
+                    <Checkbox id="is_exclusion" checked={formData.is_exclusion} onCheckedChange={(checked) => setFormData(p => ({...p, is_exclusion: !!checked}))}/>
+                    <Label htmlFor="is_exclusion">Exclusion Pattern</Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                    An **Inclusion** pattern marks a matching author as a bot. An **Exclusion** pattern marks a matching author as explicitly NOT a bot, overriding any inclusion matches.
+                </p>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleSubmit}>{editingPattern ? "Update" : "Add"} Pattern</Button>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleSubmit} disabled={isSubmitting}>
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                {editingPattern ? 'Save Changes' : 'Create Pattern'}
+            </Button>
             </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
-  )
+  );
 }
 
-export default function BotPatternsPage() { // New wrapper component
+export default function BotPatternsPage() {
   return (
-    <Suspense fallback={<PageLoader message="Loading bot patterns page..." />}>
+    <Suspense fallback={<PageLoader message="Loading bot patterns..." />}>
       <BotPatternsPageContent />
     </Suspense>
   );

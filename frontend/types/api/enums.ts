@@ -89,9 +89,3 @@ export enum PrunerTypeEnum {
     PERCENTILE = "percentile",
     SUCCESSIVEHALVING = "successivehalving",
 }
-
-export enum PatternTypeEnum { // from shared/db/models/bot_pattern.py
-    REGEX = "REGEX",
-    WILDCARD = "WILDCARD",
-    EXACT = "EXACT",
-}

@@ -23,6 +23,10 @@ import {
   CommitPageResponse,
   TaskResponse,
   FeatureSelectionDefinition,
+  BotPatternRead,
+  BotPatternCreatePayload,
+  BotPatternUpdatePayload,
+  PaginatedBotPatternRead,
 } from "@/types/api"; // Assuming types are in @/types/api/*
 
 const API_BASE_URL =  `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/api/v1`;
@@ -130,6 +134,35 @@ export const apiService = {
   },
   delete: async <TResponse>(endpoint: string, options?: RequestInit): Promise<TResponse> => {
     return request<TResponse>(endpoint, { ...options, method: 'DELETE' });
+  },
+
+  // --- Bot Patterns ---
+  getGlobalBotPatterns: async (params?: { skip?: number; limit?: number }): Promise<PaginatedBotPatternRead> => {
+    const queryParams = new URLSearchParams(params as any).toString();
+    return apiService.get<PaginatedBotPatternRead>(`/bot-patterns?${queryParams}`);
+  },
+
+  getRepoBotPatterns: async (repoId: number, params?: { skip?: number; limit?: number, include_global?: boolean }): Promise<PaginatedBotPatternRead> => {
+    const queryParams = new URLSearchParams(params as any).toString();
+    return apiService.get<PaginatedBotPatternRead>(`/repositories/${repoId}/bot-patterns?${queryParams}`);
+  },
+  
+  createBotPattern: async (payload: BotPatternCreatePayload): Promise<BotPatternRead> => {
+    if (payload.repository_id) {
+      // Repository-specific
+      return apiService.post<BotPatternRead, BotPatternCreatePayload>(`/repositories/${payload.repository_id}/bot-patterns`, payload);
+    } else {
+      // Global
+      return apiService.post<BotPatternRead, BotPatternCreatePayload>('/bot-patterns', payload);
+    }
+  },
+
+  updateBotPattern: async (patternId: number, payload: BotPatternUpdatePayload): Promise<BotPatternRead> => {
+    return apiService.put<BotPatternRead, BotPatternUpdatePayload>(`/bot-patterns/${patternId}`, payload);
+  },
+
+  deleteBotPattern: async (patternId: number): Promise<void> => {
+    return apiService.delete<void>(`/bot-patterns/${patternId}`);
   },
 
   // --- Dashboard ---
