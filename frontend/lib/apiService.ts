@@ -22,6 +22,7 @@ import {
   PaginatedCommitList, 
   CommitPageResponse,
   TaskResponse,
+  FeatureSelectionDefinition,
 } from "@/types/api"; // Assuming types are in @/types/api/*
 
 const API_BASE_URL =  `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/api/v1`;
@@ -147,6 +148,9 @@ export const apiService = {
   // --- Datasets ---
   getAvailableCleaningRules: async (): Promise<RuleDefinition[]> => {
     return apiService.get<RuleDefinition[]>('/datasets/available-cleaning-rules');
+  },
+  getAvailableFeatureSelectionAlgorithms: async (): Promise<FeatureSelectionDefinition[]> => {
+    return apiService.get<FeatureSelectionDefinition[]>('/datasets/available-feature-selection-algorithms');
   },
   createDataset: async (repoId: string | number, payload: DatasetCreatePayload): Promise<DatasetTaskResponse> => {
     return apiService.post<DatasetTaskResponse, DatasetCreatePayload>(`/repositories/${repoId}/datasets`, payload);

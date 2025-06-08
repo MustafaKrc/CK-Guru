@@ -42,18 +42,21 @@ def sync_definitions_to_db():
         with get_sync_db_session() as session:
             # Mark old definitions from this worker as not implemented
             # This handles cases where an algorithm is removed from the worker code
-            type_names = {d["name"] for d in definitions}
+            type_names = {d.name for d in definitions}  # Use attribute access instead of dict subscription
             session.query(FeatureSelectionDefinitionDB)\
                    .filter(FeatureSelectionDefinitionDB.last_updated_by == worker_id,
                            ~FeatureSelectionDefinitionDB.name.in_(type_names))\
                    .update({'is_implemented': False})
 
-            # Prepare data for upsert
+            # Convert Pydantic models to dictionaries and prepare data for upsert
+            definitions_to_upsert = []
             for definition in definitions:
-                definition['last_updated_by'] = worker_id
+                db_data = definition.model_dump(mode="json")  # Convert to dict
+                db_data['last_updated_by'] = worker_id
+                definitions_to_upsert.append(db_data)
 
-            if definitions:
-                upsert_stmt = pg_insert(FeatureSelectionDefinitionDB).values(definitions)
+            if definitions_to_upsert:
+                upsert_stmt = pg_insert(FeatureSelectionDefinitionDB).values(definitions_to_upsert)
                 update_on_conflict = upsert_stmt.on_conflict_do_update(
                     index_elements=['name'],
                     set_={

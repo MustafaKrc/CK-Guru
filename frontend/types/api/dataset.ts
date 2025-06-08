@@ -8,11 +8,17 @@ export interface CleaningRuleConfig {
   params?: Record<string, any>; // Parameters specific to this rule
 }
 
+export interface FeatureSelectionConfig {
+  name: string;
+  params: Record<string, any>;
+}
+
 // This interface should mirror shared/schemas/dataset.py -> DatasetConfig
 export interface DatasetConfig {
   feature_columns: string[];
   target_column: string;
   cleaning_rules: CleaningRuleConfig[]; // Use the exported CleaningRuleConfig
+  feature_selection?: FeatureSelectionConfig | null;
 }
 
 // This interface should mirror shared/schemas/dataset.py -> DatasetRead
