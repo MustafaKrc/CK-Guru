@@ -16,6 +16,7 @@ from .stream_and_process_batches_step import StreamAndProcessBatchesStep
 from .write_output_step import WriteOutputStep
 from .base_dataset_step import BaseDatasetStep
 from .feature_selection_step import FeatureSelectionStep
+from .apply_bot_patterns_step import ApplyBotPatternsStep
 
 __all__ = [
     "BaseDatasetStep",
@@ -34,4 +35,5 @@ __all__ = [
     "CombineBatchesStep",
     "ApplyGlobalCleaningRulesStep",
     "FeatureSelectionStep",
+    "ApplyBotPatternsStep",
 ]

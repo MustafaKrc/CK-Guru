@@ -34,50 +34,6 @@ bot_patterns_table = sa.table(
 # List of default global bot patterns to seed
 # Use uppercase enum values that match the database enum definition
 default_patterns = [
-    {
-        "repository_id": None,
-        "pattern": "dependabot[bot]",
-        "pattern_type": "EXACT",
-        "is_exclusion": False,
-        "description": "GitHub Dependabot",
-    },
-    {
-        "repository_id": None,
-        "pattern": "dependabot-preview[bot]",
-        "pattern_type": "EXACT",
-        "is_exclusion": False,
-        "description": "GitHub Dependabot Preview",
-    },
-    {
-        "repository_id": None,
-        "pattern": "github-actions[bot]",
-        "pattern_type": "EXACT",
-        "is_exclusion": False,
-        "description": "GitHub Actions Bot",
-    },
-    {
-        "repository_id": None,
-        "pattern": "renovate[bot]",
-        "pattern_type": "EXACT",
-        "is_exclusion": False,
-        "description": "Renovate Bot",
-    },
-    {
-        "repository_id": None,
-        "pattern": "snyk-bot",
-        "pattern_type": "EXACT",
-        "is_exclusion": False,
-        "description": "Snyk Bot",
-    },
-    # Add more known common bots here if desired
-    # Example using regex (use cautiously):
-    {
-        "repository_id": None,
-        "pattern": r".*\[bot\]$",
-        "pattern_type": "REGEX",
-        "is_exclusion": False,
-        "description": "Generic pattern for names ending in [bot]",
-    },
 ]
 
 

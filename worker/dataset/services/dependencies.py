@@ -9,7 +9,6 @@ from shared.core.config import settings
 from shared.services import JobStatusUpdater  # Shared concrete implementation
 from shared.services.interfaces import IJobStatusUpdater  # Shared interface
 from shared.utils.pipeline_logging import StepLogger
-from services.steps.feature_selection_step import FeatureSelectionStep
 
 # Import Context
 from .context import DatasetContext
@@ -36,6 +35,8 @@ from .steps import (
     SelectFinalColumnsStep,
     StreamAndProcessBatchesStep,
     WriteOutputStep,
+    FeatureSelectionStep,
+    ApplyBotPatternsStep,
 )
 
 logger = logging.getLogger(__name__)
@@ -54,7 +55,8 @@ class StepRegistry:
             ProcessGloballyStep,
             SelectFinalColumnsStep,
             WriteOutputStep,
-            FeatureSelectionStep
+            FeatureSelectionStep,
+            ApplyBotPatternsStep,
             # Include sub-steps if they needed direct instantiation/injection,
             # but currently they are instantiated within their orchestrator steps
         ]
@@ -194,6 +196,9 @@ class DependencyProvider:
             pass
         elif step_type == FeatureSelectionStep:
             pass
+        elif step_type == ApplyBotPatternsStep:
+            # This step needs the BotPatternRepository, which is accessed via repo_factory
+            deps["bot_pattern_repo"] = self._repo_factory.get_bot_pattern_repo()
         # Add dependencies for other steps if they are added later
 
         step_logger = StepLogger(

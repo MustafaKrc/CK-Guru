@@ -1,27 +1,13 @@
 # shared/db/models/bot_pattern.py
-import enum
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import (
-    Boolean,
-    Enum,
-    ForeignKey,
-    String,
-    Text,
-    UniqueConstraint,
-)
+from sqlalchemy import Boolean, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from shared.db.base_class import Base
 
 if TYPE_CHECKING:
     from .repository import Repository  # noqa
-
-
-class PatternTypeEnum(str, enum.Enum):
-    REGEX = "regex"
-    WILDCARD = "wildcard"
-    EXACT = "exact"
 
 
 class BotPattern(Base):
@@ -32,13 +18,8 @@ class BotPattern(Base):
     repository_id: Mapped[int | None] = mapped_column(
         ForeignKey("repositories.id", ondelete="CASCADE"), nullable=True, index=True
     )
-    pattern: Mapped[str] = mapped_column(String, nullable=False)
-    pattern_type: Mapped[PatternTypeEnum] = mapped_column(
-        Enum(PatternTypeEnum, name="pattern_type_enum"),
-        nullable=False,
-        default=PatternTypeEnum.EXACT,
-    )
-    is_exclusion: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    pattern: Mapped[str] = mapped_column(String, nullable=False, comment="The regular expression pattern.")
+    is_exclusion: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, comment="If true, matches are explicitly NOT bots.")
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     repository: Mapped[Optional["Repository"]] = relationship(
@@ -46,17 +27,10 @@ class BotPattern(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint(
-            "repository_id",
-            "pattern",
-            "pattern_type",
-            "is_exclusion",
-            name="uq_repo_bot_pattern",
-        ),
-        # Add check constraint if needed, e.g., ensure global patterns don't have repo_id
+        UniqueConstraint("repository_id", "pattern", name="uq_repo_bot_pattern"),
     )
 
     def __repr__(self):
         scope = f"Repo({self.repository_id})" if self.repository_id else "Global"
         exclusion = " (Exclusion)" if self.is_exclusion else ""
-        return f"<BotPattern(id={self.id}, scope='{scope}', type='{self.pattern_type.value}', pattern='{self.pattern}'{exclusion})>"
+        return f"<BotPattern(id={self.id}, scope='{scope}', pattern='{self.pattern}'{exclusion})>"

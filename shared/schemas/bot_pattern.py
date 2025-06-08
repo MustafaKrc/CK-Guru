@@ -1,53 +1,31 @@
 # shared/schemas/bot_pattern.py
-from typing import Optional
-
-from pydantic import BaseModel, Field
-
-from shared.db.models.bot_pattern import PatternTypeEnum  # Import Enum
+from typing import Optional, List
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class BotPatternBase(BaseModel):
-    pattern: str = Field(
-        ..., description="The pattern string (exact, wildcard, or regex)."
-    )
-    pattern_type: PatternTypeEnum = Field(
-        default=PatternTypeEnum.EXACT, description="Type of the pattern."
-    )
-    is_exclusion: bool = Field(
-        default=False,
-        description="If true, matches exclude commits instead of including them for filtering.",
-    )
-    description: Optional[str] = Field(
-        None, description="Optional description of the pattern."
-    )
-    repository_id: Optional[int] = Field(
-        None, description="Repository ID if specific to a repo, null for global."
-    )
+    pattern: str = Field(..., description="The regex pattern to match against author names.")
+    is_exclusion: bool = Field(False, description="If true, this pattern defines an exception and matching authors will be kept.")
+    description: Optional[str] = Field(None, description="A description of what this pattern does.")
 
 
 class BotPatternCreate(BotPatternBase):
-    pass
+    repository_id: Optional[int] = Field(None, description="The repository ID for a specific pattern. Leave null for a global pattern.")
 
 
 class BotPatternUpdate(BaseModel):
     pattern: Optional[str] = None
-    pattern_type: Optional[PatternTypeEnum] = None
     is_exclusion: Optional[bool] = None
     description: Optional[str] = None
-    # repository_id is usually not updatable, managed via endpoint path
 
 
 class BotPatternRead(BotPatternBase):
     id: int
+    repository_id: Optional[int] = None
 
-    model_config = {
-        "from_attributes": True,  # Pydantic V2 way
-        "use_enum_values": True,  # Serialize enums as strings
-    }
+    model_config = ConfigDict(from_attributes=True)
+
 
 class PaginatedBotPatternRead(BaseModel):
     total: int
-    items: list[BotPatternRead]
-
-    skip: Optional[int] = None
-    limit: Optional[int] = None
+    items: List[BotPatternRead]

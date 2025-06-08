@@ -11,6 +11,7 @@ from services.steps import (
     SelectFinalColumnsStep,
     FeatureSelectionStep,
     StreamAndProcessBatchesStep,
+    ApplyBotPatternsStep,
     WriteOutputStep,
 )
 
@@ -39,6 +40,7 @@ class DefaultDatasetGenerationStrategy(IDatasetGenerationStrategy):
             StreamAndProcessBatchesStep,  # This step orchestrates batch sub-steps
             ProcessGloballyStep,  # This step orchestrates global sub-steps
             SelectFinalColumnsStep,
+            ApplyBotPatternsStep, 
             FeatureSelectionStep,
             WriteOutputStep,
         ]

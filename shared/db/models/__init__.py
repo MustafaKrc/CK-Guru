@@ -1,4 +1,4 @@
-from .bot_pattern import BotPattern, PatternTypeEnum
+from .bot_pattern import BotPattern
 from .ck_metric import CKMetric
 from .cleaning_rule_definitions import CleaningRuleDefinitionDB
 from .commit_guru_metric import CommitGuruMetric
@@ -17,7 +17,6 @@ from .feature_selection_definition import FeatureSelectionDefinitionDB
 
 __all__ = [
     "BotPattern",
-    "PatternTypeEnum",
     "CKMetric",
     "CleaningRuleDefinitionDB",
     "CommitGuruMetric",
