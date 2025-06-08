@@ -18,18 +18,48 @@ from shared import schemas
 from shared.core.config import settings
 from shared.db.models.cleaning_rule_definitions import CleaningRuleDefinitionDB
 from shared.db.models.dataset import DatasetStatusEnum
+from shared.db.models.feature_selection_definition import FeatureSelectionDefinitionDB
 from shared.db_session import get_async_db_session
 from shared.schemas import PaginatedDatasetRead  # Ensure this is imported
 from shared.schemas import RuleDefinition as BackendRuleDefinitionSchema
 from shared.schemas.enums import (
     DatasetStatusEnum as DatasetStatusEnumSchema,
-)  # For query param type hint
+)
+from shared.schemas.feature_selection import FeatureSelectionDefinitionRead  # For query param type hint
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
 
 router = APIRouter()
 
+# --- Endpoint to list available feature selection rules ---
+@router.get(
+    "/datasets/available-feature-selection-algorithms",
+    response_model=List[FeatureSelectionDefinitionRead],
+    summary="Get Available Feature Selection Algorithms",
+    description="Lists the feature selection algorithms that are implemented and available for use.",
+)
+async def get_available_feature_selection_algorithms(
+    db: AsyncSession = Depends(get_async_db_session),
+):
+    """Returns the list of implemented feature selection algorithm definitions from the DB."""
+    logger.info("Fetching available feature selection algorithms from database...")
+    stmt = (
+        select(FeatureSelectionDefinitionDB)
+        .where(FeatureSelectionDefinitionDB.is_implemented)
+        .order_by(FeatureSelectionDefinitionDB.display_name)
+    )
+
+    result = await db.execute(stmt)
+    db_algorithms = result.scalars().all()
+    
+    # Using model_validate (from_orm is deprecated in Pydantic v2)
+    response_algorithms = [
+        FeatureSelectionDefinitionRead.model_validate(algo) for algo in db_algorithms
+    ]
+
+    logger.info(f"Returning {len(response_algorithms)} available feature selection algorithms.")
+    return response_algorithms
 
 # --- Endpoint to list available rules ---
 @router.get(

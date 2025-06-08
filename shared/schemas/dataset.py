@@ -4,8 +4,12 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field  # Use Json for validation? maybe just Dict
 
-from shared.schemas.enums import DatasetStatusEnum  # Import Enum from correct location
+from shared.schemas.enums import DatasetStatusEnum, FeatureSelectionAlgorithmEnum
 
+# --- Feature Selection Configuration --- 
+class FeatureSelectionConfig(BaseModel):
+    name: FeatureSelectionAlgorithmEnum = Field(..., description="Name of the feature selection algorithm to apply.")
+    params: Dict[str, Any] = Field(default_factory=dict, description="Parameters for the selected algorithm.")
 
 # --- Cleaning Rule Configuration ---
 class CleaningRuleParams(BaseModel):
@@ -38,6 +42,11 @@ class DatasetConfig(BaseModel):
     cleaning_rules: List[CleaningRuleConfig] = Field(
         default_factory=list, description="Configuration for cleaning rules to apply."
     )
+    feature_selection: Optional[FeatureSelectionConfig] = Field(
+        None,
+        description="Configuration for the feature selection step, which runs after cleaning."
+    )
+
 
 
 # --- Dataset Schemas ---

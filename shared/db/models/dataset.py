@@ -34,6 +34,12 @@ class Dataset(Base):
     #   "cleaning_rules": [{"name": "rule_id", "enabled": true, "params": {...}}]
     # }
 
+    feature_selection_config: Mapped[Dict[str, Any] | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="Configuration for the feature selection algorithm, e.g., {'name': 'mrmr', 'params': {'k': 20}}"
+    )
+
     status: Mapped[DatasetStatusEnum] = mapped_column(
         Enum(DatasetStatusEnum, name="dataset_status_enum"),
         nullable=False,

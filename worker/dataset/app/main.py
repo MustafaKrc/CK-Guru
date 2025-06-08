@@ -9,6 +9,10 @@ from services.cleaning_rules.base import (
     RuleDefinition,
     discover_rules,
 )
+
+from services.factories.feature_selection_factory import FeatureSelectionStrategyFactory
+from shared.db.models.feature_selection_definition import FeatureSelectionDefinitionDB
+
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -23,6 +27,49 @@ logger = logging.getLogger(__name__)
 
 WORKER_IDENTIFIER = "dataset-worker"
 
+def sync_definitions_to_db():
+    """Upserts feature selection algorithm definitions into the database on worker startup."""
+    logger.info("Syncing feature selection definitions to database...")
+    factory = FeatureSelectionStrategyFactory()
+    definitions = factory.get_all_definitions()
+    worker_id = "dataset-worker"
+
+    if not definitions:
+        logger.info("No feature selection definitions found in factory to sync.")
+        return
+
+    try:
+        with get_sync_db_session() as session:
+            # Mark old definitions from this worker as not implemented
+            # This handles cases where an algorithm is removed from the worker code
+            type_names = {d["name"] for d in definitions}
+            session.query(FeatureSelectionDefinitionDB)\
+                   .filter(FeatureSelectionDefinitionDB.last_updated_by == worker_id,
+                           ~FeatureSelectionDefinitionDB.name.in_(type_names))\
+                   .update({'is_implemented': False})
+
+            # Prepare data for upsert
+            for definition in definitions:
+                definition['last_updated_by'] = worker_id
+
+            if definitions:
+                upsert_stmt = pg_insert(FeatureSelectionDefinitionDB).values(definitions)
+                update_on_conflict = upsert_stmt.on_conflict_do_update(
+                    index_elements=['name'],
+                    set_={
+                        'display_name': upsert_stmt.excluded.display_name,
+                        'description': upsert_stmt.excluded.description,
+                        'parameters': upsert_stmt.excluded.parameters,
+                        'is_implemented': upsert_stmt.excluded.is_implemented,
+                        'last_updated_by': upsert_stmt.excluded.last_updated_by
+                    }
+                )
+                session.execute(update_on_conflict)
+            
+            session.commit()
+            logger.info(f"Successfully synced {len(definitions)} feature selection definitions to DB.")
+    except Exception as e:
+        logger.error(f"Failed to sync feature selection definitions to DB: {e}", exc_info=True)
 
 def update_rule_registry_in_db(registry_snapshot: Dict[str, Any]):
     """UPSERTs rule definitions into the database using a snapshot of the registry."""
@@ -111,16 +158,19 @@ logger.info(
 )
 
 
-# 1. Discover rules - populates the global WORKER_RULE_REGISTRY
+#  Discover rules - populates the global WORKER_RULE_REGISTRY
 #    Ensure the path is correct relative to the execution directory or adjust PYTHONPATH
 discover_rules(module_path="services.cleaning_rules.implementations")
 
-# 2. Update DB using the registry populated in *this* process
+#  Update DB using the registry populated in *this* process
 #    We copy it here just to pass it cleanly to the function.
 initial_registry_view = WORKER_RULE_REGISTRY.copy()
 update_rule_registry_in_db(initial_registry_view)
 
-# 3. Create Celery app instance
+#  Sync feature selection definitions to DB
+sync_definitions_to_db()
+
+#  Create Celery app instance
 #    The tasks themselves will now access the registry snapshot when needed via DependencyProvider.
 celery_app = create_celery_app(
     main_name="dataset_worker",

@@ -24,6 +24,7 @@ from .enums import (
     SamplerTypeEnum,
     CommitIngestionStatusEnum,
     FileChangeTypeEnum,
+    FeatureSelectionAlgorithmEnum,
 )
 from .hp_search_job import (
     HPSearchConfig,
@@ -105,6 +106,11 @@ from .commit import (
     PaginatedCommitList,
 )
 
+from .feature_selection import (
+    FeatureSelectionDefinitionRead,
+    FeatureSelectionParamDefinition,
+)
+
 __all__ = [
     # Enums
     "JobStatusEnum",
@@ -118,6 +124,7 @@ __all__ = [
     "TaskStatusEnum",
     "CommitIngestionStatusEnum",
     "FileChangeTypeEnum",
+    "FeatureSelectionAlgorithmEnum",
     # Schemas
     "RepositoryBase",
     "RepositoryCreate",
@@ -198,4 +205,6 @@ __all__ = [
     "CommitListItem",
     "CommitPageResponse",
     "PaginatedCommitList",
+    "FeatureSelectionParamDefinition",
+    "FeatureSelectionDefinitionRead",
 ]

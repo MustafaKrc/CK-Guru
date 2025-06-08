@@ -13,6 +13,7 @@ from .xai_result import XAIResult
 from .ml_model_type_definition import MLModelTypeDefinitionDB
 from .commit_details import CommitDetails
 from .commit_file_diff import CommitFileDiff
+from .feature_selection_definition import FeatureSelectionDefinitionDB
 
 __all__ = [
     "BotPattern",
@@ -32,4 +33,5 @@ __all__ = [
     "MLModelTypeDefinitionDB",
     "CommitDetails",
     "CommitFileDiff",
+    "FeatureSelectionDefinitionDB",
 ]

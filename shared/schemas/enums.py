@@ -38,6 +38,11 @@ class FileChangeTypeEnum(str, enum.Enum):
     X = "X" # Unknown (e.g., file type not recognized)
     B = "B" # Broken (e.g., file was deleted but still exists in the index)
 
+class FeatureSelectionAlgorithmEnum(str, enum.Enum):
+    """Enum defining the supported feature selection algorithm names."""
+    CBFS = "cbfs"
+    MRMR = "mrmr"
+    MODEL_BASED = "model_based"
 
 class ObjectiveMetricEnum(str, enum.Enum):
     F1_WEIGHTED = "f1_weighted"
