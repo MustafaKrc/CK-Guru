@@ -1,461 +1,264 @@
+// app/tasks/page.tsx
 "use client"
 
-import type React from "react"
-
-import { useState, useEffect } from "react"
+import React, { useState, useEffect, useMemo } from "react"
 import { MainLayout } from "@/components/main-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { RefreshCw, StopCircle, AlertTriangle, Clock, CheckCircle, XCircle } from "lucide-react"
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { RefreshCw, StopCircle, AlertTriangle, CheckCircle, XCircle, Clock, Search, Rss } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { PageContainer } from "@/components/ui/page-container"
+import { Skeleton } from "@/components/ui/skeleton"
+import { useTaskStore, TaskStatusUpdatePayload } from "@/store/taskStore"
+import { TaskStatusResponse } from "@/types/api/task"
+import { apiService, handleApiError } from "@/lib/apiService"
+import Link from "next/link"
 
-interface Task {
-  id: string
-  type: string
-  status: "RUNNING" | "SUCCESS" | "FAILED" | "PENDING"
-  progress: number
-  statusMessage: string
-  createdAt: string
-  completedAt?: string
-  error?: string
-  result?: any
-}
+const ACTIVE_STATUSES = ["PENDING", "RUNNING", "STARTED", "RECEIVED", "RETRY"];
 
-export default function TaskMonitorPage() {
-  const [taskId, setTaskId] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
-  const [taskData, setTaskData] = useState<Task | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [runningTasks, setRunningTasks] = useState<Task[]>([])
-  const [recentTasks, setRecentTasks] = useState<Task[]>([])
-  const [isLoadingTasks, setIsLoadingTasks] = useState(true)
-  const { toast } = useToast()
-
-  // Fetch running and recent tasks on mount
-  useEffect(() => {
-    fetchTasks()
-  }, [])
-
-  const fetchTasks = () => {
-    setIsLoadingTasks(true)
-
-    // In a real app, this would be an API call to fetch tasks
-    setTimeout(() => {
-      // Mock data for running tasks
-      const mockRunningTasks: Task[] = [
-        {
-          id: "task-789012",
-          type: "MODEL_TRAINING",
-          status: "RUNNING",
-          progress: 65,
-          statusMessage: "Training model (step 3/5)",
-          createdAt: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
-        },
-        {
-          id: "task-789013",
-          type: "DATASET_CREATION",
-          status: "RUNNING",
-          progress: 30,
-          statusMessage: "Processing data files",
-          createdAt: new Date(Date.now() - 1800000).toISOString(), // 30 minutes ago
-        },
-        {
-          id: "task-789014",
-          type: "REPOSITORY_INGESTION",
-          status: "PENDING",
-          progress: 0,
-          statusMessage: "Waiting to start",
-          createdAt: new Date(Date.now() - 300000).toISOString(), // 5 minutes ago
-        },
-      ]
-
-      // Mock data for recent tasks
-      const mockRecentTasks: Task[] = [
-        {
-          id: "task-123456",
-          type: "MODEL_TRAINING",
-          status: "SUCCESS",
-          progress: 100,
-          statusMessage: "Task completed successfully",
-          createdAt: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
-          completedAt: new Date(Date.now() - 82800000).toISOString(), // 23 hours ago
-          result: {
-            modelId: "model-123",
-            metrics: {
-              f1: 0.85,
-              accuracy: 0.88,
-            },
-          },
-        },
-        {
-          id: "task-345678",
-          type: "DATASET_CREATION",
-          status: "FAILED",
-          progress: 30,
-          statusMessage: "Task failed due to an error",
-          createdAt: new Date(Date.now() - 43200000).toISOString(), // 12 hours ago
-          completedAt: new Date(Date.now() - 41400000).toISOString(), // 11.5 hours ago
-          error: "Out of memory error during data processing",
-        },
-        {
-          id: "task-567890",
-          type: "INFERENCE",
-          status: "SUCCESS",
-          progress: 100,
-          statusMessage: "Inference completed successfully",
-          createdAt: new Date(Date.now() - 7200000).toISOString(), // 2 hours ago
-          completedAt: new Date(Date.now() - 5400000).toISOString(), // 1.5 hours ago
-          result: {
-            predictionsCount: 1250,
-            averageConfidence: 0.92,
-          },
-        },
-      ]
-
-      setRunningTasks(mockRunningTasks)
-      setRecentTasks(mockRecentTasks)
-      setIsLoadingTasks(false)
-    }, 1000)
+// Helper function to format dates
+function formatDate(dateString?: string | null): string {
+  if (!dateString) return "N/A";
+  try {
+    return new Date(dateString).toLocaleString(undefined, {
+      year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+  } catch (e) {
+    return "Invalid Date";
   }
+};
 
-  const handleTaskIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setTaskId(e.target.value)
-  }
-
-  const handleCheckStatus = () => {
-    if (!taskId.trim()) {
-      setError("Please enter a task ID")
-      return
-    }
-
-    setIsLoading(true)
-    setError(null)
-
-    // In a real app, this would be an API call to check the task status
-    setTimeout(() => {
-      // Mock response based on the task ID
-      if (taskId === "123456") {
-        setTaskData({
-          id: "123456",
-          type: "MODEL_TRAINING",
-          status: "SUCCESS",
-          progress: 100,
-          statusMessage: "Task completed successfully",
-          createdAt: new Date(Date.now() - 86400000).toISOString(),
-          completedAt: new Date(Date.now() - 82800000).toISOString(),
-          result: {
-            modelId: "model-123",
-            metrics: {
-              f1: 0.85,
-              accuracy: 0.88,
-            },
-          },
-        })
-      } else if (taskId === "789012") {
-        setTaskData({
-          id: "789012",
-          type: "MODEL_TRAINING",
-          status: "RUNNING",
-          progress: 65,
-          statusMessage: "Training model (step 3/5)",
-          createdAt: new Date(Date.now() - 3600000).toISOString(),
-        })
-      } else if (taskId === "345678") {
-        setTaskData({
-          id: "345678",
-          type: "DATASET_CREATION",
-          status: "FAILED",
-          progress: 30,
-          statusMessage: "Task failed due to an error",
-          createdAt: new Date(Date.now() - 43200000).toISOString(),
-          completedAt: new Date(Date.now() - 41400000).toISOString(),
-          error: "Out of memory error during data processing",
-        })
-      } else {
-        setError("Task not found")
-        setTaskData(null)
-      }
-
-      setIsLoading(false)
-    }, 1000)
-  }
-
-  const handleRevokeTask = (taskId: string) => {
-    // In a real app, this would be an API call to revoke the task
-    toast({
-      title: "Task revocation requested",
-      description: `Revocation request sent for task ${taskId}`,
-    })
-  }
-
-  const handleRefreshTasks = () => {
-    fetchTasks()
-  }
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "SUCCESS":
-        return (
-          <Badge
-            variant="outline"
-            className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400 dark:border-green-800"
-          >
-            <CheckCircle className="h-3 w-3 mr-1" />
-            Success
-          </Badge>
-        )
-      case "RUNNING":
-        return (
-          <Badge
-            variant="outline"
-            className="flex items-center gap-1 bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-400 dark:border-blue-800"
-          >
-            <RefreshCw className="h-3 w-3 animate-spin" />
-            Running
-          </Badge>
-        )
-      case "PENDING":
-        return (
-          <Badge
-            variant="outline"
-            className="flex items-center gap-1 bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-950 dark:text-yellow-400 dark:border-yellow-800"
-          >
-            <Clock className="h-3 w-3" />
-            Pending
-          </Badge>
-        )
-      case "FAILED":
-        return (
-          <Badge
-            variant="outline"
-            className="bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-400 dark:border-red-800"
-          >
-            <XCircle className="h-3 w-3 mr-1" />
-            Failed
-          </Badge>
-        )
-      default:
-        return <Badge variant="secondary">{status}</Badge>
-    }
-  }
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleString()
-  }
-
-  const formatTaskType = (type: string) => {
+// Helper function to format task type/name
+function formatTaskType(task: TaskStatusUpdatePayload): string {
+    const type = task.job_type || task.task_name || 'Unknown Task';
     return type
       .replace(/_/g, " ")
-      .toLowerCase()
-      .replace(/\b\w/g, (c) => c.toUpperCase())
-  }
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+};
 
-  const renderTaskCard = (task: Task) => {
-    return (
-      <Card key={task.id} className="mb-4">
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <CardTitle className="text-base">{formatTaskType(task.type)}</CardTitle>
-                {getStatusBadge(task.status)}
-              </div>
-              <CardDescription className="mt-1">ID: {task.id}</CardDescription>
-            </div>
-            {task.status === "RUNNING" && (
-              <Button variant="outline" size="sm" onClick={() => handleRevokeTask(task.id)}>
-                <StopCircle className="mr-2 h-4 w-4" />
-                Revoke
-              </Button>
-            )}
+const TaskCard: React.FC<{ task: TaskStatusUpdatePayload; onRevoke: (task: TaskStatusUpdatePayload) => void; }> = ({ task, onRevoke }) => {
+  const getStatusBadge = (status: string) => {
+    switch (status.toUpperCase()) {
+      case "SUCCESS":
+        return <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-xs"><CheckCircle className="h-3 w-3 mr-1" />Success</Badge>;
+      case "RUNNING":
+      case "STARTED":
+      case "RECEIVED":
+        return <Badge variant="outline" className="text-blue-600 border-blue-600 text-xs"><RefreshCw className="h-3 w-3 animate-spin mr-1"/>Running</Badge>;
+      case "PENDING":
+        return <Badge variant="outline" className="text-yellow-600 border-yellow-600 text-xs"><Clock className="h-3 w-3 mr-1"/>Pending</Badge>;
+      case "FAILED":
+        return <Badge variant="destructive" className="text-xs"><XCircle className="h-3 w-3 mr-1" />Failed</Badge>;
+      case "REVOKED":
+        return <Badge variant="destructive" className="bg-gray-500 hover:bg-gray-600 text-xs"><StopCircle className="h-3 w-3 mr-1" />Revoked</Badge>;
+      default:
+        return <Badge variant="secondary" className="text-xs">{status}</Badge>;
+    }
+  };
+  
+  const isTaskActive = ACTIVE_STATUSES.includes(task.status.toUpperCase());
+  
+  return (
+    <Card className="mb-4">
+      <CardHeader className="pb-4">
+        <div className="flex items-start justify-between">
+          <div className="flex-grow">
+            <CardTitle className="text-base flex items-center justify-between">
+              <span className="truncate" title={formatTaskType(task)}>{formatTaskType(task)}</span>
+              {getStatusBadge(task.status)}
+            </CardTitle>
+            <CardDescription className="text-xs font-mono break-all mt-1">ID: {task.task_id}</CardDescription>
+             {task.entity_type && task.entity_id && (
+                <CardDescription className="text-xs mt-1">
+                    Entity: {task.entity_type} / ID: {task.entity_id}
+                </CardDescription>
+             )}
           </div>
-        </CardHeader>
-        <CardContent className="space-y-4 pb-2">
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span>Progress</span>
-              <span>{task.progress}%</span>
-            </div>
-            <Progress value={task.progress} className="bg-muted h-2" />
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm pb-4">
+        {isTaskActive && task.progress != null && (
+          <div>
+             <Progress value={task.progress} className="h-2" />
+             <p className="text-xs text-muted-foreground text-center mt-1">{task.progress}% complete</p>
           </div>
-
-          <div className="space-y-1">
-            <h3 className="text-sm font-medium">Status</h3>
-            <p className="text-sm">{task.statusMessage}</p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <div>
-              <span className="text-muted-foreground">Created:</span> {formatDate(task.createdAt)}
-            </div>
-            {task.completedAt && (
-              <div>
-                <span className="text-muted-foreground">Completed:</span> {formatDate(task.completedAt)}
-              </div>
-            )}
-          </div>
-
-          {task.error && (
+        )}
+        {task.status_message && (
+          <p className="text-muted-foreground italic text-xs p-2 bg-muted/50 rounded-md">{task.status_message}</p>
+        )}
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+            <div><span className="text-muted-foreground">Created:</span> {formatDate(task.timestamp)}</div>
+        </div>
+        {task.error_details && (
             <div className="space-y-1">
-              <h3 className="text-sm font-medium text-destructive">Error</h3>
-              <div className="p-3 text-sm border rounded-md border-destructive bg-destructive/10 text-destructive">
-                {task.error}
-              </div>
+              <h4 className="font-medium text-destructive">Error</h4>
+              <pre className="p-2 text-xs border rounded-md border-destructive bg-destructive/10 text-destructive whitespace-pre-wrap max-h-40 overflow-auto">{task.error_details}</pre>
             </div>
-          )}
-
-          {task.result && (
+        )}
+        {task.result_summary && (
             <div className="space-y-1">
-              <h3 className="text-sm font-medium">Result</h3>
-              <div className="p-3 text-sm border rounded-md bg-muted">
-                <pre className="whitespace-pre-wrap text-xs">{JSON.stringify(task.result, null, 2)}</pre>
-              </div>
+              <h4 className="font-medium text-primary">Result Summary</h4>
+              <pre className="p-2 text-xs border rounded-md bg-muted whitespace-pre-wrap max-h-40 overflow-auto">{JSON.stringify(task.result_summary, null, 2)}</pre>
             </div>
-          )}
-        </CardContent>
-      </Card>
-    )
-  }
+        )}
+      </CardContent>
+      {isTaskActive && (
+        <CardFooter className="flex justify-end pt-0 pb-4">
+            <Button variant="destructive" size="sm" onClick={() => onRevoke(task)}><StopCircle className="mr-2 h-4 w-4" />Revoke</Button>
+        </CardFooter>
+      )}
+    </Card>
+  );
+};
 
+
+export default function TaskMonitorPage() {
+  const { taskStatuses, sseIsConnected, setTaskStatus } = useTaskStore();
+  const { toast } = useToast();
+
+  const [manualTaskId, setManualTaskId] = useState("");
+  const [isCheckingManualTask, setIsCheckingManualTask] = useState(false);
+  const [manualTaskResult, setManualTaskResult] = useState<TaskStatusUpdatePayload | null>(null);
+
+  const [taskToRevoke, setTaskToRevoke] = useState<TaskStatusUpdatePayload | null>(null);
+  const [isRevoking, setIsRevoking] = useState(false);
+
+  const sortedTasks = useMemo(() => {
+    return Object.values(taskStatuses).sort((a, b) => {
+      const dateA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const dateB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return dateB - dateA;
+    });
+  }, [taskStatuses]);
+
+  const activeTasks = useMemo(() => sortedTasks.filter(task => ACTIVE_STATUSES.includes(task.status.toUpperCase())), [sortedTasks]);
+  const completedTasks = useMemo(() => sortedTasks.filter(task => !ACTIVE_STATUSES.includes(task.status.toUpperCase())), [sortedTasks]);
+
+  const handleManualCheck = async () => {
+    if (!manualTaskId.trim()) {
+      toast({ title: "Error", description: "Please enter a Task ID.", variant: "destructive" });
+      return;
+    }
+    setIsCheckingManualTask(true);
+    setManualTaskResult(null);
+    try {
+      const result: TaskStatusResponse = await apiService.getTaskStatus(manualTaskId);
+      // Adapt TaskStatusResponse to TaskStatusUpdatePayload
+      const payload: TaskStatusUpdatePayload = {
+        task_id: result.task_id,
+        status: result.status,
+        progress: result.progress,
+        status_message: result.status_message,
+        error_details: result.error,
+        result_summary: result.result,
+        timestamp: new Date().toISOString(), // Use current time for the update timestamp
+      };
+      setManualTaskResult(payload);
+      setTaskStatus(payload); // Update the global store
+    } catch (error) {
+      handleApiError(error, "Failed to fetch task status");
+    } finally {
+      setIsCheckingManualTask(false);
+    }
+  };
+  
+  const executeRevokeTask = async () => {
+    if (!taskToRevoke?.task_id) return;
+    setIsRevoking(true);
+    try {
+      await apiService.revokeTask(taskToRevoke.task_id);
+      toast({ title: "Revocation Sent", description: `Revocation request sent for task ${taskToRevoke.task_id}.` });
+      setTaskToRevoke(null);
+    } catch (error) {
+      handleApiError(error, "Failed to revoke task");
+    } finally {
+      setIsRevoking(false);
+    }
+  };
+  
   return (
     <MainLayout>
-      <div className="container mx-auto py-6 space-y-6">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-bold tracking-tight">Task Monitor</h1>
-          <Button variant="outline" size="sm" onClick={handleRefreshTasks} disabled={isLoadingTasks}>
-            {isLoadingTasks ? (
-              <>
-                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                Refreshing...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Refresh
-              </>
-            )}
-          </Button>
-        </div>
+      <PageContainer
+        title="Task Monitor"
+        description="View real-time and historical status of background jobs."
+      >
+        <Alert variant={sseIsConnected ? "default" : "destructive"} className="mb-6">
+          <Rss className="h-4 w-4" />
+          <AlertTitle>Live Feed Status</AlertTitle>
+          <AlertDescription>
+            {sseIsConnected ? "Connected to the live task feed. Updates will appear automatically." : "Not connected to the live task feed. Data shown may be stale."}
+          </AlertDescription>
+        </Alert>
 
-        <Card>
+        <Card className="mb-6">
           <CardHeader>
-            <CardTitle>Check Task Status</CardTitle>
-            <CardDescription>Enter a task ID to check its current status and progress</CardDescription>
+            <CardTitle>Check Specific Task</CardTitle>
+            <CardDescription>Enter a task ID to get its latest status from the server.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent>
             <div className="flex gap-2">
-              <Input placeholder="Enter task ID" value={taskId} onChange={handleTaskIdChange} />
-              <Button onClick={handleCheckStatus} disabled={isLoading}>
-                {isLoading ? (
-                  <>
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    Checking...
-                  </>
-                ) : (
-                  "Check Status"
-                )}
+              <Input placeholder="Enter task ID..." value={manualTaskId} onChange={(e) => setManualTaskId(e.target.value)} />
+              <Button onClick={handleManualCheck} disabled={isCheckingManualTask}>
+                {isCheckingManualTask ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+                Check
               </Button>
             </div>
-
-            {error && (
-              <div className="flex items-center p-4 text-sm border rounded-md border-destructive bg-destructive/10 text-destructive">
-                <AlertTriangle className="h-4 w-4 mr-2" />
-                {error}
-              </div>
-            )}
           </CardContent>
         </Card>
 
-        {taskData && (
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Task {taskData.id}</CardTitle>
-                  <CardDescription>Status: {getStatusBadge(taskData.status)}</CardDescription>
-                </div>
-                {taskData.status === "RUNNING" && (
-                  <Button variant="outline" size="sm" onClick={() => handleRevokeTask(taskData.id)}>
-                    <StopCircle className="mr-2 h-4 w-4" />
-                    Revoke Task
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Progress</span>
-                  <span>{taskData.progress}%</span>
-                </div>
-                <Progress value={taskData.progress} className="bg-muted h-2" />
-              </div>
-
-              <div className="space-y-2">
-                <h3 className="text-sm font-medium">Status Message</h3>
-                <p className="text-sm">{taskData.statusMessage}</p>
-              </div>
-
-              {taskData.error && (
-                <div className="space-y-2">
-                  <h3 className="text-sm font-medium text-destructive">Error</h3>
-                  <div className="p-4 text-sm border rounded-md border-destructive bg-destructive/10 text-destructive">
-                    {taskData.error}
-                  </div>
-                </div>
-              )}
-
-              {taskData.result && (
-                <div className="space-y-2">
-                  <h3 className="text-sm font-medium">Result</h3>
-                  <div className="p-4 text-sm border rounded-md bg-muted">
-                    <pre className="whitespace-pre-wrap">{JSON.stringify(taskData.result, null, 2)}</pre>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-            <CardFooter>
-              <p className="text-xs text-muted-foreground">
-                Task information is updated in real-time. Refresh to get the latest status.
-              </p>
-            </CardFooter>
-          </Card>
+        {manualTaskResult && (
+            <div className="mb-6">
+                <h3 className="text-lg font-semibold mb-2">Manual Check Result</h3>
+                <TaskCard task={manualTaskResult} onRevoke={setTaskToRevoke} />
+            </div>
         )}
 
-        <Tabs defaultValue="running" className="mt-6">
-          <TabsList>
-            <TabsTrigger value="running">Running Tasks ({runningTasks.length})</TabsTrigger>
-            <TabsTrigger value="recent">Recent Tasks ({recentTasks.length})</TabsTrigger>
+        <Tabs defaultValue="active">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="active">Active ({activeTasks.length})</TabsTrigger>
+            <TabsTrigger value="completed">Completed ({completedTasks.length})</TabsTrigger>
           </TabsList>
-          <TabsContent value="running" className="mt-4">
-            {isLoadingTasks ? (
-              <div className="flex justify-center py-8">
-                <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
-            ) : runningTasks.length > 0 ? (
-              <div>{runningTasks.map(renderTaskCard)}</div>
+          <TabsContent value="active" className="mt-4">
+            {activeTasks.length > 0 ? (
+              activeTasks.map(task => <TaskCard key={task.task_id} task={task} onRevoke={setTaskToRevoke} />)
             ) : (
-              <div className="text-center py-8 text-muted-foreground">No running tasks at the moment</div>
+              <p className="text-center text-muted-foreground py-8">No active tasks at the moment.</p>
             )}
           </TabsContent>
-          <TabsContent value="recent" className="mt-4">
-            {isLoadingTasks ? (
-              <div className="flex justify-center py-8">
-                <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
-            ) : recentTasks.length > 0 ? (
-              <div>{recentTasks.map(renderTaskCard)}</div>
+          <TabsContent value="completed" className="mt-4">
+            {completedTasks.length > 0 ? (
+              completedTasks.map(task => <TaskCard key={task.task_id} task={task} onRevoke={setTaskToRevoke} />)
             ) : (
-              <div className="text-center py-8 text-muted-foreground">No recent tasks to display</div>
+              <p className="text-center text-muted-foreground py-8">No completed tasks found.</p>
             )}
           </TabsContent>
         </Tabs>
-      </div>
+
+        <AlertDialog open={!!taskToRevoke} onOpenChange={(open) => !open && setTaskToRevoke(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirm Task Revocation</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to attempt to stop task <strong>{taskToRevoke?.task_id}</strong>?
+                This action may not be immediately effective if the task is in a non-interruptible state.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isRevoking}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={executeRevokeTask} disabled={isRevoking} className="bg-destructive hover:bg-destructive/90">
+                {isRevoking ? <><RefreshCw className="mr-2 h-4 w-4 animate-spin"/>Revoking...</> : "Yes, Revoke Task"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+        
+      </PageContainer>
     </MainLayout>
-  )
+  );
 }

@@ -5,12 +5,12 @@
  */
 export enum TaskStatusEnum {
   PENDING = "PENDING",
-  RECEIVED = "RECEIVED",
-  STARTED = "STARTED",
-  SUCCESS = "SUCCESS",
-  FAILURE = "FAILURE",
-  RETRY = "RETRY",
-  REVOKED = "REVOKED",
+  RECEIVED = "RECEIVED",  // Task received by a worker
+  STARTED = "STARTED",  // Task started execution
+  SUCCESS = "SUCCESS",  // Task completed successfully
+  FAILURE = "FAILURE",  // Task failed
+  RETRY = "RETRY",  // Task is being retried
+  REVOKED = "REVOKED",  // Task was revoked.
 }
 
 /**
@@ -18,13 +18,14 @@ export enum TaskStatusEnum {
  */
 export interface TaskResponse {
   task_id: string;
-  message: string;
+  message?: string; // Optional message
 }
 
 /**
- * Mirrored from shared.schemas.task.TaskStatusResponse
+ * Mirrored from shared.schemas.task.TaskStatusResponse.
+ * This is the response from GET /tasks/{task_id}
  */
-export interface TaskStatus {
+export interface TaskStatusResponse {
   task_id: string;
   status: TaskStatusEnum;
   progress?: number | null;

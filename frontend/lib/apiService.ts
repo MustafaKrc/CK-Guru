@@ -22,6 +22,7 @@ import {
   PaginatedCommitList, 
   CommitPageResponse,
   TaskResponse,
+  TaskStatusResponse,
   FeatureSelectionDefinition,
   BotPatternRead,
   BotPatternCreatePayload,
@@ -134,6 +135,16 @@ export const apiService = {
   },
   delete: async <TResponse>(endpoint: string, options?: RequestInit): Promise<TResponse> => {
     return request<TResponse>(endpoint, { ...options, method: 'DELETE' });
+  },
+
+  // --- Task Management ---
+  getTaskStatus: async (taskId: string): Promise<TaskStatusResponse> => {
+    return apiService.get<TaskStatusResponse>(`/tasks/${taskId}`);
+  },
+
+  revokeTask: async (taskId: string, terminate: boolean = true, signal: string = 'TERM'): Promise<{ message: string }> => {
+    const queryParams = new URLSearchParams({ terminate: String(terminate), signal }).toString();
+    return apiService.post<{ message: string }>(`/tasks/${taskId}/revoke?${queryParams}`);
   },
 
   // --- Bot Patterns ---
