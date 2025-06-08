@@ -39,8 +39,8 @@ class DefaultDatasetGenerationStrategy(IDatasetGenerationStrategy):
             LoadConfigurationStep,
             StreamAndProcessBatchesStep,  # This step orchestrates batch sub-steps
             ProcessGloballyStep,  # This step orchestrates global sub-steps
-            SelectFinalColumnsStep,
             ApplyBotPatternsStep, 
+            SelectFinalColumnsStep,
             FeatureSelectionStep,
             WriteOutputStep,
         ]

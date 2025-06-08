@@ -26,13 +26,13 @@ class ApplyBotPatternsStep(IDatasetGeneratorStep):
         log_prefix = f"Task {context.task_instance.request.id} - Step [{self.name}]"
         step_logger = StepLogger(logger, log_prefix=log_prefix)
 
-        if context.dataframe is None or context.dataframe.empty:
+        if context.processed_dataframe is None or context.processed_dataframe.empty:
             step_logger.warning("DataFrame is empty, skipping bot pattern application.")
             return context
 
         step_logger.info("Fetching bot patterns from database...")
-        patterns, _ = bot_pattern_repo.get_bot_patterns(
-            repository_id=context.repository_id, include_global=True
+        patterns, _ = bot_pattern_repo.get_patterns(
+            repository_id=context.repository_db.id, include_global=True
         )
 
         if not patterns:
@@ -60,13 +60,13 @@ class ApplyBotPatternsStep(IDatasetGeneratorStep):
             
             return False
 
-        original_rows = len(context.dataframe)
+        original_rows = len(context.processed_dataframe)
         
         # Apply the filter logic
-        bot_mask = context.dataframe['author_name'].apply(is_bot)
-        context.dataframe = context.dataframe[~bot_mask]
+        bot_mask = context.processed_dataframe['author_name'].apply(is_bot)
+        context.processed_dataframe = context.processed_dataframe[~bot_mask]
 
-        rows_removed = original_rows - len(context.dataframe)
+        rows_removed = original_rows - len(context.processed_dataframe)
         if rows_removed > 0:
             step_logger.info(f"Removed {rows_removed} commits from bot authors.")
         else:

@@ -142,21 +142,6 @@ class DataLoader(IDataLoader):  # Implement interface
             .where(self.cgm_alias.repository_id == self.repository_id)
         )
 
-        if self.bot_patterns:
-            # --- Use BotPatternRepository static method ---
-            bot_condition = BotPatternRepository.build_bot_filter_condition(
-                self.bot_patterns, self.cgm_alias
-            )
-            if bot_condition is not None:
-                query = query.where(sa.not_(bot_condition))
-                logger.debug("Applied bot filters to base query.")
-            else:
-                logger.warning(
-                    "Bot patterns provided, but failed to build filter condition."
-                )
-        else:
-            logger.debug("No bot patterns provided, skipping bot filtering.")
-
         return query
 
     def estimate_total_rows(self) -> int:
