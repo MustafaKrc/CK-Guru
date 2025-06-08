@@ -55,6 +55,48 @@ export class ApiError extends Error {
   }
 }
 
+async function downloadFile(endpoint: string, options: RequestInit = {}): Promise<Blob> {
+  const url = `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+  
+  const config: RequestInit = {
+    ...options,
+    headers: {
+      Accept: 'application/octet-stream, text/csv, */*', // Accept binary or csv data
+      ...options.headers,
+    },
+  };
+
+  try {
+    const response = await fetch(url, config);
+
+    if (!response.ok) {
+      let errorData: ApiErrorResponse = { message: `HTTP error! status: ${response.status}` };
+      try {
+        const parsedError = await response.json();
+        errorData = parsedError;
+      } catch (e) {
+        // Response might not be JSON, use status text
+        errorData.message = response.statusText || errorData.message;
+      }
+      const userMessage = typeof errorData.detail === 'string' ? errorData.detail : "File not found or server error.";
+      throw new ApiError(userMessage, response.status, errorData);
+    }
+    
+    // Return the response body as a Blob
+    return response.blob();
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    console.error("Network or unexpected error in file download:", { url, error });
+    throw new ApiError(
+      "A network error occurred during download. Please check your connection.", 
+      0, 
+      { message: (error as Error).message }
+    );
+  }
+}
+
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
   
@@ -136,6 +178,8 @@ export const apiService = {
   delete: async <TResponse>(endpoint: string, options?: RequestInit): Promise<TResponse> => {
     return request<TResponse>(endpoint, { ...options, method: 'DELETE' });
   },
+
+  downloadFile: downloadFile,
 
   // --- Task Management ---
   getTaskStatus: async (taskId: string): Promise<TaskStatusResponse> => {

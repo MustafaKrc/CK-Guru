@@ -22,15 +22,14 @@ import {
 } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, MoreHorizontal, Edit, Trash2, Check, X, Loader2, AlertCircle } from "lucide-react";
+import { Plus, MoreHorizontal, Edit, Trash2, Check, X, Loader2, AlertCircle, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PageLoader } from '@/components/ui/page-loader';
-import { apiService, handleApiError } from "@/lib/apiService";
+import { apiService, handleApiError, ApiError } from "@/lib/apiService"; // Import ApiError
 import { BotPatternRead, BotPatternCreatePayload, BotPatternUpdatePayload, Repository, PaginatedBotPatternRead } from "@/types/api";
 import { PageContainer } from "@/components/ui/page-container";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-
 
 function BotPatternsPageContent() {
   const router = useRouter();
@@ -74,7 +73,6 @@ function BotPatternsPageContent() {
         const response = await apiService.getGlobalBotPatterns();
         setGlobalPatterns(response.items);
       } else if (activeTab === 'repository' && selectedRepositoryId) {
-        // <<< MODIFIED LINE HERE >>>
         const response = await apiService.getRepoBotPatterns(parseInt(selectedRepositoryId), { include_global: false });
         setRepoPatterns(response.items);
       } else {
@@ -129,6 +127,13 @@ function BotPatternsPageContent() {
       toast({ title: "Validation Error", description: "Pattern cannot be empty.", variant: "destructive"});
       return;
     }
+    // Simple regex sanity check (not foolproof)
+    try {
+        new RegExp(formData.pattern);
+    } catch (e) {
+        toast({ title: "Invalid Regex", description: "The pattern is not a valid regular expression.", variant: "destructive"});
+        return;
+    }
     
     setIsSubmitting(true);
     try {
@@ -153,7 +158,12 @@ function BotPatternsPageContent() {
       setDialogOpen(false);
       fetchPatterns();
     } catch (err) {
-      handleApiError(err, `Failed to ${editingPattern ? 'update' : 'create'} pattern`);
+      // Catch specific backend validation errors
+      if (err instanceof ApiError && err.status === 422) {
+          toast({ title: "Invalid Regex", description: `Backend error: ${err.message}`, variant: "destructive" });
+      } else {
+          handleApiError(err, `Failed to ${editingPattern ? 'update' : 'create'} pattern`);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -270,6 +280,12 @@ function BotPatternsPageContent() {
                 <div className="space-y-2">
                     <Label htmlFor="pattern">Pattern (Regex) *</Label>
                     <Input id="pattern" value={formData.pattern || ""} onChange={(e) => setFormData(p => ({...p, pattern: e.target.value}))} placeholder="e.g., .*\[bot\].*"/>
+                    <Alert variant="default" className="text-xs p-2 mt-2">
+                        <Info className="h-4 w-4" />
+                        <AlertDescription>
+                            Uses Python's `re` module flavor. Test your patterns accordingly.
+                        </AlertDescription>
+                    </Alert>
                 </div>
                 <div className="space-y-2">
                     <Label htmlFor="description">Description</Label>

@@ -47,8 +47,24 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import { Separator } from "@/components/ui/separator";
 
 const ROWS_PER_PAGE = 10;
+
+const KeyValueItem: React.FC<{ label: string; value?: string | number | null | boolean }> = ({ label, value }) => (
+    <div className="flex justify-between items-start py-1.5 border-b border-dashed last:border-b-0">
+      <dt className="text-xs text-muted-foreground mr-2">{label}:</dt>
+      <dd className="font-mono text-xs text-right break-all">
+        {value === null || value === undefined ? (
+          <span className="italic">N/A</span>
+        ) : typeof value === 'boolean' ? (
+          <Badge variant={value ? "secondary" : "outline"} className="text-xs">{value ? "Yes" : "No"}</Badge>
+        ) : (
+          String(value)
+        )}
+      </dd>
+    </div>
+);
 
 function formatDate(dateString: string | Date | undefined | null): string {
   if (!dateString) return "N/A";
@@ -82,6 +98,8 @@ function DatasetDetailPageContent() {
 
   const [modelsTrained, setModelsTrained] = useState<MLModelRead[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
+
+  const [isDownloading, setIsDownloading] = useState(false);
 
   // --- OTHER HOOKS (like custom hooks or context hooks) ---
   const { taskStatuses } = useTaskStore(); // Assuming useTaskStore is a hook
@@ -320,10 +338,35 @@ function DatasetDetailPageContent() {
     }
   };
 
-  const handleDownloadDataset = () => {
-    if (!datasetId) return; // Should not happen if dataset is loaded
-    window.location.href = `${process.env.NEXT_PUBLIC_API_URL || ''}/api/v1/datasets/${datasetId}/download`;
-    toast({ title: "Download Initialized", description: "Your dataset download should start shortly." });
+  const handleDownloadDataset = async () => {
+    if (!datasetId) return;
+    setIsDownloading(true);
+    toast({ title: "Preparing Download", description: "Your dataset is being prepared..." });
+    try {
+      const blob = await apiService.downloadFile(`/datasets/${datasetId}/download`);
+      
+      // Create a URL for the blob
+      const url = window.URL.createObjectURL(blob);
+      
+      // Create a temporary link element
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `dataset_${datasetId}_${dataset?.name || 'export'}.csv`);
+      
+      // Append to the document, click it, and then remove it
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // Clean up the blob URL
+      window.URL.revokeObjectURL(url);
+      
+      toast({ title: "Download Started", description: "Check your browser's downloads." });
+    } catch (error) {
+      handleApiError(error, "Download Failed");
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   const handleDeleteDataset = async () => {
@@ -336,16 +379,18 @@ function DatasetDetailPageContent() {
   };
 
   const handleRegenerateDataset = async () => {
-    // dataset is guaranteed non-null here
+    if (!dataset) return;
     try {
-      const taskResponse = await apiService.createDataset(dataset.repository_id.toString(), {
-        name: dataset.name,
+      const taskResponse = await apiService.createDataset(dataset.repository_id, {
+        name: `${dataset.name} (Regen)`,
         description: dataset.description,
         config: dataset.config,
       });
-      toast({ title: "Regeneration Requested", description: `Regeneration for dataset ${dataset.name} initiated. Task ID: ${taskResponse.task_id}`, variant: "default" });
-      fetchDatasetDetails(true);
-    } catch (err) { handleApiError(err, "Failed to request dataset regeneration"); }
+      toast({ title: "Regeneration Started", description: `Redirecting to new dataset page... Task ID: ${taskResponse.task_id}` });
+      router.push(`/datasets/${taskResponse.dataset_id}`);
+    } catch (err) {
+      handleApiError(err, "Failed to request dataset regeneration");
+    }
   };
 
   const pageActions = (
@@ -411,6 +456,30 @@ function DatasetDetailPageContent() {
                             )}</li>))}</ul></ScrollArea>
                   ) : <p className="text-xs text-muted-foreground italic mt-1">No cleaning rules were enabled.</p>}
                 </div>
+
+                <Separator />
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase flex items-center tracking-wider"><Wand2 className="h-3.5 w-3.5 mr-1.5" />Feature Selection</Label>
+                  {dataset.config.feature_selection ? (
+                    <div className="mt-1 space-y-2">
+                        <div>
+                            <span className="font-semibold text-sm">{dataset.config.feature_selection.name}</span>
+                        </div>
+                        {Object.keys(dataset.config.feature_selection.params).length > 0 ? (
+                            <div className="mt-1 space-y-1 rounded-md border p-2 bg-muted/20">
+                                {Object.entries(dataset.config.feature_selection.params).map(([key, value]) => (
+                                    <KeyValueItem key={key} label={key} value={value} />
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-xs text-muted-foreground italic">Default parameters were used.</p>
+                        )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic mt-1">Feature selection was not applied.</p>
+                  )}
+                </div>
+
                 {dataset.description && (<div><Label className="text-xs text-muted-foreground uppercase">Description</Label> <p className="text-xs italic bg-muted/10 p-2 rounded-md whitespace-pre-wrap">{dataset.description}</p></div>)}
                 <div className="flex justify-between pt-2 border-t text-xs text-muted-foreground"><p>Created: {formatDate(dataset.created_at)}</p><p>Updated: {formatDate(dataset.updated_at)}</p></div>
               </CardContent>
