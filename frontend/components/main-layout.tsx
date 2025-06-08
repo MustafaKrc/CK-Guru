@@ -1,3 +1,4 @@
+// frontend/components/main-layout.tsx
 "use client"
 
 import React from "react"
@@ -32,6 +33,8 @@ import {
   Lightbulb,
   LineChart,
   ArrowLeft,
+  Puzzle,
+  Wand2,
 } from "lucide-react"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -199,6 +202,18 @@ export function MainLayout({ children }: MainLayoutProps) {
           exactPath: true,
         },
         {
+          name: "Training",
+          path: "/jobs/train",
+          icon: <Puzzle className="h-4 w-4" />,
+          exactPath: true,
+        },
+        {
+          name: "HP Search",
+          path: "/jobs/hp-search",
+          icon: <Wand2 className="h-4 w-4" />,
+          exactPath: true,
+        },
+        {
           name: "Inference",
           path: "/jobs/inference",
           icon: <Play className="h-4 w-4" />,
@@ -207,16 +222,9 @@ export function MainLayout({ children }: MainLayoutProps) {
       ],
     },
     {
-      name: "Insights",
+      name: "Prediction Insights",
       path: "/prediction-insights",
       icon: <Lightbulb className="h-5 w-5" />,
-      children: [
-        {
-          name: "Prediction Insights",
-          path: "/prediction-insights",
-          icon: <LineChart className="h-4 w-4" />,
-        },
-      ],
     },
     {
       name: "Task Monitor",
