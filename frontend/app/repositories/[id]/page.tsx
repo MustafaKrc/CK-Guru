@@ -7,7 +7,7 @@ import { MainLayout } from "@/components/main-layout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, RefreshCw, Database, BarChart3, Layers, Settings, Play, Eye, AlertCircle, Loader2, Puzzle, Plus, CheckCircle, GitCommit } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -37,6 +37,8 @@ import { BotPatternRead, PaginatedBotPatternRead } from "@/types/api/bot-pattern
 import { useTaskStore, TaskStatusUpdatePayload } from "@/store/taskStore";
 import { getLatestTaskForEntity } from "@/lib/taskUtils";
 import { JobStatusEnum } from "@/types/api/enums";
+import { RepositoryCommitsTab } from "@/components/repositories/RepositoryCommitsTab";
+import { CommitListItem } from "@/types/api";
 
 const ITEMS_PER_PAGE = 5; // Common limit for tab lists
 
@@ -51,6 +53,10 @@ export default function RepositoryDetailPage() {
   const [repository, setRepository] = useState<Repository | null>(null);
   const [isLoadingRepo, setIsLoadingRepo] = useState(true);
   const [repoError, setRepoError] = useState<string | null>(null);
+
+  const [recentCommits, setRecentCommits] = useState<CommitListItem[]>([]);
+  const [isLoadingCommits, setIsLoadingCommits] = useState(true);
+  const [selectedCommitDialog, setSelectedCommitDialog] = useState<string | null>(null);
 
   const [datasets, setDatasets] = useState<DatasetRead[]>([]);
   const [datasetsPagination, setDatasetsPagination] = useState({ currentPage: 1, totalItems: 0, isLoading: true });
@@ -82,9 +88,23 @@ export default function RepositoryDetailPage() {
     }
   }, [repoId]);
 
+  const fetchRecentCommits = useCallback(async () => {
+    if(!repoId) return;
+    setIsLoadingCommits(true);
+    try {
+        const response = await apiService.getCommits(repoId, { limit: 10 });
+        setRecentCommits(response.items || []);
+    } catch (err) {
+        // Silently fail for tab content or show small inline error
+    } finally {
+        setIsLoadingCommits(false);
+    }
+  }, [repoId]);
+
   useEffect(() => {
     fetchMainRepositoryData();
-  }, [fetchMainRepositoryData]);
+    fetchRecentCommits();
+  }, [fetchMainRepositoryData, fetchRecentCommits]);
 
   // --- Paginated Fetch Functions ---
   const fetchPaginatedDatasets = useCallback(async (page: number) => {
@@ -582,22 +602,9 @@ export default function RepositoryDetailPage() {
           
           {/* COMMITS TAB */}
           <TabsContent value="commits" className="space-y-4">
-            <PageContainer
-                title="Commit History"
-                description="View the detailed commit history and trigger inference on specific commits."
-                actions={<Button asChild size="sm"><Link href={`/repositories/${repoId}/commits`}><GitCommit className="mr-2 h-4 w-4"/>View All Commits</Link></Button>}
-            >
-              <Card>
-                <CardHeader>
-                  <CardTitle>What is this?</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">
-                    This section provides a detailed, paginated view of every commit in the repository's history. From the commit list, you can select individual commits to view their changes, statistics, and run defect predictions.
-                  </p>
-                </CardContent>
-              </Card>
-            </PageContainer>
+            <TabsContent value="commits" className="space-y-4">
+            <RepositoryCommitsTab repoId={repoId} repoName={repository.name}/>
+          </TabsContent>
           </TabsContent>
 
           {/* DATASETS TAB with Pagination */}

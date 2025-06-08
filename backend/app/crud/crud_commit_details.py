@@ -91,7 +91,7 @@ async def list_commits_paginated(
 ) -> Tuple[List[CommitListItem], int]:
     """
     Retrieves a paginated list of commits for a repository.
-    This queries CommitGuruMetric as it's the most comprehensive list from full ingestion.
+    This queries CommitGuruMetric and LEFT JOINS with CommitDetails to get ingestion status.
     """
     from shared.db.models.commit_guru_metric import CommitGuruMetric
 
@@ -143,7 +143,7 @@ async def list_commits_paginated(
                 commit_hash=row.commit_hash,
                 author_name=row.author_name,
                 author_date=author_date,
-                message_short=row.commit_message.split('\n', 1)[0],
+                message_short=row.commit_message.split('\n', 1)[0] if row.commit_message else "",
                 ingestion_status=row.ingestion_status or CommitIngestionStatusEnum.NOT_INGESTED
             )
         )
