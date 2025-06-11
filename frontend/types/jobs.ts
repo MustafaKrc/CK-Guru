@@ -1,34 +1,28 @@
 // frontend/types/jobs.ts
 
-import { ModelTypeEnum } from "./api/enums"; // Assuming this is correctly defined in your enums
-import { CleaningRuleConfig } from "./api/dataset"; // Import from dataset types
+import { ModelTypeEnum, ObjectiveMetricEnum, SamplerTypeEnum, PrunerTypeEnum } from "./api/enums";
+import { CleaningRuleConfig } from "./api/dataset";
+import { HPSuggestion, OptunaConfig } from "./api/hp-search-job";
 
-/**
- * Definition for a single hyperparameter, used to dynamically generate forms.
- * This structure should be provided by the backend when fetching model details.
- */
 export interface HyperparameterDefinition {
   name: string;
   type: "integer" | "float" | "string" | "boolean" | "enum" | "text_choice";
   description?: string;
-  default_value?: any; 
-  example_value?: any; 
-  options?: Array<{ value: string | number | boolean; label: string }>; // Value can be boolean for boolean type with choices
+  default_value?: any;
+  example_value?: any;
+  options?: Array<{ value: string | number | boolean; label: string }>;
   range?: { min?: number; max?: number; step?: number };
   required?: boolean;
 }
 
-/**
- * Represents the accumulated form data throughout the training job creation wizard.
- */
 export interface TrainingJobFormData {
   // Step 1: Repository & Dataset
   repositoryId: number | null;
-  repositoryName?: string; // For display purposes
+  repositoryName?: string;
   datasetId: number | null;
   datasetName?: string; 
   datasetFeatureSpace: string[]; 
-  datasetTargetColumn?: string | null; // The target column defined in the dataset's config
+  datasetTargetColumn?: string | null;
 
   // Step 2: Model Type Selection
   modelType: ModelTypeEnum | null; 
@@ -40,20 +34,16 @@ export interface TrainingJobFormData {
 
   // Step 4: Feature & Target Configuration (Training Specific)
   selectedFeatures: string[];
-  trainingTargetColumn: string | null; // The target column to be used for this specific training run
+  trainingTargetColumn: string | null;
 
-  // Step 5: Job Naming & Review
-  trainingJobName: string; // Name for the TrainingJobDB record
-  modelBaseName: string;   // Base name for the MLModelDB record (backend will add version)
+  trainingJobName: string;
+  modelBaseName: string;
   trainingJobDescription?: string;
 
-  randomSeed?: number | null; // Optional random seed for reproducibility
-  evalTestSplitSize?: number | null; // Optional test split size for evaluation
+  randomSeed?: number | null;
+  evalTestSplitSize?: number | null;
 }
 
-/**
- * Initial state for the TrainingJobFormData.
- */
 export const initialTrainingJobFormData: TrainingJobFormData = {
   repositoryId: null,
   repositoryName: undefined,
@@ -77,11 +67,59 @@ export const initialTrainingJobFormData: TrainingJobFormData = {
 };
 
 
-// Types for the "Create Dataset" modal/sub-flow within the wizard
-export interface NewDatasetWizardData {
-  name: string;
-  description?: string;
-  feature_columns: string[];
-  target_column: string;
-  cleaning_rules: CleaningRuleConfig[];
+export interface HpSearchJobFormData {
+  // Step 1
+  repositoryId: number | null;
+  repositoryName?: string;
+  datasetId: number | null;
+  datasetName?: string;
+  datasetFeatureSpace: string[];
+  datasetTargetColumn: string | null;
+
+  // Step 2
+  modelType: ModelTypeEnum | null;
+  modelDisplayName?: string;
+  modelHyperparametersSchema: HyperparameterDefinition[];
+
+  // Step 3
+  hpSpace: HPSuggestion[];
+
+  // Step 4
+  optunaConfig: OptunaConfig;
+
+  // Step 5
+  studyName: string;
+  saveBestModel: boolean;
+  modelBaseName: string;
 }
+
+// Initial state for the HP Search form
+export const initialHpSearchJobFormData: HpSearchJobFormData = {
+  repositoryId: null,
+  repositoryName: undefined,
+  datasetId: null,
+  datasetName: undefined,
+  datasetFeatureSpace: [],
+  datasetTargetColumn: null,
+
+  modelType: null,
+  modelDisplayName: undefined,
+  modelHyperparametersSchema: [],
+  
+  hpSpace: [],
+  
+  optunaConfig: {
+    n_trials: 20,
+    objective_metric: ObjectiveMetricEnum.F1_WEIGHTED,
+    sampler_type: SamplerTypeEnum.TPE,
+    pruner_type: PrunerTypeEnum.MEDIAN,
+    continue_if_exists: false,
+    hp_search_cv_folds: 3,
+    sampler_config: {},
+    pruner_config: {},
+  },
+  
+  studyName: "",
+  saveBestModel: true,
+  modelBaseName: "",
+};

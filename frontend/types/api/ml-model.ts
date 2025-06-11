@@ -3,7 +3,7 @@ import { ModelTypeEnum } from "./enums";
 import { DatasetRead } from "./dataset"; 
 import { TrainingJobRead } from "./training-job";
 import { HPSearchJobRead } from "./hp-search-job"; 
-import { HyperparameterDefinition } from "@/types/jobs"; // Corrected import path
+import { HyperparameterDefinition } from "@/types/jobs";
 
 export interface ModelPerformanceMetrics {
   accuracy?: number;

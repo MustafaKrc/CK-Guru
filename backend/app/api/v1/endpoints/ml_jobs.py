@@ -332,10 +332,8 @@ async def submit_hp_search_job(
         db, study_name=study_name
     )
 
-    if existing_jobs:
-        first_job = existing_jobs[
-            0
-        ]  # Get the most recent one if multiple somehow exist
+    if existing_jobs and existing_jobs[0]:
+        first_job = existing_jobs[0][0]  # Get the most recent one if multiple somehow exist
         if optuna_config.continue_if_exists:
             # Check if dataset matches
             if first_job.dataset_id != job_in.dataset_id:
