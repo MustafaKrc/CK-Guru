@@ -17,7 +17,7 @@ class RepoApiResponseStatus:
 class RepoApiClientResponse(BaseModel):
     """Generic response structure for repository API clients."""
 
-    status: int = Field(
+    status_code: int = Field(
         ...,
         description=f"Abstracted status code ({'/'.join(str(v) for v in vars(RepoApiResponseStatus) if not v.startswith('_'))})",
     )

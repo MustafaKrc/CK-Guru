@@ -99,11 +99,15 @@ class GitHubClient(IRepositoryApiClient):
             304: RepoApiResponseStatus.NOT_MODIFIED,
             404: RepoApiResponseStatus.NOT_FOUND,
             410: RepoApiResponseStatus.NOT_FOUND,  # Treat Gone as Not Found
+            400: RepoApiResponseStatus.ERROR,  # Bad Request
+            401: RepoApiResponseStatus.ERROR,  # Unauthorized
+            402: RepoApiResponseStatus.ERROR,  # Payment Required
             403: (
                 RepoApiResponseStatus.RATE_LIMITED
                 if internal_response.rate_limit_remaining == 0
                 else RepoApiResponseStatus.ERROR
             ),  # Check rate limit specifically
+            404: RepoApiResponseStatus.NOT_FOUND,  # Resource not found
             429: RepoApiResponseStatus.RATE_LIMITED,
             408: RepoApiResponseStatus.ERROR,  # Timeout
             503: RepoApiResponseStatus.ERROR,  # Connection
@@ -114,7 +118,7 @@ class GitHubClient(IRepositoryApiClient):
         )
 
         return RepoApiClientResponse(
-            status=generic_status,
+            status_code=generic_status,
             json_data=internal_response.json_data,
             etag=internal_response.etag,
             error_message=internal_response.error_message,

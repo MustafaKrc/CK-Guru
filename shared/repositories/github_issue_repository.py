@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from shared.db.models import GitHubIssue
+from shared.schemas.repo_api_client import RepoApiClientResponse
 
 from .base_repository import BaseRepository
 
@@ -30,7 +31,7 @@ class GitHubIssueRepository(BaseRepository[GitHubIssue]):
         self,
         repo_id: int,
         issue_number: int,
-        api_response: type["GitHubAPIResponse"],  # noqa: F821
+        api_response: RepoApiClientResponse,  # noqa: F821
     ) -> Optional[GitHubIssue]:
         """
         Updates or creates a GitHubIssue based on API response data.
