@@ -21,15 +21,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, MoreHorizontal, Edit, Trash2, Check, X, Loader2, AlertCircle, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PageLoader } from '@/components/ui/page-loader';
-import { apiService, handleApiError, ApiError } from "@/lib/apiService"; // Import ApiError
+import { apiService, handleApiError, ApiError } from "@/lib/apiService";
 import { BotPatternRead, BotPatternCreatePayload, BotPatternUpdatePayload, Repository, PaginatedBotPatternRead } from "@/types/api";
 import { PageContainer } from "@/components/ui/page-container";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Combobox } from "@/components/ui/combobox";
 
 function BotPatternsPageContent() {
   const router = useRouter();
@@ -57,7 +57,7 @@ function BotPatternsPageContent() {
   const fetchRepositories = useCallback(async () => {
     setIsLoadingRepos(true);
     try {
-        const response = await apiService.getRepositories({ limit: 200 });
+        const response = await apiService.getRepositories({ limit: 500 });
         setRepositories(response.items || []);
     } catch(err) {
         handleApiError(err, "Failed to load repositories");
@@ -127,7 +127,6 @@ function BotPatternsPageContent() {
       toast({ title: "Validation Error", description: "Pattern cannot be empty.", variant: "destructive"});
       return;
     }
-    // Simple regex sanity check (not foolproof)
     try {
         new RegExp(formData.pattern);
     } catch (e) {
@@ -158,7 +157,6 @@ function BotPatternsPageContent() {
       setDialogOpen(false);
       fetchPatterns();
     } catch (err) {
-      // Catch specific backend validation errors
       if (err instanceof ApiError && err.status === 422) {
           toast({ title: "Invalid Regex", description: `Backend error: ${err.message}`, variant: "destructive" });
       } else {
@@ -180,7 +178,13 @@ function BotPatternsPageContent() {
   };
 
   const currentPatterns = useMemo(() => activeTab === 'global' ? globalPatterns : repoPatterns, [activeTab, globalPatterns, repoPatterns]);
-  const selectedRepoName = useMemo(() => repositories.find(r => r.id.toString() === selectedRepositoryId)?.name, [repositories, selectedRepositoryId]);
+  
+  const repositoryOptions = useMemo(() => {
+    return repositories.map(repo => ({
+      value: repo.id.toString(),
+      label: repo.name,
+    }));
+  }, [repositories]);
 
   const renderTable = (patterns: BotPatternRead[]) => (
     <div className="rounded-md border">
@@ -251,12 +255,16 @@ function BotPatternsPageContent() {
           <TabsContent value="repository" className="space-y-4">
             <div className="space-y-2">
                 <Label htmlFor="repository-select">Select Repository</Label>
-                <Select value={selectedRepositoryId} onValueChange={setSelectedRepositoryId} disabled={isLoadingRepos}>
-                    <SelectTrigger id="repository-select"><SelectValue placeholder={isLoadingRepos ? "Loading..." : "Select a repository to view its patterns..."} /></SelectTrigger>
-                    <SelectContent>
-                        {repositories.map(repo => (<SelectItem key={repo.id} value={repo.id.toString()}>{repo.name}</SelectItem>))}
-                    </SelectContent>
-                </Select>
+                <Combobox
+                    options={repositoryOptions}
+                    value={selectedRepositoryId}
+                    onValueChange={setSelectedRepositoryId}
+                    disabled={isLoadingRepos}
+                    placeholder={isLoadingRepos ? "Loading repositories..." : "Search and select a repository..."}
+                    searchPlaceholder="Search repository..."
+                    emptyMessage="No repository found."
+                    className="w-full md:w-[350px]"
+                />
             </div>
             {selectedRepositoryId ? renderTable(repoPatterns) : (
                 <Alert variant="default" className="text-center py-8"><AlertCircle className="h-4 w-4"/><AlertDescription>Please select a repository to view or manage its specific bot patterns.</AlertDescription></Alert>
