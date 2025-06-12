@@ -44,7 +44,7 @@ async def create_global_bot_pattern(
 async def list_global_bot_patterns(
     db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=200),
+    limit: int = Query(100, ge=1, le=500),
 ):
     """Retrieve a list of global bot patterns."""
     patterns, total = await crud.crud_bot_pattern.get_bot_patterns(db=db, repository_id=None, skip=skip, limit=limit)
@@ -84,7 +84,7 @@ async def list_repo_bot_patterns(
     include_global: bool = Query(True, description="Include global patterns in the list"),
     db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=200),
+    limit: int = Query(100, ge=1, le=500),
 ):
     """Retrieve bot patterns for a specific repository, optionally including global ones."""
     repo = await crud.crud_repository.get_repository(db, repo_id=repo_id)

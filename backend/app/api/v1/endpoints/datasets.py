@@ -201,7 +201,7 @@ async def list_repository_datasets_endpoint(
     repo_id: int,
     db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=200),
+    limit: int = Query(100, ge=1, le=500),
 ):
     """Retrieve all datasets defined for a specific repository."""
     # Check if repository exists (optional, protects against invalid repo_id)

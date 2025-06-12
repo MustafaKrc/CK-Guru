@@ -28,7 +28,7 @@ async def list_commits_endpoint(
     repo_id: int,
     db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(50, ge=1, le=500),
 ):
     """
     Retrieves a paginated list of commits for a repository.

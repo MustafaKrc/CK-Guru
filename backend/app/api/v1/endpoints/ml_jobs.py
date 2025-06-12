@@ -197,7 +197,7 @@ async def get_training_job_details(
 async def list_training_jobs(
     db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=200),
+    limit: int = Query(100, ge=1, le=500),
     dataset_id: Optional[int] = Query(None, description="Filter by dataset ID"),
     status: Optional[JobStatusEnum] = Query(None, description="Filter by job status"),
 ):
@@ -221,7 +221,7 @@ async def list_training_jobs(
 async def list_ml_models(
     db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=200),
+    limit: int = Query(100, ge=1, le=500),
     model_name: Optional[str] = Query(
         None, description="Filter by logical model name."
     ),
@@ -526,7 +526,7 @@ async def get_hp_search_job_details(
 async def list_hp_search_jobs(
     db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=200),
+    limit: int = Query(100, ge=1, le=500),
     dataset_id: Optional[int] = Query(None, description="Filter by dataset ID"),
     status: Optional[JobStatusEnum] = Query(None, description="Filter by job status"),
     study_name: Optional[str] = Query(
@@ -601,7 +601,7 @@ async def get_inference_job_details(
 async def list_inference_jobs(
     db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=200),
+    limit: int = Query(100, ge=1, le=500),
     model_id: Optional[int] = Query(None, description="Filter by ML Model ID used."),
     status: Optional[JobStatusEnum] = Query(None, description="Filter by job status"),
 ):

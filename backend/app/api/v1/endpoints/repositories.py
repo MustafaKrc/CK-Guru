@@ -54,7 +54,7 @@ async def read_repositories_endpoint(
     db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0, description="Number of records to skip for pagination"),
     limit: int = Query(
-        10, ge=1, le=200, description="Maximum number of records to return"
+        10, ge=1, le=500, description="Maximum number of records to return"
     ),
     q: Optional[str] = Query(None, description="Search query to filter repositories by name."),
     sort_by: Optional[str] = Query('created_at', description="Column to sort by."),
@@ -208,7 +208,7 @@ async def list_repository_ml_models(
     repo_id: int,
     db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=200),
+    limit: int = Query(100, ge=1, le=500),
 ):
     """
     Retrieve all ML Models associated with datasets belonging to a specific repository.
@@ -237,7 +237,7 @@ async def list_repository_training_jobs(
     repo_id: int,
     db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=200),
+    limit: int = Query(100, ge=1, le=500),
 ):
     repo = await crud.crud_repository.get_repository(db, repo_id=repo_id)
     if not repo:
@@ -263,7 +263,7 @@ async def list_repository_hp_search_jobs(
     repo_id: int,
     db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=200),
+    limit: int = Query(100, ge=1, le=500),
 ):
     repo = await crud.crud_repository.get_repository(db, repo_id=repo_id)
     if not repo:
@@ -289,7 +289,7 @@ async def list_repository_inference_jobs(
     repo_id: int,
     db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=200),
+    limit: int = Query(100, ge=1, le=500),
 ):
     repo = await crud.crud_repository.get_repository(db, repo_id=repo_id)
     if not repo:
