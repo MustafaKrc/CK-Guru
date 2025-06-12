@@ -41,4 +41,7 @@ export interface PaginatedRepositoryRead {
   total: number;
   skip?: number;
   limit?: number;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+  nameFilter?: string;
 }

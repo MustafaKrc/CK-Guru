@@ -226,10 +226,13 @@ export const apiService = {
   },
 
   // --- Repositories ---
-  getRepositories: async (params?: { skip?: number; limit?: number }): Promise<PaginatedRepositoryRead> => {
+  getRepositories: async (params?: { skip?: number; limit?: number, sortBy?: string, sortDir?: 'asc' | 'desc', nameFilter?: string  }): Promise<PaginatedRepositoryRead> => {
     const queryParams = new URLSearchParams();
     if (params?.skip !== undefined) queryParams.append('skip', String(params.skip));
     if (params?.limit !== undefined) queryParams.append('limit', String(params.limit));
+    if (params?.nameFilter) queryParams.append('q', params.nameFilter);
+    if (params?.sortBy) queryParams.append('sort_by', params.sortBy);
+    if (params?.sortDir) queryParams.append('sort_order', params.sortDir);
     return apiService.get<PaginatedRepositoryRead>(`/repositories?${queryParams.toString()}`);
   },
   
