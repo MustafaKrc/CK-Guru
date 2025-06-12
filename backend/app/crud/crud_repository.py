@@ -3,11 +3,12 @@ import logging
 from typing import Optional, Sequence, Tuple
 from urllib.parse import urlparse
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, desc, asc
+from sqlalchemy.orm import selectinload, aliased
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.core.config import settings
-from shared.db.models import Repository
+from shared.db.models import Repository, Dataset, BotPattern, GitHubIssue
 from shared.schemas.repository import RepositoryCreate, RepositoryUpdate
 
 logger = logging.getLogger(__name__)
@@ -44,10 +45,51 @@ def _extract_repo_name(git_url: str) -> str:
 
 
 async def get_repository(db: AsyncSession, repo_id: int) -> Optional[Repository]:
-    """Get a single repository by ID."""
-    result = await db.execute(select(Repository).filter(Repository.id == repo_id))
-    return result.scalars().first()
+    """Get a single repository by ID, including relationship counts."""
+    # Aliases for subqueries
+    dataset_alias = aliased(Dataset)
+    bot_pattern_alias = aliased(BotPattern)
+    github_issue_alias = aliased(GitHubIssue)
 
+    # Subqueries to count related items
+    dataset_count_subquery = (
+        select(func.count(dataset_alias.id))
+        .where(dataset_alias.repository_id == Repository.id)
+        .label("datasets_count")
+    )
+    bot_pattern_count_subquery = (
+        select(func.count(bot_pattern_alias.id))
+        .where(bot_pattern_alias.repository_id == Repository.id)
+        .label("bot_patterns_count")
+    )
+    github_issue_count_subquery = (
+        select(func.count(github_issue_alias.id))
+        .where(github_issue_alias.repository_id == Repository.id)
+        .label("github_issues_count")
+    )
+    
+    stmt = (
+        select(
+            Repository,
+            dataset_count_subquery,
+            bot_pattern_count_subquery,
+            github_issue_count_subquery,
+        )
+        .filter(Repository.id == repo_id)
+    )
+
+    result = await db.execute(stmt)
+    repo_data = result.first()
+    
+    if repo_data:
+        repo, datasets_count, bot_patterns_count, github_issues_count = repo_data
+        # Manually attach counts to the ORM object for the Pydantic schema
+        repo.datasets_count = datasets_count
+        repo.bot_patterns_count = bot_patterns_count
+        repo.github_issues_count = github_issues_count
+        return repo
+        
+    return None
 
 async def get_repository_by_git_url(
     db: AsyncSession, git_url: str
@@ -62,22 +104,80 @@ async def get_repository_by_git_url(
 
 
 async def get_repositories(
-    db: AsyncSession, skip: int = 0, limit: int = 100
+    db: AsyncSession,
+    *,
+    skip: int = 0,
+    limit: int = 100,
+    q: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    sort_order: str = "desc",
 ) -> Tuple[Sequence[Repository], int]:
-    """Get multiple repositories with pagination."""
-    stmt_items = (
-        select(Repository)
-        .order_by(Repository.created_at.desc())
-        .offset(skip)
-        .limit(limit)
+    """Get multiple repositories with filtering, sorting, and pagination."""
+    
+    # Aliases for subqueries
+    dataset_alias = aliased(Dataset)
+    bot_pattern_alias = aliased(BotPattern)
+    github_issue_alias = aliased(GitHubIssue)
+
+    # Subqueries to count related items
+    dataset_count_subquery = (
+        select(func.count(dataset_alias.id))
+        .where(dataset_alias.repository_id == Repository.id)
+        .correlate(Repository)
+        .scalar_subquery()
     )
-    result_items = await db.execute(stmt_items)
-    items = result_items.scalars().all()
+    bot_pattern_count_subquery = (
+        select(func.count(bot_pattern_alias.id))
+        .where(bot_pattern_alias.repository_id == Repository.id)
+        .correlate(Repository)
+        .scalar_subquery()
+    )
+    github_issue_count_subquery = (
+        select(func.count(github_issue_alias.id))
+        .where(github_issue_alias.repository_id == Repository.id)
+        .correlate(Repository)
+        .scalar_subquery()
+    )
 
-    stmt_total = select(func.count(Repository.id))
-    result_total = await db.execute(stmt_total)
-    total = result_total.scalar_one_or_none() or 0
+    # Base statement with counts
+    stmt = select(
+        Repository,
+        dataset_count_subquery.label("datasets_count"),
+        bot_pattern_count_subquery.label("bot_patterns_count"),
+        github_issue_count_subquery.label("github_issues_count"),
+    )
 
+    # Filtering
+    if q:
+        stmt = stmt.filter(Repository.name.ilike(f"%{q}%"))
+
+    # Sorting
+    if sort_by:
+        sort_column = getattr(Repository, sort_by, None)
+        if sort_column is not None:
+            stmt = stmt.order_by(desc(sort_column) if sort_order == "desc" else asc(sort_column))
+    else:
+        stmt = stmt.order_by(Repository.created_at.desc())
+
+    # Count total matching items before pagination
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total_result = await db.execute(count_stmt)
+    total = total_result.scalar_one_or_none() or 0
+
+    # Apply pagination
+    stmt = stmt.offset(skip).limit(limit)
+    
+    result_items = await db.execute(stmt)
+    
+    items = []
+    for row in result_items:
+        repo, datasets_count, bot_patterns_count, github_issues_count = row
+        # Manually attach counts to the ORM object for the Pydantic schema
+        repo.datasets_count = datasets_count
+        repo.bot_patterns_count = bot_patterns_count
+        repo.github_issues_count = github_issues_count
+        items.append(repo)
+        
     return items, total
 
 

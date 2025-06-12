@@ -38,7 +38,8 @@ import { useTaskStore, TaskStatusUpdatePayload } from "@/store/taskStore";
 import { getLatestTaskForEntity } from "@/lib/taskUtils";
 import { JobStatusEnum } from "@/types/api/enums";
 import { RepositoryCommitsTab } from "@/components/repositories/RepositoryCommitsTab";
-import { CommitListItem } from "@/types/api";
+import { CommitListItem, TaskResponse } from "@/types/api";
+import { Progress } from "@/components/ui/progress";
 
 const ITEMS_PER_PAGE = 5; // Common limit for tab lists
 
@@ -70,8 +71,75 @@ export default function RepositoryDetailPage() {
   const [inferenceJobsPagination, setInferenceJobsPagination] = useState({ currentPage: 1, totalItems: 0, isLoading: true });
   const [botPatterns, setBotPatterns] = useState<BotPatternRead[]>([]);
   const [botPatternsPagination, setBotPatternsPagination] = useState({ currentPage: 1, totalItems: 0, isLoading: true });
+  const [ingestLoading, setIngestLoading] = useState<{ [key: string]: boolean }>({});
   
   const { taskStatuses } = useTaskStore();
+
+  const repoIngestionStatus = useMemo(() => {
+      if (!repository) return undefined;
+      return getLatestTaskForEntity(taskStatuses, "Repository", repository.id, "repository_ingestion");
+  }, [taskStatuses, repository]);
+
+  const handleIngest = async () => {
+      if (!repository) return;
+      setIngestLoading(prev => ({...prev, [repository.id]: true})); // Reuse logic if needed, or local state
+      try {
+          const response = await apiService.post<TaskResponse>(`/repositories/${repository.id}/ingest`);
+          toast({ title: "Ingestion Started", description: `Task ${response.task_id} submitted for ${repository.name}.` });
+      } catch (err) {
+          handleApiError(err, `Failed to start ingestion for ${repository.name}`);
+      } finally {
+          setIngestLoading(prev => ({...prev, [repository.id]: false}));
+      }
+  };
+
+  const handleRefreshData = () => {
+    toast({title: "Refreshing repository data..."});
+    fetchMainRepositoryData(); // This will re-fetch the main repo and then trigger related data fetches
+  };
+
+    const getDisplayRepoStatusInfo = (): {
+        text: string;
+        badgeVariant: "default" | "secondary" | "destructive" | "outline";
+        icon?: React.ReactNode;
+        isActionable: boolean;
+        actionText: string;
+    } => {
+        // This function now determines the text for the badge and button
+        if (isLoadingRepo && !repository) return { text: "Loading info...", badgeVariant: "outline", icon: <Loader2 className="h-4 w-4 animate-spin" />, isActionable: false, actionText: "Loading..." };
+        if (repoError) return { text: "Error loading", badgeVariant: "destructive", icon: <AlertCircle className="h-4 w-4" />, isActionable: true, actionText: "Retry" };
+        if (!repository) return { text: "Not found", badgeVariant: "destructive", isActionable: false, actionText: "N/A" };
+    
+        if (repoIngestionStatus && (repoIngestionStatus.status === "RUNNING" || repoIngestionStatus.status === "PENDING")) {
+          return { 
+            text: `${repoIngestionStatus.status_message || repoIngestionStatus.status} (${repoIngestionStatus.progress ?? 0}%)`,
+            badgeVariant: "outline",
+            icon: <RefreshCw className="h-4 w-4 animate-spin" />,
+            isActionable: false, // Cannot start a new one while one is active
+            actionText: "Ingesting..."
+          };
+        }
+        
+        const isIngested = repository.datasets_count > 0 || repository.github_issues_count > 0;
+        if (isIngested) {
+            return { text: "Ingested", badgeVariant: "default", icon: <CheckCircle className="h-4 w-4 text-green-600" />, isActionable: true, actionText: "Re-Ingest" };
+        }
+        return { text: "Not Ingested", badgeVariant: "secondary", isActionable: true, actionText: "Ingest Repository" };
+    };
+    
+    const displayRepoStatus = getDisplayRepoStatusInfo();
+
+    const pageActions = (
+        <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleRefreshData}>
+                <RefreshCw className="mr-2 h-4 w-4" /> Refresh
+            </Button>
+            {/* The dynamic ingest button */}
+            <Button size="sm" onClick={handleIngest} disabled={!displayRepoStatus.isActionable}>
+                {displayRepoStatus.icon} {displayRepoStatus.actionText}
+            </Button>
+        </div>
+    );
 
   const fetchMainRepositoryData = useCallback(async () => {
     if (!repoId) return;
@@ -269,38 +337,6 @@ export default function RepositoryDetailPage() {
     } catch (e) { return "Invalid Date"; }
   };
 
-  // Memoized status for the main repository ingestion
-  const repoIngestionStatus = useMemo(() => {
-    if (!repository) return undefined;
-    return getLatestTaskForEntity(taskStatuses, "Repository", repository.id, "repository_ingestion");
-  }, [taskStatuses, repository]);
-
-  const getDisplayRepoStatusInfo = () => {
-    if (isLoadingRepo && !repository) return { text: "Loading info...", badgeVariant: "outline" as const, icon: <Loader2 className="h-4 w-4 animate-spin" /> };
-    if (repoError) return { text: "Error loading", badgeVariant: "destructive" as const, icon: <AlertCircle className="h-4 w-4" /> };
-    if (!repository) return { text: "Not found", badgeVariant: "destructive" as const };
-
-    if (repoIngestionStatus) {
-      const { status, status_message, progress } = repoIngestionStatus;
-      if (status === "RUNNING" || status === "PENDING") {
-        return { 
-          text: `${status_message || status} (${progress ?? 0}%)`,
-          badgeVariant: "outline" as const,
-          icon: <RefreshCw className="h-4 w-4 animate-spin" />
-        };
-      }
-      if (status === "SUCCESS") return { text: "Ingested", badgeVariant: "default" as const , icon: <CheckCircle className="h-4 w-4 text-green-600" /> };
-      if (status === "FAILED") return { text: `Ingestion Failed: ${status_message || "Error details unavailable."}`, badgeVariant: "destructive" as const, icon: <AlertCircle className="h-4 w-4" /> };
-    }
-    // Fallback based on repository data if no active/recent task
-    // This logic may need refinement based on actual backend states post-ingestion
-    return repository.datasets_count > 0 || repository.github_issues_count > 0 || repository.bot_patterns_count > 0 ? 
-           { text: "Ingested (Idle)", badgeVariant: "default" as const } : 
-           { text: "Ready for Ingestion", badgeVariant: "secondary" as const };
-  };
-  
-  const displayRepoStatus = getDisplayRepoStatusInfo();
-
   const renderTaskAwareStatusBadge = (taskAwareEntityStatus?: TaskStatusUpdatePayload, fallbackStaticStatus?: string) => {
     const currentStatusToDisplay = taskAwareEntityStatus || (fallbackStaticStatus ? { status: fallbackStaticStatus } as TaskStatusUpdatePayload : undefined);
     if (!currentStatusToDisplay) return <Badge variant="secondary">Unknown</Badge>;
@@ -329,13 +365,17 @@ export default function RepositoryDetailPage() {
         icon = <AlertCircle className="h-3 w-3 mr-1" />;
         text = `Failed: ${status_message || "Error"}`;
         break;
+      default:
+        badgeVariant = "secondary";
+        text = status_message || status || "Unknown";
     }
-    return <Badge variant={badgeVariant} className="whitespace-nowrap">{icon}{text}</Badge>;
-  };
 
-  const handleRefreshData = () => {
-    toast({title: "Refreshing repository data..."});
-    fetchMainRepositoryData(); // This will re-fetch the main repo and then trigger related data fetches
+    return (
+      <Badge variant={badgeVariant} className="text-xs">
+        {icon}
+        {text}
+      </Badge>
+    );
   };
 
   // Helper for rendering pagination elements
@@ -443,19 +483,6 @@ export default function RepositoryDetailPage() {
     );
   }
 
-  const pageActions = (
-    <div className="flex items-center gap-2">
-        <Button variant="outline" size="sm" onClick={handleRefreshData} disabled={isLoadingRepo || datasetsPagination.isLoading || modelsPagination.isLoading /* etc. */}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${ (isLoadingRepo || datasetsPagination.isLoading) ? 'animate-spin' : ''}`} />
-            Refresh
-        </Button>
-        <Button size="sm" asChild>
-            <Link href={`/repositories/${repoId}/settings`}>
-                <Settings className="mr-2 h-4 w-4" /> Settings
-            </Link>
-        </Button>
-    </div>
-  );
 
   return (
     <MainLayout>
@@ -469,6 +496,14 @@ export default function RepositoryDetailPage() {
         actions={pageActions}
         className="px-4 md:px-6 lg:px-8"
       >
+
+          {repoIngestionStatus && (repoIngestionStatus.status === 'RUNNING' || repoIngestionStatus.status === 'PENDING') && (
+              <div className="mb-4">
+                  <Label className="text-xs text-muted-foreground">{displayRepoStatus.text}</Label>
+                  <Progress value={repoIngestionStatus.progress ?? 0} className="w-full h-2 mt-1"/>
+              </div>
+          )}
+
          <div className="mb-4">
             <Badge variant={displayRepoStatus.badgeVariant} className="text-base px-3 py-1">
                 {displayRepoStatus.icon && <span className="mr-1.5">{displayRepoStatus.icon}</span>}

@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,20 +48,23 @@ async def create_repository_endpoint(
     "/",
     response_model=schemas.PaginatedRepositoryRead,  # Use Paginated schema
     summary="List registered repositories",
-    description="Retrieves a list of repositories with pagination.",
+    description="Retrieves a list of repositories with pagination, filtering, and sorting.",
 )
 async def read_repositories_endpoint(
     db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0, description="Number of records to skip for pagination"),
     limit: int = Query(
-        100, ge=1, le=200, description="Maximum number of records to return"
+        10, ge=1, le=200, description="Maximum number of records to return"
     ),
+    q: Optional[str] = Query(None, description="Search query to filter repositories by name."),
+    sort_by: Optional[str] = Query('created_at', description="Column to sort by."),
+    sort_order: str = Query('desc', description="Sort order: 'asc' or 'desc'."),
 ):
     """
-    Retrieve repositories.
+    Retrieve repositories with filtering and sorting.
     """
     items, total = await crud.crud_repository.get_repositories(
-        db, skip=skip, limit=limit
+        db, skip=skip, limit=limit, q=q, sort_by=sort_by, sort_order=sort_order
     )
     return schemas.PaginatedRepositoryRead(
         items=items, total=total, skip=skip, limit=limit
