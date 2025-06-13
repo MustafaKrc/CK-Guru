@@ -55,6 +55,17 @@ export class ApiError extends Error {
   }
 }
 
+export interface GetModelsParams {
+    skip?: number;
+    limit?: number;
+    nameFilter?: string; // Changed from model_name to match backend alias
+    model_type?: string;
+    dataset_id?: number;
+    repository_id?: number;
+    sortBy?: string;
+    sortDir?: 'asc' | 'desc';
+}
+
 async function downloadFile(endpoint: string, options: RequestInit = {}): Promise<Blob> {
   const url = `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
   
@@ -262,23 +273,8 @@ export const apiService = {
   getAvailableModelTypes: async (): Promise<AvailableModelType[]> => {
     return request<AvailableModelType[]>('/ml/model-types');
   },
-  getModels: async (params?: {
-    skip?: number;
-    limit?: number;
-    model_name?: string;
-    model_type?: string;
-    dataset_id?: number;
-    repository_id?: number; // Add if backend supports listing models by repo
-  }): Promise<PaginatedMLModelRead> => {
-    const queryParams = new URLSearchParams();
-    if (params) {
-        if (params.skip !== undefined) queryParams.append('skip', String(params.skip));
-        if (params.limit !== undefined) queryParams.append('limit', String(params.limit));
-        if (params.model_name) queryParams.append('model_name', params.model_name);
-        if (params.model_type) queryParams.append('model_type', params.model_type);
-        if (params.dataset_id !== undefined) queryParams.append('dataset_id', String(params.dataset_id));
-        if (params.repository_id !== undefined) queryParams.append('repository_id', String(params.repository_id));
-    }
+  getModels: async (params?: GetModelsParams): Promise<PaginatedMLModelRead> => {
+    const queryParams = new URLSearchParams(params as any);
     return apiService.get<PaginatedMLModelRead>(`/ml/models?${queryParams.toString()}`);
   },
 

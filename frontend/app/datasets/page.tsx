@@ -22,6 +22,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious, PaginationEllipsis } from "@/components/ui/pagination";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { PageContainer } from "@/components/ui/page-container";
+import { SearchableSelect, SearchableSelectOption } from "@/components/ui/searchable-select"; // Added import
 import { useDebounce } from "@/hooks/useDebounce";
 import { apiService, handleApiError } from "@/lib/apiService";
 import { DatasetRead, PaginatedDatasetRead, Repository, PaginatedRepositoryRead } from "@/types/api";
@@ -80,46 +81,71 @@ export default function DatasetsPage() {
   const fetchRepositoriesForFilter = useCallback(async () => {
     setIsLoadingRepositories(true);
     try {
-      const response = await apiService.get<PaginatedRepositoryRead>(`/repositories?limit=200`);
+      const response = await apiService.get<PaginatedRepositoryRead>(`/repositories?limit=200`); // Fetch enough for selection
       setRepositories(response.items || []);
     } catch (err) { handleApiError(err, "Failed to fetch repositories for filter"); }
     finally { setIsLoadingRepositories(false); }
   }, []);
 
-  const fetchDatasets = useCallback(async (page: number) => {
-    setPagination(prev => ({ ...prev, isLoading: true, currentPage: page }));
+  const fetchDatasets = useCallback(async (
+    pageToFetch: number, 
+    limitToFetch: number, 
+    currentSearch: string, 
+    currentStatus: string, 
+    currentRepoId: string, 
+    currentSort: SortConfig
+  ) => {
+    setPagination(prev => ({ ...prev, isLoading: true }));
     try {
       const response = await apiService.getDatasets({
-        skip: (page - 1) * pagination.itemsPerPage,
-        limit: pagination.itemsPerPage,
-        status: statusFilter === ALL_FILTER_VALUE ? undefined : statusFilter,
-        repository_id: repositoryFilter === ALL_FILTER_VALUE ? undefined : repositoryFilter,
-        nameFilter: debouncedSearchQuery,
-        sortBy: sortConfig.key,
-        sortDir: sortConfig.direction,
+        skip: (pageToFetch - 1) * limitToFetch,
+        limit: limitToFetch,
+        status: currentStatus === ALL_FILTER_VALUE ? undefined : currentStatus as DatasetStatusEnum,
+        repository_id: currentRepoId === ALL_FILTER_VALUE ? undefined : currentRepoId,
+        nameFilter: currentSearch,
+        sortBy: currentSort.key,
+        sortDir: currentSort.direction,
       });
       setDatasets(response.items || []);
-      setPagination(prev => ({ ...prev, totalItems: response.total, isLoading: false }));
+      setPagination(prev => ({ 
+        ...prev, 
+        totalItems: response.total, 
+        isLoading: false, 
+        currentPage: pageToFetch, 
+        itemsPerPage: limitToFetch 
+      }));
     } catch (err) {
       handleApiError(err, "Failed to fetch datasets");
       setFetchError(err instanceof Error ? err.message : "Error fetching datasets.");
       setPagination(prev => ({ ...prev, isLoading: false }));
     }
-  }, [pagination.itemsPerPage, statusFilter, repositoryFilter, debouncedSearchQuery, sortConfig]);
+  }, []);
 
   useEffect(() => {
     fetchRepositoriesForFilter();
   }, [fetchRepositoriesForFilter]);
 
+  // Effect for filters or sort config changing: fetch page 1
   useEffect(() => {
-    // This effect triggers a refetch whenever a filter or sort setting changes, resetting to page 1.
-    fetchDatasets(1);
-  }, [debouncedSearchQuery, statusFilter, repositoryFilter, sortConfig]);
+    fetchDatasets(1, pagination.itemsPerPage, debouncedSearchQuery, statusFilter, repositoryFilter, sortConfig);
+  }, [debouncedSearchQuery, statusFilter, repositoryFilter, sortConfig, fetchDatasets]); // Removed fetchDatasets from dependency array as it's stable
+
+  // Effect for pagination changes (currentPage or itemsPerPage)
+  useEffect(() => {
+    fetchDatasets(pagination.currentPage, pagination.itemsPerPage, debouncedSearchQuery, statusFilter, repositoryFilter, sortConfig);
+  }, [pagination.currentPage, pagination.itemsPerPage, debouncedSearchQuery, statusFilter, repositoryFilter, sortConfig, fetchDatasets]); // Added missing dependencies
+
 
   const handlePageChange = (newPage: number) => {
-    if (newPage !== pagination.currentPage) {
-        fetchDatasets(newPage);
+    const totalPages = Math.ceil(pagination.totalItems / pagination.itemsPerPage);
+    if (newPage !== pagination.currentPage && newPage > 0 && newPage <= totalPages) {
+        setPagination(prev => ({ ...prev, currentPage: newPage }));
     }
+  };
+
+  const handleItemsPerPageChange = (value: string) => {
+    const newItemsPerPage = parseInt(value, 10);
+    setPagination(prev => ({ ...prev, itemsPerPage: newItemsPerPage, currentPage: 1 }));
   };
 
   const handleSort = (key: SortableKeys) => {
@@ -133,7 +159,14 @@ export default function DatasetsPage() {
         await apiService.delete<void>(`/datasets/${selectedDatasetForDelete.id}`);
         toast({ title: "Dataset Deleted", description: `Dataset ${selectedDatasetForDelete.name} has been marked for deletion.`});
         setSelectedDatasetForDelete(null);
-        fetchDatasets(pagination.currentPage); // Refresh current page
+        fetchDatasets(
+          pagination.currentPage,
+          pagination.itemsPerPage,
+          debouncedSearchQuery,
+          statusFilter,
+          repositoryFilter,
+          sortConfig
+        ); // Refresh current page
     } catch (err) {
         handleApiError(err, "Failed to delete dataset");
     } finally {
@@ -141,6 +174,14 @@ export default function DatasetsPage() {
     }
   };
   
+  const repositoryOptions: SearchableSelectOption[] = [
+    { value: ALL_FILTER_VALUE, label: "All Repositories" },
+    ...repositories.map(repo => ({
+      value: String(repo.id),
+      label: `${repo.name} (ID: ${repo.id})`,
+    }))
+  ];
+
   const renderStatusBadge = (dataset: DatasetRead) => {
     const liveStatus = getLatestTaskForEntity(taskStatuses, "Dataset", dataset.id, "dataset_generation");
     const currentStatusToDisplay = liveStatus || { status: dataset.status, status_message: dataset.status_message, progress: null };
@@ -230,16 +271,29 @@ export default function DatasetsPage() {
         description="Browse and manage your datasets for model training."
         actions={<Button asChild><Link href="/datasets/create"><Plus className="mr-2 h-4 w-4" />Create Dataset</Link></Button>}
       >
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <Input placeholder="Search by dataset name..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-6">
+          <Input placeholder="Search by dataset name..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="md:col-span-1 lg:col-span-1"/>
           <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as any)}>
             <SelectTrigger><SelectValue placeholder="Filter by Status" /></SelectTrigger>
             <SelectContent><SelectItem value={ALL_FILTER_VALUE}>All Statuses</SelectItem>{availableDatasetStatuses.map(s => <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>)}</SelectContent>
           </Select>
-          <Select value={repositoryFilter} onValueChange={setRepositoryFilter} disabled={isLoadingRepositories}>
-            <SelectTrigger><SelectValue placeholder="Filter by Repository" /></SelectTrigger>
-            <SelectContent><SelectItem value={ALL_FILTER_VALUE}>All Repositories</SelectItem>{repositories.map(repo => <SelectItem key={repo.id} value={repo.id.toString()}>{repo.name}</SelectItem>)}</SelectContent>
-          </Select>
+          <SearchableSelect
+            options={repositoryOptions}
+            value={repositoryFilter}
+            onValueChange={setRepositoryFilter}
+            placeholder="Filter by Repository"
+            searchPlaceholder="Search repositories..."
+            emptyMessage="No repositories found."
+            disabled={isLoadingRepositories}
+            isLoading={isLoadingRepositories}
+          />
+          <div className="flex items-center gap-2 md:col-start-3 lg:col-start-4">
+            <Label htmlFor="items-per-page-datasets" className="text-sm shrink-0">Show:</Label>
+            <Select value={String(pagination.itemsPerPage)} onValueChange={handleItemsPerPageChange}>
+              <SelectTrigger id="items-per-page-datasets" className="w-full md:w-[80px]"><SelectValue /></SelectTrigger>
+              <SelectContent>{[10, 25, 50, 100].map(size => <SelectItem key={size} value={String(size)}>{size}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
         </div>
 
         <div className="rounded-md border">

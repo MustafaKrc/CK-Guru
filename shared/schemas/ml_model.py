@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 from shared.schemas.enums import ModelTypeEnum
+from shared.schemas.dataset import DatasetRead
 
 
 # --- Base ---
@@ -51,6 +52,9 @@ class MLModelRead(MLModelBase):
     s3_artifact_path: Optional[str] = Field(
         None, description="URI to the saved model artifact."
     )
+    dataset: Optional[DatasetRead] = Field(
+        None, description="Dataset used for training/evaluation."
+    )  # Add this line
     # Include related job IDs if useful for client
     training_job_id: Optional[int] = None
     hp_search_job_id: Optional[int] = None
@@ -61,8 +65,9 @@ class MLModelRead(MLModelBase):
         "from_attributes": True,  # Pydantic V2+ ORM mode
     }
 
+
 class PaginatedMLModelRead(BaseModel):
     items: List[MLModelRead]
     total: int
     skip: Optional[int] = None
-    limit: Optional[int] = None 
+    limit: Optional[int] = None

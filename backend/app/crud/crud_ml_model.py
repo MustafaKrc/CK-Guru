@@ -2,7 +2,7 @@
 import logging
 from typing import Any, Dict, Optional, Sequence, Tuple
 
-from sqlalchemy import func, select
+from sqlalchemy import asc, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload  # <--- IMPORT THIS
 
@@ -35,22 +35,22 @@ async def get_ml_models(
     limit: int = 100,
     model_name: Optional[str] = None,
     model_type: Optional[str] = None,
-    dataset_id: Optional[int] = None,  # Added dataset_id filter
-) -> Tuple[Sequence[MLModel], int]:  # Return tuple
+    dataset_id: Optional[int] = None,
+    sort_by: Optional[str] = 'created_at',
+    sort_dir: Optional[str] = 'desc',
+) -> Tuple[Sequence[MLModel], int]:
     """Get multiple ML models with optional filtering and pagination."""
-    stmt_items = (
-        select(MLModel)
-        .options(  # Eager load for list view as well, for consistency on model objects
-            selectinload(MLModel.dataset),
-            selectinload(MLModel.training_job),
-            selectinload(MLModel.hp_search_job),
-        )
-        .order_by(MLModel.name, MLModel.version.desc())
+    
+    stmt_items = select(MLModel).options(
+        selectinload(MLModel.dataset).selectinload(Dataset.repository), # Eager load for list view
+        selectinload(MLModel.training_job),
+        selectinload(MLModel.hp_search_job),
     )
+    stmt_total = select(func.count(MLModel.id))
 
     filters = []
     if model_name:
-        filters.append(MLModel.name == model_name)
+        filters.append(MLModel.name.ilike(f"%{model_name}%"))
     if model_type:
         filters.append(MLModel.model_type == model_type)
     if dataset_id is not None:
@@ -58,15 +58,34 @@ async def get_ml_models(
 
     if filters:
         stmt_items = stmt_items.where(*filters)
-
-    # Count before applying offset/limit for items
-    stmt_total = select(func.count(MLModel.id))
-    if filters:
         stmt_total = stmt_total.where(*filters)
 
+    # Get total count before pagination
     result_total = await db.execute(stmt_total)
     total = result_total.scalar_one_or_none() or 0
 
+    # Define a mapping of allowed sort keys to model columns
+    sort_mapping = {
+        'name': MLModel.name,
+        'version': MLModel.version,
+        'model_type': MLModel.model_type,
+        'created_at': MLModel.created_at,
+        'dataset': Dataset.name,
+    }
+
+    # If sorting by dataset name, join the Dataset table
+    if sort_by == 'dataset':
+        stmt_items = stmt_items.join(Dataset, MLModel.dataset_id == Dataset.id)
+        sort_column = Dataset.name
+    else:
+        sort_column = sort_mapping.get(sort_by, MLModel.created_at) # Default sort
+
+    if sort_dir == 'desc':
+        stmt_items = stmt_items.order_by(desc(sort_column))
+    else:
+        stmt_items = stmt_items.order_by(asc(sort_column))
+
+    # Apply pagination and execute
     stmt_items = stmt_items.offset(skip).limit(limit)
     result_items = await db.execute(stmt_items)
     items = result_items.scalars().all()

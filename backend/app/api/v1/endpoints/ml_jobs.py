@@ -214,21 +214,19 @@ async def list_training_jobs(
 
 @router.get(
     "/models",
-    response_model=schemas.PaginatedMLModelRead,  # Use Paginated schema
+    response_model=schemas.PaginatedMLModelRead,
     summary="List ML Models",
     description="Retrieves a list of registered ML models with filtering and pagination.",
 )
 async def list_ml_models(
     db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500),
-    model_name: Optional[str] = Query(
-        None, description="Filter by logical model name."
-    ),
+    limit: int = Query(100, ge=1, le=200),
+    model_name: Optional[str] = Query(None, alias="nameFilter", description="Filter by logical model name (case-insensitive)."),
     model_type: Optional[str] = Query(None, description="Filter by model type."),
-    dataset_id: Optional[int] = Query(
-        None, description="Filter by dataset ID."
-    ),  # Added dataset_id
+    dataset_id: Optional[int] = Query(None, description="Filter by dataset ID."),
+    sort_by: Optional[str] = Query('created_at', alias="sortBy", description="Column to sort by."),
+    sort_dir: Optional[str] = Query('desc', alias="sortDir", pattern="^(asc|desc)$")
 ):
     logger.info(
         f"Listing ML models (Name: {model_name}, Type: {model_type}, Dataset: {dataset_id}, Skip: {skip}, Limit: {limit})"
@@ -240,6 +238,8 @@ async def list_ml_models(
         model_name=model_name,
         model_type=model_type,
         dataset_id=dataset_id,
+        sort_by=sort_by,
+        sort_dir=sort_dir
     )
     return schemas.PaginatedMLModelRead(
         items=items, total=total, skip=skip, limit=limit
