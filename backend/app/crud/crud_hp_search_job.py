@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from shared.db.models.dataset import Dataset
 from shared.db.models.hp_search_job import HyperparameterSearchJob
+from shared.db.models.ml_model import MLModel # Ensure MLModel is imported for selectinload path
 from shared.db.models.training_job import JobStatusEnum  # Reuse enum
 from shared.schemas.hp_search_job import HPSearchJobCreate, HPSearchJobUpdate
 
@@ -52,7 +53,11 @@ async def get_hp_search_jobs(
     """Get multiple HP search jobs with optional filtering and pagination."""
     stmt_items = (
         select(HyperparameterSearchJob)
-        .options(selectinload(HyperparameterSearchJob.best_ml_model))
+        .options(
+            selectinload(HyperparameterSearchJob.best_ml_model)
+            .selectinload(MLModel.dataset)
+            .selectinload(Dataset.repository)  # Eager load repository
+        )
         .order_by(HyperparameterSearchJob.created_at.desc())
     )
     filters = []

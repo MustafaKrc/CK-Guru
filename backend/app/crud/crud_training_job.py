@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from shared.db.models.dataset import Dataset
+from shared.db.models.ml_model import MLModel # Ensure MLModel is imported for selectinload path
 from shared.db.models.training_job import JobStatusEnum, TrainingJob
 from shared.schemas.training_job import TrainingJobCreate, TrainingJobUpdate
 
@@ -48,7 +49,11 @@ async def get_training_jobs(
     """Get multiple training jobs with optional filtering and pagination."""
     stmt_items = (
         select(TrainingJob)
-        .options(selectinload(TrainingJob.ml_model))
+        .options(
+            selectinload(TrainingJob.ml_model)
+            .selectinload(MLModel.dataset)
+            .selectinload(Dataset.repository)  # Eager load repository
+        )
         .order_by(TrainingJob.created_at.desc())
     )
     filters = []
