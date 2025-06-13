@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from shared.db.models.dataset import Dataset  # Required for linking
 from shared.db.models.inference_job import InferenceJob
 from shared.db.models.ml_model import MLModel  # Required for linking
+from shared.db.models.repository import Repository
 from shared.schemas import InferenceJobCreate
 from shared.schemas.enums import JobStatusEnum  # Reuse enum
 from shared.schemas.inference_job import InferenceJobUpdate
@@ -21,7 +22,7 @@ async def get_inference_job(db: AsyncSession, job_id: int) -> Optional[Inference
     stmt = (
         select(InferenceJob)
         .options(
-            selectinload(InferenceJob.ml_model).selectinload(MLModel.dataset)
+            selectinload(InferenceJob.ml_model).selectinload(MLModel.dataset).selectinload(Dataset.repository)
         )
         .filter(InferenceJob.id == job_id)
     )
@@ -36,7 +37,7 @@ async def get_inference_job_by_task_id(
     stmt = (
         select(InferenceJob)
         .options(
-            selectinload(InferenceJob.ml_model).selectinload(MLModel.dataset)
+            selectinload(InferenceJob.ml_model).selectinload(MLModel.dataset).selectinload(Dataset.repository)
         )
         .filter(InferenceJob.celery_task_id == celery_task_id)
     )
@@ -53,15 +54,46 @@ async def get_inference_jobs(
     model_id: Optional[int] = None,
     status: Optional[JobStatusEnum] = None,
     name_filter: Optional[str] = None, # For commit hash
+    repository_id: Optional[int] = None,
     sort_by: Optional[str] = 'created_at',
     sort_dir: Optional[str] = 'desc'
 ) -> Tuple[Sequence[InferenceJob], int]:
     """Get multiple inference jobs with optional filtering and pagination."""
     stmt_items = select(InferenceJob).options(
-        selectinload(InferenceJob.ml_model).selectinload(MLModel.dataset)
+        selectinload(InferenceJob.ml_model).selectinload(MLModel.dataset).selectinload(Dataset.repository)
     )
     stmt_total = select(func.count(InferenceJob.id))
 
+    # Determine required joins for filtering and sorting
+    needs_ml_model_join = False
+    needs_dataset_join = False
+    needs_repository_join = False
+
+    if repository_id is not None:
+        needs_ml_model_join = True
+        needs_dataset_join = True
+    
+    if sort_by == 'repository_name':
+        needs_ml_model_join = True
+        needs_dataset_join = True
+        needs_repository_join = True
+    elif sort_by == 'dataset_name':
+        needs_ml_model_join = True
+        needs_dataset_join = True
+    elif sort_by in ['model_type', 'name']: # 'name' is MLModel.name
+        needs_ml_model_join = True
+
+    # Apply joins
+    if needs_ml_model_join:
+        stmt_items = stmt_items.join(MLModel, InferenceJob.ml_model_id == MLModel.id)
+        stmt_total = stmt_total.join(MLModel, InferenceJob.ml_model_id == MLModel.id)
+    if needs_dataset_join: # Assumes MLModel is already joined if this is true
+        stmt_items = stmt_items.join(Dataset, MLModel.dataset_id == Dataset.id)
+        stmt_total = stmt_total.join(Dataset, MLModel.dataset_id == Dataset.id)
+    if needs_repository_join: # Assumes Dataset is already joined
+        stmt_items = stmt_items.join(Repository, Dataset.repository_id == Repository.id)
+        stmt_total = stmt_total.join(Repository, Dataset.repository_id == Repository.id)
+    
     filters = []
     if model_id is not None:
         filters.append(InferenceJob.ml_model_id == model_id)
@@ -69,6 +101,8 @@ async def get_inference_jobs(
         filters.append(InferenceJob.status == status)
     if name_filter:
         filters.append(InferenceJob.input_reference.op('->>')('commit_hash').ilike(f"%{name_filter}%"))
+    if repository_id is not None:
+        filters.append(Dataset.repository_id == repository_id)
     
     if filters:
         stmt_items = stmt_items.where(*filters)
@@ -79,7 +113,11 @@ async def get_inference_jobs(
 
     sort_mapping = {
         'created_at': InferenceJob.created_at,
-        'status': InferenceJob.status
+        'status': InferenceJob.status,
+        'repository_name': Repository.name,
+        'dataset_name': Dataset.name,
+        'model_type': MLModel.model_type,
+        'name': MLModel.name,
     }
     sort_column = sort_mapping.get(sort_by, InferenceJob.created_at)
 
@@ -193,7 +231,7 @@ async def get_all_for_commit(
     stmt = (
         select(InferenceJob)
         .options(
-            selectinload(InferenceJob.ml_model).selectinload(MLModel.dataset)
+            selectinload(InferenceJob.ml_model).selectinload(MLModel.dataset).selectinload(Dataset.repository)
         )
         .filter(
             InferenceJob.input_reference["repo_id"].as_integer() == repo_id,

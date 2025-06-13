@@ -28,7 +28,12 @@ import {
   BotPatternCreatePayload,
   BotPatternUpdatePayload,
   PaginatedBotPatternRead,
-} from "@/types/api"; // Assuming types are in @/types/api/*
+  JobStatusEnum,
+  PaginatedInferenceJobRead,
+  InferenceJobRead,
+  XAIResultRead,
+  XAITriggerResponse,
+} from "@/types/api";
 
 const API_BASE_URL =  `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/api/v1`;
 
@@ -70,6 +75,7 @@ export interface GetTrainingJobsParams {
   skip?: number;
   limit?: number;
   dataset_id?: number;
+  repository_id?: number;
   status?: JobStatusEnum | string;
   nameFilter?: string;
   sortBy?: string;
@@ -308,18 +314,18 @@ export const apiService = {
   },
 
   getTrainingJobs: async (params?: GetTrainingJobsParams): Promise<PaginatedTrainingJobRead> => {
-    const queryParams = new URLSearchParams(params as any).toString();
-    return apiService.get<PaginatedTrainingJobRead>(`/ml/train?${queryParams}`);
+    const queryParams = new URLSearchParams(params as any);
+    return apiService.get<PaginatedTrainingJobRead>(`/ml/train?${queryParams.toString()}`);
   },
 
   getHpSearchJobs: async (params?: GetHpSearchJobsParams): Promise<PaginatedHPSearchJobRead> => {
-    const queryParams = new URLSearchParams(params as any).toString();
-    return apiService.get<PaginatedHPSearchJobRead>(`/ml/search?${queryParams}`);
+    const queryParams = new URLSearchParams(params as any);
+    return apiService.get<PaginatedHPSearchJobRead>(`/ml/search?${queryParams.toString()}`);
   },
 
   getInferenceJobs: async (params?: GetInferenceJobsParams): Promise<PaginatedInferenceJobRead> => {
-    const queryParams = new URLSearchParams(params as any).toString();
-    return apiService.get<PaginatedInferenceJobRead>(`/ml/infer?${queryParams}`);
+    const queryParams = new URLSearchParams(params as any);
+    return apiService.get<PaginatedInferenceJobRead>(`/ml/infer?${queryParams.toString()}`);
   },
 
   getCommits: async (repoId: number | string, params?: { skip?: number; limit?: number }): Promise<PaginatedCommitList> => {
@@ -359,33 +365,6 @@ export const handleApiError = (
 };
 
 // --- Dedicated API Service Functions ---
-import {
-  PaginatedInferenceJobRead,
-  InferenceJobRead,
-  XAIResultRead,
-  XAITriggerResponse,
-} from "@/types/api";
-
-import { JobStatusEnum } from "@/types/api/enums";
-
-export interface GetInferenceJobsParams {
-  skip?: number;
-  limit?: number;
-  ml_model_id?: number;
-  status?: JobStatusEnum | string;
-}
-
-export const getInferenceJobs = async (params?: GetInferenceJobsParams): Promise<PaginatedInferenceJobRead> => {
-  const queryParams = new URLSearchParams();
-  if (params) {
-    if (params.skip !== undefined) queryParams.append('skip', String(params.skip));
-    if (params.limit !== undefined) queryParams.append('limit', String(params.limit));
-    if (params.ml_model_id !== undefined) queryParams.append('ml_model_id', String(params.ml_model_id));
-    if (params.status !== undefined) queryParams.append('status', params.status);
-  }
-  const endpoint = `/ml/infer?${queryParams.toString()}`;
-  return apiService.get<PaginatedInferenceJobRead>(endpoint);
-};
 
 export const getInferenceJobDetails = async (jobId: string | number): Promise<InferenceJobRead> => {
   return apiService.get<InferenceJobRead>(`/ml/infer/${jobId}`);

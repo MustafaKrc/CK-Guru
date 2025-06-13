@@ -1,5 +1,6 @@
 // frontend/types/api/inference-job.ts
 import { JobStatusEnum } from "./enums";
+import { MLModelRead } from './ml-model';
 import { FilePredictionDetail } from "./xai"; 
 
 export interface InferenceResultPackage {
@@ -13,6 +14,7 @@ export interface InferenceResultPackage {
 export interface InferenceJobRead {
   id: number;
   ml_model_id: number;
+  ml_model?: MLModelRead; // Add the nested model details
   input_reference: Record<string, any>; // e.g., { commit_hash, repo_id, trigger_source }
   celery_task_id?: string | null;
   status: JobStatusEnum;

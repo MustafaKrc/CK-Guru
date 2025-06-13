@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from shared.schemas.enums import JobStatusEnum
 from shared.schemas.xai import FilePredictionDetail
+from shared.schemas.ml_model import MLModelRead 
 
 
 # --- Result package stored in InferenceJob ---
@@ -72,6 +73,7 @@ class InferenceJobRead(InferenceJobBase):
     status_message: Optional[str] = None
     # Use the result package schema here for consistent response structure
     prediction_result: Optional[InferenceResultPackage] = None
+    ml_model: Optional[MLModelRead] = None 
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     created_at: datetime
@@ -88,6 +90,7 @@ class InferenceTriggerResponse(BaseModel):
     initial_task_id: str = Field(
         ..., description="The Celery task ID for the initial feature extraction step."
     )
+
 
 class PaginatedInferenceJobRead(BaseModel):
     """Response for paginated inference job queries."""

@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from shared.schemas.enums import JobStatusEnum, ModelTypeEnum  # Import ModelTypeEnum
 
 from .ml_model import MLModelRead  # To show nested model info
+from .dataset import DatasetRead
 
 
 # --- Training Run Config (More specific than raw JSON) ---
@@ -64,6 +65,7 @@ class TrainingJobUpdate(BaseModel):
 class TrainingJobRead(TrainingJobBase):
     """Schema for reading training job data."""
     id: int
+    dataset: Optional[DatasetRead] = None
     celery_task_id: Optional[str] = None
     status: JobStatusEnum
     status_message: Optional[str] = None

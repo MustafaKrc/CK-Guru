@@ -43,7 +43,7 @@ async def list_available_model_types(
     
     def get_types_sync(session: SyncSession):
         repo = MLModelTypeDefinitionRepository(lambda: session)
-        db_model_types = repo.get_all_enabled(limit=200)
+        db_model_types = repo.get_all_enabled(limit=500)
         # Convert each DB model to response schema properly
         response_list = []
         for mt in db_model_types:
@@ -197,15 +197,16 @@ async def get_training_job_details(
 async def list_training_jobs(
     db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=200),
+    limit: int = Query(100, ge=1, le=500),
     dataset_id: Optional[int] = Query(None, description="Filter by dataset ID"),
+    repository_id: Optional[int] = Query(None, description="Filter by repository ID."),
     status: Optional[JobStatusEnum] = Query(None, description="Filter by job status"),
     name_filter: Optional[str] = Query(None, alias="nameFilter", description="Filter by job name."),
     sort_by: Optional[str] = Query('created_at', alias="sortBy"),
     sort_dir: Optional[str] = Query('desc', alias="sortDir", pattern="^(asc|desc)$")
 ):
     items, total = await crud.crud_training_job.get_training_jobs(
-        db, skip=skip, limit=limit, dataset_id=dataset_id, status=status,
+        db, skip=skip, limit=limit, dataset_id=dataset_id, repository_id=repository_id, status=status,
         name_filter=name_filter, sort_by=sort_by, sort_dir=sort_dir
     )
     return schemas.PaginatedTrainingJobRead(items=items, total=total, skip=skip, limit=limit)
@@ -223,7 +224,7 @@ async def list_training_jobs(
 async def list_ml_models(
     db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=200),
+    limit: int = Query(100, ge=1, le=500),
     model_name: Optional[str] = Query(None, alias="nameFilter", description="Filter by logical model name (case-insensitive)."),
     model_type: Optional[str] = Query(None, description="Filter by model type."),
     dataset_id: Optional[int] = Query(None, description="Filter by dataset ID."),
@@ -528,15 +529,16 @@ async def get_hp_search_job_details(
 async def list_hp_search_jobs(
     db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=200),
+    limit: int = Query(100, ge=1, le=500),
     dataset_id: Optional[int] = Query(None, description="Filter by dataset ID"),
+    repository_id: Optional[int] = Query(None, description="Filter by repository ID."),
     status: Optional[JobStatusEnum] = Query(None, description="Filter by job status"),
     name_filter: Optional[str] = Query(None, alias="nameFilter", description="Filter by Optuna study name."),
     sort_by: Optional[str] = Query('created_at', alias="sortBy"),
     sort_dir: Optional[str] = Query('desc', alias="sortDir", pattern="^(asc|desc)$")
 ):
     items, total = await crud.crud_hp_search_job.get_hp_search_jobs(
-        db, skip=skip, limit=limit, dataset_id=dataset_id, status=status,
+        db, skip=skip, limit=limit, dataset_id=dataset_id, repository_id=repository_id, status=status,
         name_filter=name_filter, sort_by=sort_by, sort_dir=sort_dir
     )
     return schemas.PaginatedHPSearchJobRead(items=items, total=total, skip=skip, limit=limit)
@@ -597,15 +599,16 @@ async def get_inference_job_details(
 async def list_inference_jobs(
     db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=200),
+    limit: int = Query(100, ge=1, le=500),
     model_id: Optional[int] = Query(None, description="Filter by ML Model ID used."),
+    repository_id: Optional[int] = Query(None, description="Filter by repository ID."),
     status: Optional[JobStatusEnum] = Query(None, description="Filter by job status"),
     name_filter: Optional[str] = Query(None, alias="nameFilter", description="Filter by commit hash."),
     sort_by: Optional[str] = Query('created_at', alias="sortBy"),
     sort_dir: Optional[str] = Query('desc', alias="sortDir", pattern="^(asc|desc)$")
 ):
     items, total = await crud.crud_inference_job.get_inference_jobs(
-        db, skip=skip, limit=limit, model_id=model_id, status=status,
+        db, skip=skip, limit=limit, model_id=model_id, repository_id=repository_id, status=status,
         name_filter=name_filter, sort_by=sort_by, sort_dir=sort_dir
     )
     return schemas.PaginatedInferenceJobRead(items=items, total=total, skip=skip, limit=limit)

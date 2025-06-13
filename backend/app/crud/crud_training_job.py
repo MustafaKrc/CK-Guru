@@ -20,9 +20,10 @@ async def get_training_job(db: AsyncSession, job_id: int) -> Optional[TrainingJo
     stmt = (
         select(TrainingJob)
         .options(
+            selectinload(TrainingJob.dataset).selectinload(Dataset.repository),
             selectinload(TrainingJob.ml_model)
             .selectinload(MLModel.dataset)
-            .selectinload(Dataset.repository)  # Eager load repository
+            .selectinload(Dataset.repository)
         )
         .filter(TrainingJob.id == job_id)
     )
@@ -37,9 +38,10 @@ async def get_training_job_by_task_id(
     stmt = (
         select(TrainingJob)
         .options(
+            selectinload(TrainingJob.dataset).selectinload(Dataset.repository),
             selectinload(TrainingJob.ml_model)
             .selectinload(MLModel.dataset)
-            .selectinload(Dataset.repository)  # Eager load repository
+            .selectinload(Dataset.repository)
         )
         .filter(TrainingJob.celery_task_id == celery_task_id)
     )
@@ -53,6 +55,7 @@ async def get_training_jobs(
     skip: int = 0,
     limit: int = 100,
     dataset_id: Optional[int] = None,
+    repository_id: Optional[int] = None,
     status: Optional[JobStatusEnum] = None,
     name_filter: Optional[str] = None,
     sort_by: Optional[str] = 'created_at',
@@ -61,51 +64,69 @@ async def get_training_jobs(
     """Get multiple training jobs with optional filtering and pagination."""
     
     stmt_items = select(TrainingJob).options(
+        selectinload(TrainingJob.dataset).selectinload(Dataset.repository),
         selectinload(TrainingJob.ml_model)
+        # Eager load ml_model.dataset.repository if needed for response serialization
         .selectinload(MLModel.dataset)
-        .selectinload(Dataset.repository)  # Eager load repository
+        .selectinload(Dataset.repository)
     )
     stmt_total = select(func.count(TrainingJob.id))
 
+    # Determine required joins based on filters and sorting
+    needs_dataset_join = False
+    needs_repository_join = False # For joining Repository table via Dataset
+
+    if repository_id is not None:
+        needs_dataset_join = True # Filtering by repository_id requires joining Dataset
+    
+    if sort_by == 'dataset_name':
+        needs_dataset_join = True
+    elif sort_by == 'repository_name':
+        needs_dataset_join = True
+        needs_repository_join = True
+
+    # Apply joins
+    # Join Dataset if needed for filtering by repository_id or sorting by dataset_name/repository_name
+    if needs_dataset_join:
+        stmt_items = stmt_items.join(TrainingJob.dataset.of_type(Dataset))
+        stmt_total = stmt_total.join(TrainingJob.dataset.of_type(Dataset))
+        
+        # If repository_name sort or repository_id filter, further join Repository
+        if needs_repository_join: # This implies Dataset was already joined
+            stmt_items = stmt_items.join(Dataset.repository.of_type(Repository))
+            stmt_total = stmt_total.join(Dataset.repository.of_type(Repository))
+
+
     filters = []
     if dataset_id is not None:
-        # Ensure correct relationship path for filtering if needed, or direct column
-        # For TrainingJob, dataset_id is a direct column.
         filters.append(TrainingJob.dataset_id == dataset_id)
+    if repository_id is not None:
+        # This filter now assumes Dataset table is already joined if repository_id is present
+        filters.append(Dataset.repository_id == repository_id)
     if status:
         filters.append(TrainingJob.status == status)
     if name_filter:
-        # Assuming the job name is stored in the 'config' JSON field as 'training_job_name'
-        filters.append(TrainingJob.config.op('->>')('training_job_name').ilike(f"%{name_filter}%"))
+        filters.append(TrainingJob.config.op('->>')('model_name').ilike(f"%{name_filter}%"))
 
     if filters:
         stmt_items = stmt_items.where(*filters)
         stmt_total = stmt_total.where(*filters)
         
-    # If filtering by dataset_id, we might need to join to filter on dataset properties
-    # or ensure the filter applies to TrainingJob.dataset_id directly.
-    # Current filter `TrainingJob.dataset_id == dataset_id` is correct for direct column.
-
     # Get total count
     result_total = await db.execute(stmt_total)
     total = result_total.scalar_one_or_none() or 0
 
     # Sorting
     sort_mapping = {
-        'name': TrainingJob.config.op('->>')('training_job_name'),
+        'name': TrainingJob.config.op('->>')('model_name'),
         'status': TrainingJob.status,
-        'created_at': TrainingJob.created_at
-        # Add other sortable fields if necessary, potentially joining for related fields
+        'created_at': TrainingJob.created_at,
+        'repository_name': Repository.name, # Requires Repository join
+        'dataset_name': Dataset.name,       # Requires Dataset join
+        'model_type': TrainingJob.config.op('->>')('model_type'),
     }
     sort_column = sort_mapping.get(sort_by, TrainingJob.created_at)
-
-    # If sorting by a related field, ensure the join is present
-    # Example: if sorting by dataset name (not currently implemented here for brevity)
-    # if sort_by == 'dataset_name':
-    #     stmt_items = stmt_items.join(MLModel, TrainingJob.ml_model_id == MLModel.id)\
-    #                            .join(Dataset, MLModel.dataset_id == Dataset.id)
-    #     sort_column = Dataset.name
-
+    
     stmt_items = stmt_items.order_by(desc(sort_column) if sort_dir == 'desc' else asc(sort_column))
 
     # Pagination
@@ -147,14 +168,13 @@ async def update_training_job(
     db.add(db_obj)
     await db.commit()
     await db.refresh(db_obj)
-    # Eager load the relationship chain again after refresh if it was loaded before
-    # and if the updated object is immediately used in a context requiring these relations.
-    # For Pydantic serialization, this ensures all data is available.
-    await db.refresh(db_obj, attribute_names=["ml_model"])
-    if db_obj.ml_model:
-        await db.refresh(db_obj.ml_model, attribute_names=["dataset"])
-        if db_obj.ml_model.dataset:
-            await db.refresh(db_obj.ml_model.dataset, attribute_names=["repository"])
+    # Eager load the relationship chain again after refresh
+    await db.refresh(db_obj, attribute_names=["ml_model", "dataset"])
+    if db_obj.ml_model and db_obj.ml_model.dataset:
+        await db.refresh(db_obj.ml_model.dataset, attribute_names=["repository"])
+    if db_obj.dataset:
+        await db.refresh(db_obj.dataset, attribute_names=["repository"])
+
     logger.info(f"Updated Training Job ID {db_obj.id}, Status: {db_obj.status.value}")
     return db_obj
 
@@ -182,9 +202,10 @@ async def get_training_jobs_by_repository(
     stmt_items = (
         select(TrainingJob)
         .options(
+            selectinload(TrainingJob.dataset).selectinload(Dataset.repository),
             selectinload(TrainingJob.ml_model)
             .selectinload(MLModel.dataset)
-            .selectinload(Dataset.repository)  # Eager load repository
+            .selectinload(Dataset.repository)
         )
         .where(TrainingJob.dataset_id.in_(dataset_ids_stmt))
         .order_by(TrainingJob.created_at.desc())

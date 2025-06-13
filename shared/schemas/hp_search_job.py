@@ -20,6 +20,7 @@ from shared.schemas.enums import (
     SamplerTypeEnum,
 )
 from shared.schemas.ml_model import MLModelRead
+from shared.schemas.dataset import DatasetRead
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
@@ -206,6 +207,7 @@ class HPSearchJobUpdate(BaseModel):
 
 class HPSearchJobRead(HPSearchJobBase):
     id: int
+    dataset: Optional[DatasetRead] = None
     celery_task_id: Optional[str] = None
     status: JobStatusEnum
     status_message: Optional[str] = None

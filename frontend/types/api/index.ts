@@ -13,3 +13,4 @@ export * from "./ml-model";
 export * from "./dashboard";
 export * from "./commit";
 export * from "./feature-selection";
+export * from "./enums";

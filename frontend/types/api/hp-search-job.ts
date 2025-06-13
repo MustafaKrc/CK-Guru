@@ -1,6 +1,7 @@
 // frontend/types/api/hp-search-job.ts
 import { JobStatusEnum, ModelTypeEnum, ObjectiveMetricEnum, SamplerTypeEnum, PrunerTypeEnum } from "./enums";
 import { MLModelRead } from "./ml-model";
+import { DatasetRead } from "./dataset"; // Import DatasetRead
 
 export interface HPSuggestion {
   param_name: string;
@@ -34,23 +35,10 @@ export interface HPSearchConfig {
   random_seed?: number | null;
 }
 
-export interface HPSearchJobRead {
-  id: number;
-  dataset_id: number;
-  optuna_study_name: string;
-  config: HPSearchConfig;
-  celery_task_id?: string | null;
-  status: JobStatusEnum;
-  status_message?: string | null;
-  best_trial_id?: number | null;
-  best_params?: Record<string, any> | null;
-  best_value?: number | null;
-  best_ml_model_id?: number | null;
-  best_ml_model?: MLModelRead | null; // Nested model details
-  started_at?: string | null;
-  completed_at?: string | null;
-  created_at: string;
-  updated_at: string;
+export interface HPSearchJobBase {
+    dataset_id: number;
+    optuna_study_name: string;
+    config: HPSearchConfig;
 }
 
 // For creating an HP search job
@@ -67,7 +55,26 @@ export interface HPSearchJobSubmitResponse {
     message: string;
 }
 
+export interface HPSearchJobRead extends HPSearchJobBase {
+  id: number;
+  dataset?: DatasetRead | null; // <-- Add this line
+  celery_task_id?: string | null;
+  status: JobStatusEnum;
+  status_message?: string | null;
+  best_trial_id?: number | null;
+  best_params?: Record<string, any> | null;
+  best_value?: number | null;
+  best_ml_model_id?: number | null;
+  best_ml_model?: MLModelRead | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface PaginatedHPSearchJobRead {
   items: HPSearchJobRead[];
   total: number;
+  skip?: number;
+  limit?: number;
 }
