@@ -32,7 +32,6 @@ class RuleBasedCleaningService(ICleaningService):  # Inherit directly from inter
         logger.info(f"Initializing Cleaning Service: {self.__class__.__name__}")
         self._load_and_prepare_rules()  # Load rules using the injected registry
 
-    # _validate_and_prepare_params method remains the same
     def _validate_and_prepare_params(
         self,
         rule_name: str,
@@ -91,7 +90,6 @@ class RuleBasedCleaningService(ICleaningService):  # Inherit directly from inter
             )
             return None
 
-    # _load_and_prepare_rules method remains the same
     def _load_and_prepare_rules(self):
         """Loads rule instances using the injected registry and prepares param models."""
         logger.info("Loading and preparing cleaning rule instances...")
@@ -142,7 +140,6 @@ class RuleBasedCleaningService(ICleaningService):  # Inherit directly from inter
             f"Loaded and prepared {len(self.batch_rules_info)} batch-safe and {len(self.global_rules_info)} global rules."
         )
 
-    # apply_batch_rules method remains the same
     def apply_batch_rules(self, df: pd.DataFrame) -> pd.DataFrame:
         """Applies all configured batch-safe rules sequentially using prepared params."""
         if not self.batch_rules_info:
@@ -176,7 +173,6 @@ class RuleBasedCleaningService(ICleaningService):  # Inherit directly from inter
                 )
         return current_df
 
-    # apply_global_rules method remains the same
     def apply_global_rules(self, df: pd.DataFrame) -> pd.DataFrame:
         """Applies all configured global rules sequentially using prepared params."""
         if not self.global_rules_info:

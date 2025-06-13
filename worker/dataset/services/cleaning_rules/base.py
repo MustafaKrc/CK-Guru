@@ -8,7 +8,6 @@ import pandas as pd
 from shared.schemas.rule_definition import RuleDefinition, RuleParamDefinition
 
 
-# --- Abstract Base Class (Remains the same) ---
 class CleaningRuleBase(ABC):
     rule_name: str = "base_rule_name"
     description: str = "Base rule description."
@@ -34,14 +33,12 @@ class CleaningRuleBase(ABC):
         pass
 
 
-# --- Registry & Discovery (Modified to emphasize non-global use after discovery) ---
 WORKER_RULE_REGISTRY: Dict[str, Type[CleaningRuleBase]] = {}
 logger = logging.getLogger(__name__)
 
 
 def register_rule(cls: Type[CleaningRuleBase]):
     """Class decorator to register rule implementations in the global registry."""
-    # (Validation logic remains the same)
     if not issubclass(cls, CleaningRuleBase) or cls is CleaningRuleBase:
         raise TypeError("Registered class must be a subclass of CleaningRuleBase")
     if not cls.rule_name or cls.rule_name == "base_rule_name":

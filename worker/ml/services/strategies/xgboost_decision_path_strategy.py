@@ -29,7 +29,6 @@ class XGBoostDecisionPathStrategy(BaseDecisionPathStrategy):
                 f"XGBoostDecisionPathStrategy initialized with non-XGBoost model: {type(self.model).__name__}"
             )
 
-    # _parse_xgboost_condition remains the same
     def _parse_xgboost_condition(
         self, condition_str: str, feature_names: List[str]
     ) -> str:

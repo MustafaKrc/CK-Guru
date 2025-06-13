@@ -77,7 +77,6 @@ class PersistCommitGuruMetricsStep(IngestionStep):
                     step_progress,
                 )
 
-        # Perform Bulk Upsert using the repository (remains the same)
         if commits_to_upsert:
             self._log_info(
                 context,

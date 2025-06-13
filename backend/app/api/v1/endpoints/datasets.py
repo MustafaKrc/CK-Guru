@@ -111,8 +111,6 @@ async def list_all_datasets_endpoint(
     """
     Retrieve all datasets with server-side sorting and filtering.
     """
-    print("AAA")
-    print(f"Listing datasets with filters: status={status}, repository_id={repository_id}, name_filter={name_filter}, sort_by={sort_by}, sort_dir={sort_dir}")
     items, total = await crud.crud_dataset.get_all_datasets(
         db,
         skip=skip,
@@ -425,7 +423,6 @@ async def view_dataset_content(
             
             logger.info(f"Reading dataset {dataset_id}: DB reports {db_dataset.num_rows} rows, file has {total_rows_in_file} rows")
 
-            # Pagination logic remains the same
             total_rows_seen = 0
             for batch in parquet_file.iter_batches(batch_size=65536):
                 if not rows_collected and total_rows_seen + batch.num_rows <= skip:

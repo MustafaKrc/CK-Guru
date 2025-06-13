@@ -255,10 +255,7 @@ export const apiService = {
     if (params?.nameFilter) queryParams.append('name_filter', params.nameFilter);
     if (params?.sortBy) queryParams.append('sort_by', params.sortBy);
     if (params?.sortDir) queryParams.append('sort_order', params.sortDir);
-    var a = apiService.get<PaginatedDatasetRead>(`/datasets?${queryParams.toString()}`);
-    console.log("getDatasets called with params:", params, "Result:", a);
-    return a;
-  
+    return apiService.get<PaginatedDatasetRead>(`/datasets?${queryParams.toString()}`);
   },
   // --- ML Models ---
 
