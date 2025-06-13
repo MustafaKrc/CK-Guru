@@ -2,7 +2,7 @@
 import logging
 from typing import Any, Dict, List, Optional, Sequence, Tuple  # Add Tuple
 
-from sqlalchemy import func, select  # Add func
+from sqlalchemy import asc, desc, func, select  # Add func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -20,7 +20,9 @@ async def get_inference_job(db: AsyncSession, job_id: int) -> Optional[Inference
     """Get a single inference job by ID."""
     stmt = (
         select(InferenceJob)
-        .options(selectinload(InferenceJob.ml_model))
+        .options(
+            selectinload(InferenceJob.ml_model).selectinload(MLModel.dataset)
+        )
         .filter(InferenceJob.id == job_id)
     )
     result = await db.execute(stmt)
@@ -33,7 +35,9 @@ async def get_inference_job_by_task_id(
     """Get an inference job by its Celery task ID."""
     stmt = (
         select(InferenceJob)
-        .options(selectinload(InferenceJob.ml_model))
+        .options(
+            selectinload(InferenceJob.ml_model).selectinload(MLModel.dataset)
+        )
         .filter(InferenceJob.celery_task_id == celery_task_id)
     )
     result = await db.execute(stmt)
@@ -48,29 +52,39 @@ async def get_inference_jobs(
     limit: int = 100,
     model_id: Optional[int] = None,
     status: Optional[JobStatusEnum] = None,
-) -> Tuple[Sequence[InferenceJob], int]:  # Return tuple
+    name_filter: Optional[str] = None, # For commit hash
+    sort_by: Optional[str] = 'created_at',
+    sort_dir: Optional[str] = 'desc'
+) -> Tuple[Sequence[InferenceJob], int]:
     """Get multiple inference jobs with optional filtering and pagination."""
-    stmt_items = (
-        select(InferenceJob)
-        .options(selectinload(InferenceJob.ml_model))  # Eager load for consistency
-        .order_by(InferenceJob.created_at.desc())
+    stmt_items = select(InferenceJob).options(
+        selectinload(InferenceJob.ml_model).selectinload(MLModel.dataset)
     )
+    stmt_total = select(func.count(InferenceJob.id))
+
     filters = []
     if model_id is not None:
         filters.append(InferenceJob.ml_model_id == model_id)
     if status:
         filters.append(InferenceJob.status == status)
-
+    if name_filter:
+        filters.append(InferenceJob.input_reference.op('->>')('commit_hash').ilike(f"%{name_filter}%"))
+    
     if filters:
         stmt_items = stmt_items.where(*filters)
-
-    stmt_total = select(func.count(InferenceJob.id))
-    if filters:
         stmt_total = stmt_total.where(*filters)
 
     result_total = await db.execute(stmt_total)
     total = result_total.scalar_one_or_none() or 0
 
+    sort_mapping = {
+        'created_at': InferenceJob.created_at,
+        'status': InferenceJob.status
+    }
+    sort_column = sort_mapping.get(sort_by, InferenceJob.created_at)
+
+    stmt_items = stmt_items.order_by(desc(sort_column) if sort_dir == 'desc' else asc(sort_column))
+    
     stmt_items = stmt_items.offset(skip).limit(limit)
     result_items = await db.execute(stmt_items)
     items = result_items.scalars().all()
@@ -116,6 +130,8 @@ async def update_inference_job(
     await db.refresh(db_obj)
     # Eager load the relationship again after refresh
     await db.refresh(db_obj, attribute_names=["ml_model"])
+    if db_obj.ml_model: # If ml_model exists, refresh its dataset relationship
+        await db.refresh(db_obj.ml_model, attribute_names=["dataset"])
     logger.info(f"Updated Inference Job ID {db_obj.id}, Status: {db_obj.status.value}")
     return db_obj
 
@@ -147,7 +163,9 @@ async def get_inference_jobs_by_repository(
     # Query for items
     stmt_items = (
         select(InferenceJob)
-        .options(selectinload(InferenceJob.ml_model))  # Eager load ml_model
+        .options(
+            selectinload(InferenceJob.ml_model).selectinload(MLModel.dataset)
+        )  # Eager load ml_model and its dataset
         .where(InferenceJob.ml_model_id.in_(ml_model_ids_stmt))
         .order_by(InferenceJob.created_at.desc())
         .offset(skip)
@@ -174,10 +192,12 @@ async def get_all_for_commit(
     """
     stmt = (
         select(InferenceJob)
-        .options(selectinload(InferenceJob.ml_model))
+        .options(
+            selectinload(InferenceJob.ml_model).selectinload(MLModel.dataset)
+        )
         .filter(
             InferenceJob.input_reference["repo_id"].as_integer() == repo_id,
-            InferenceJob.input_reference["commit_hash"].as_string() == commit_hash,
+            InferenceJob.input_reference.op('->>')('commit_hash') == commit_hash,
         )
         .order_by(InferenceJob.created_at.desc())
     )

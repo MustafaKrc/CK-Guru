@@ -66,6 +66,21 @@ export interface GetModelsParams {
     sortDir?: 'asc' | 'desc';
 }
 
+export interface GetTrainingJobsParams {
+  skip?: number;
+  limit?: number;
+  dataset_id?: number;
+  status?: JobStatusEnum | string;
+  nameFilter?: string;
+  sortBy?: string;
+  sortDir?: 'asc' | 'desc';
+}
+
+export interface GetHpSearchJobsParams extends GetTrainingJobsParams {} 
+export interface GetInferenceJobsParams extends GetTrainingJobsParams { 
+  model_id?: number;
+}
+
 async function downloadFile(endpoint: string, options: RequestInit = {}): Promise<Blob> {
   const url = `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
   
@@ -292,44 +307,19 @@ export const apiService = {
     return apiService.get<TrainingJobRead>(`/ml/train/${jobId}`);
   },
 
-  getTrainingJobs: async (params?: { 
-    skip?: number; limit?: number; dataset_id?: number; status?: JobStatusEnum, q?: string 
-  }): Promise<PaginatedTrainingJobRead> => {
-    const queryParams = new URLSearchParams();
-    if (params) {
-        if (params.skip !== undefined) queryParams.append('skip', String(params.skip));
-        if (params.limit !== undefined) queryParams.append('limit', String(params.limit));
-        if (params.dataset_id !== undefined) queryParams.append('dataset_id', String(params.dataset_id));
-        if (params.status) queryParams.append('status', params.status);
-        if (params.q) queryParams.append('q', params.q);
-    }
-    return apiService.get<PaginatedTrainingJobRead>(`/ml/train?${queryParams.toString()}`);
+  getTrainingJobs: async (params?: GetTrainingJobsParams): Promise<PaginatedTrainingJobRead> => {
+    const queryParams = new URLSearchParams(params as any).toString();
+    return apiService.get<PaginatedTrainingJobRead>(`/ml/train?${queryParams}`);
   },
 
-  getHpSearchJobs: async (params?: { 
-    skip?: number; limit?: number; dataset_id?: number; status?: JobStatusEnum; study_name?: string 
-  }): Promise<PaginatedHPSearchJobRead> => {
-    const queryParams = new URLSearchParams();
-    if (params) {
-        if (params.skip !== undefined) queryParams.append('skip', String(params.skip));
-        if (params.limit !== undefined) queryParams.append('limit', String(params.limit));
-        if (params.dataset_id !== undefined) queryParams.append('dataset_id', String(params.dataset_id));
-        if (params.status) queryParams.append('status', params.status);
-        if (params.study_name) queryParams.append('study_name', params.study_name);
-    }
-    return apiService.get<PaginatedHPSearchJobRead>(`/ml/search?${queryParams.toString()}`);
+  getHpSearchJobs: async (params?: GetHpSearchJobsParams): Promise<PaginatedHPSearchJobRead> => {
+    const queryParams = new URLSearchParams(params as any).toString();
+    return apiService.get<PaginatedHPSearchJobRead>(`/ml/search?${queryParams}`);
   },
 
   getInferenceJobs: async (params?: GetInferenceJobsParams): Promise<PaginatedInferenceJobRead> => {
-    const queryParams = new URLSearchParams();
-    if (params) {
-      if (params.skip !== undefined) queryParams.append('skip', String(params.skip));
-      if (params.limit !== undefined) queryParams.append('limit', String(params.limit));
-      if (params.ml_model_id !== undefined) queryParams.append('ml_model_id', String(params.ml_model_id));
-      if (params.status !== undefined) queryParams.append('status', params.status);
-    }
-    const endpoint = `/ml/infer?${queryParams.toString()}`;
-    return apiService.get<PaginatedInferenceJobRead>(endpoint);
+    const queryParams = new URLSearchParams(params as any).toString();
+    return apiService.get<PaginatedInferenceJobRead>(`/ml/infer?${queryParams}`);
   },
 
   getCommits: async (repoId: number | string, params?: { skip?: number; limit?: number }): Promise<PaginatedCommitList> => {

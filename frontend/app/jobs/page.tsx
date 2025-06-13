@@ -1,175 +1,554 @@
 // frontend/app/jobs/page.tsx
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";  
-import { useRouter, useSearchParams } from "next/navigation";
+import React, {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState
+} from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+
+/* -------------------------------------------------------------------------------------------------
+ * Shared UI components
+ * ------------------------------------------------------------------------------------------------*/
 import { MainLayout } from "@/components/main-layout";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+
+import { PageLoader } from "@/components/ui/page-loader";
+
+/* -------------------------------------------------------------------------------------------------
+ * Icons
+ * ------------------------------------------------------------------------------------------------*/
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger
-} from "@/components/ui/dropdown-menu";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
-import { PageContainer } from "@/components/ui/page-container";
-import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious, PaginationEllipsis } from "@/components/ui/pagination";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+  AlertCircle,
+  ArrowUpDown,
+  CheckCircle,
+  Loader2,
+  MoreHorizontal,
+  Puzzle,
+  RefreshCw,
+  StopCircle,
+  Eye,
+} from "lucide-react";
 
-import { MoreHorizontal, RefreshCw, Eye, StopCircle, Play, Plus, Loader2, AlertCircle, CheckCircle, Puzzle, Layers, FileText, Wand2 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-
+/* -------------------------------------------------------------------------------------------------
+ * API helpers & hooks
+ * ------------------------------------------------------------------------------------------------*/
 import { apiService, handleApiError } from "@/lib/apiService";
-import { TrainingJobRead, PaginatedTrainingJobRead } from "@/types/api/training-job";
-import { HPSearchJobRead, PaginatedHPSearchJobRead } from "@/types/api/hp-search-job";
-import { InferenceJobRead, PaginatedInferenceJobRead } from "@/types/api/inference-job";
-import { JobStatusEnum } from "@/types/api/enums";
-import { useTaskStore, TaskStatusUpdatePayload } from "@/store/taskStore";
+import { useDebounce } from "@/hooks/useDebounce";
+import { toast } from "@/components/ui/use-toast";
+import { useTaskStore } from "@/store/taskStore";
 import { getLatestTaskForEntity } from "@/lib/taskUtils";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PageLoader } from '@/components/ui/page-loader'; // Added import
 
+/* -------------------------------------------------------------------------------------------------
+ * API types
+ * ------------------------------------------------------------------------------------------------*/
+import {
+  HPSearchJobRead,
+  PaginatedHPSearchJobRead
+} from "@/types/api/hp-search-job";
+import { InferenceJobRead, PaginatedInferenceJobRead } from "@/types/api/inference-job";
+import { TrainingJobRead, PaginatedTrainingJobRead } from "@/types/api/training-job";
+import { DatasetRead, PaginatedDatasetRead } from "@/types/api/dataset";
+import { JobStatusEnum } from "@/types/api/enums";
+import { TaskStatusUpdatePayload } from "@/store/taskStore";
+
+/* -------------------------------------------------------------------------------------------------
+ * Dialog for cancelling tasks
+ * ------------------------------------------------------------------------------------------------*/
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from "@/components/ui/alert-dialog";
+import { Pagination, PaginationItem, PaginationLink, PaginationContent, PaginationPrevious, PaginationEllipsis, PaginationNext } from "@/components/ui/pagination";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { PageContainer } from "@/components/ui/page-container";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+/* -------------------------------------------------------------------------------------------------
+ * Constants & utility types
+ * ------------------------------------------------------------------------------------------------*/
 const ITEMS_PER_PAGE = 10;
-const ALL_FILTER_VALUE = "_all_"; // For status filter "All" option
+const ALL_FILTER_VALUE = "_all_";
 
 type JobTypeKey = "training" | "hpSearch" | "inference";
 
-interface JobPaginationState {
+type SortableKeys<T extends JobTypeKey> =
+  T extends "training"
+    ? "name" | "status" | "created_at"
+    : T extends "hpSearch"
+    ? "name" | "status" | "created_at"
+    : "created_at" | "status";
+
+type SortConfig<T extends JobTypeKey> = {
+  key: SortableKeys<T>;
+  direction: "asc" | "desc";
+};
+
+type JobPaginationState = {
   currentPage: number;
   totalItems: number;
   isLoading: boolean;
+};
+
+/* -------------------------------------------------------------------------------------------------
+ * JobTable – single source of truth for table rows **and** pagination
+ * ------------------------------------------------------------------------------------------------*/
+interface JobTableProps<T> {
+  columns: {
+    header: React.ReactNode;
+    accessor: (job: T) => React.ReactNode;
+    className?: string;
+  }[];
+  data: T[];
+  isLoading: boolean;
+  error: string | null;
+  paginationState: JobPaginationState;
+  onPageChange: (newPage: number) => void;
+  entityType: JobTypeKey;
+  onCancelJob?: (job: {
+    id: number | string;
+    celeryTaskId?: string | null;
+    name: string;
+  }) => void;
 }
 
-function JobsPageContent() {  
-  const router = useRouter();
-  const searchParamsHook = useSearchParams();
-  const { toast } = useToast();
+function JobTable<T extends Record<string, any>>({
+  columns,
+  data,
+  isLoading,
+  error,
+  paginationState,
+  onPageChange,
+  entityType,
+  onCancelJob
+}: JobTableProps<T>) {
+  /* ----------------------------------------------------------------------------
+   * Internal helper: renderPagination (was previously outside of JobTable)
+   * --------------------------------------------------------------------------*/
+  const renderPagination = () => {
+    const totalPages = Math.ceil(paginationState.totalItems / ITEMS_PER_PAGE);
+    if (totalPages <= 1) return null;
 
-  const initialTab = (searchParamsHook.get('tab') as JobTypeKey) || "training";
+    const pages: (number | string)[] = [];
+    if (totalPages <= 7) {
+      for (let p = 1; p <= totalPages; p++) pages.push(p);
+    } else {
+      pages.push(1);
+      if (paginationState.currentPage > 3) pages.push("…");
+      if (paginationState.currentPage > 2) pages.push(paginationState.currentPage - 1);
+      if (paginationState.currentPage > 1 && paginationState.currentPage < totalPages)
+        pages.push(paginationState.currentPage);
+      if (paginationState.currentPage < totalPages - 1)
+        pages.push(paginationState.currentPage + 1);
+      if (paginationState.currentPage < totalPages - 2) pages.push("…");
+      pages.push(totalPages);
+    }
+
+    return (
+      <Pagination className="mt-4">
+        <PaginationContent>
+          <PaginationItem>
+            <PaginationPrevious
+              aria-disabled={paginationState.currentPage <= 1 || paginationState.isLoading}
+              className={
+                paginationState.currentPage <= 1 ? "pointer-events-none opacity-50" : ""
+              }
+              onClick={() => onPageChange(paginationState.currentPage - 1)}
+            />
+          </PaginationItem>
+          {pages.map((p, i) => (
+            <PaginationItem key={i}>
+              {typeof p === "number" ? (
+                <PaginationLink
+                  isActive={p === paginationState.currentPage}
+                  onClick={() => onPageChange(p)}
+                >
+                  {p}
+                </PaginationLink>
+              ) : (
+                <PaginationEllipsis />
+              )}
+            </PaginationItem>
+          ))}
+          <PaginationItem>
+            <PaginationNext
+              aria-disabled={
+                paginationState.currentPage >= totalPages || paginationState.isLoading
+              }
+              className={
+                paginationState.currentPage >= totalPages
+                  ? "pointer-events-none opacity-50"
+                  : ""
+              }
+              onClick={() => onPageChange(paginationState.currentPage + 1)}
+            />
+          </PaginationItem>
+        </PaginationContent>
+      </Pagination>
+    );
+  };
+
+  /* ----------------------------------------------------------------------------
+   * Early‑return states: loading / error / empty
+   * --------------------------------------------------------------------------*/
+  if (isLoading && data.length === 0) {
+    return (
+      <div className="space-y-2">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Skeleton key={i} className="h-12 w-full" />
+        ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>{error}</AlertDescription>
+      </Alert>
+    );
+  }
+
+  if (!isLoading && data.length === 0) {
+    return (
+      <p className="text-center text-muted-foreground py-8">
+        No jobs found matching your criteria.
+      </p>
+    );
+  }
+
+  /* ----------------------------------------------------------------------------
+   * Table rows + actions
+   * --------------------------------------------------------------------------*/
+  const renderActions = (job: any) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-7 w-7">
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+
+        {/* view details / insights */}
+        {entityType !== "inference" ? (
+          <DropdownMenuItem asChild>
+            <Link
+              href={`/jobs/${job.id}?type=${
+                entityType === "hpSearch" ? "hp_search" : entityType
+              }`}
+            >
+              <Eye className="mr-2 h-4 w-4" /> View Details
+            </Link>
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem
+            asChild
+            disabled={job.status !== JobStatusEnum.SUCCESS}
+          >
+            <Link href={`/prediction-insights/${job.id}`}>
+              <Eye className="mr-2 h-4 w-4" /> View Insights
+            </Link>
+          </DropdownMenuItem>
+        )}
+
+        {/* cancel */}
+        {onCancelJob &&
+          (job.status === JobStatusEnum.RUNNING ||
+            job.status === JobStatusEnum.PENDING) &&
+          job.celery_task_id && (
+            <DropdownMenuItem
+              onClick={() =>
+                onCancelJob({
+                  id: job.id,
+                  celeryTaskId: job.celery_task_id,
+                  name:
+                    job.config?.model_name ||
+                    job.optuna_study_name ||
+                    `Inference ${job.id}`
+                })
+              }
+            >
+              <StopCircle className="mr-2 h-4 w-4 text-destructive" /> Cancel
+              Job
+            </DropdownMenuItem>
+          )}
+
+        {/* view model  */}
+        {entityType === "training" &&
+          job.ml_model_id &&
+          job.status === JobStatusEnum.SUCCESS && (
+            <DropdownMenuItem asChild>
+              <Link href={`/models/${job.ml_model_id}`}>
+                <Puzzle className="mr-2 h-4 w-4" /> View Resulting Model
+              </Link>
+            </DropdownMenuItem>
+          )}
+        {entityType === "hpSearch" &&
+          job.best_ml_model_id &&
+          job.status === JobStatusEnum.SUCCESS && (
+            <DropdownMenuItem asChild>
+              <Link href={`/models/${job.best_ml_model_id}`}>
+                <Puzzle className="mr-2 h-4 w-4" /> View Best Model
+              </Link>
+            </DropdownMenuItem>
+          )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
+  return (
+    <>
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              {columns.map(col => (
+                <TableHead key={String(col.header)}>{col.header}</TableHead>
+              ))}
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {data.map(job => (
+              <TableRow key={`${entityType}-${job.id}`}>
+                {columns.map(col => (
+                  <TableCell
+                    key={String(col.header)}
+                    className={`text-xs ${col.className ?? ""}`}
+                  >
+                    {col.accessor(job)}
+                  </TableCell>
+                ))}
+                <TableCell className="text-right">{renderActions(job)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      {renderPagination()}
+    </>
+  );
+}
+
+/* -------------------------------------------------------------------------------------------------
+ * JobsPageContent – keeps state/fetching, now DRY with JobTable for UI
+ * ------------------------------------------------------------------------------------------------*/
+function JobsPageContent() {
+  /* ---------------- URL & tab state ---------------- */
+  const searchParamsHook = useSearchParams();
+  const initialTab = (searchParamsHook.get("tab") as JobTypeKey) || "training";
   const [activeTab, setActiveTab] = useState<JobTypeKey>(initialTab);
 
+  /* ---------------- job data ---------------- */
   const [trainingJobs, setTrainingJobs] = useState<TrainingJobRead[]>([]);
-  const [trainingJobsPagination, setTrainingJobsPagination] = useState<JobPaginationState>({ currentPage: 1, totalItems: 0, isLoading: true });
-  const [trainingJobsError, setTrainingJobsError] = useState<string | null>(null);
-
   const [hpSearchJobs, setHpSearchJobs] = useState<HPSearchJobRead[]>([]);
-  const [hpSearchJobsPagination, setHpSearchJobsPagination] = useState<JobPaginationState>({ currentPage: 1, totalItems: 0, isLoading: true });
-  const [hpSearchJobsError, setHpSearchJobsError] = useState<string | null>(null);
-
   const [inferenceJobs, setInferenceJobs] = useState<InferenceJobRead[]>([]);
-  const [inferenceJobsPagination, setInferenceJobsPagination] = useState<JobPaginationState>({ currentPage: 1, totalItems: 0, isLoading: true });
-  const [inferenceJobsError, setInferenceJobsError] = useState<string | null>(null);
 
-  const [statusFilter, setStatusFilter] = useState<JobStatusEnum | typeof ALL_FILTER_VALUE>(ALL_FILTER_VALUE);
-  const [searchQuery, setSearchQuery] = useState(""); // Backend needs to support 'q' for name/study search
+  /* ---------------- pagination ---------------- */
+  const [trainingPag, setTrainingPag] = useState<JobPaginationState>({ currentPage: 1, totalItems: 0, isLoading: true });
+  const [hpPag, setHpPag] = useState<JobPaginationState>({ currentPage: 1, totalItems: 0, isLoading: true });
+  const [infPag, setInfPag] = useState<JobPaginationState>({ currentPage: 1, totalItems: 0, isLoading: true });
+
+  /* ---------------- error ---------------- */
+  const [trainingErr, setTrainingErr] = useState<string | null>(null);
+  const [hpErr, setHpErr] = useState<string | null>(null);
+  const [infErr, setInfErr] = useState<string | null>(null);
+
+  /* ---------------- filters & sort ---------------- */
+  const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearch = useDebounce(searchQuery, 500);
+  const [statusFilter, setStatusFilter] = useState<string>(ALL_FILTER_VALUE);
+  const [datasetFilter, setDatasetFilter] = useState<string>(ALL_FILTER_VALUE);
+
+  const [trainingSort, setTrainingSort] = useState<SortConfig<"training">>({ key: "created_at", direction: "desc" });
+  const [hpSort, setHpSort] = useState<SortConfig<"hpSearch">>({ key: "created_at", direction: "desc" });
+  const [infSort, setInfSort] = useState<SortConfig<"inference">>({ key: "created_at", direction: "desc" });
 
   const { taskStatuses } = useTaskStore();
-  const availableJobStatuses = Object.values(JobStatusEnum);
-  
-  const [jobToCancel, setJobToCancel] = useState<{id: string | number, celeryTaskId?: string | null, name: string} | null>(null);
-  const [isCancelling, setIsCancelling] = useState(false);
 
-
-  const formatDate = (dateString: string | null | undefined): string => {
-    if (!dateString) return "N/A";
-    try { return new Date(dateString).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'});
-    } catch (e) { return "Invalid Date"; }
-  };
-
-  const fetchTrainingJobs = useCallback(async (page: number) => {
-    setTrainingJobsPagination(prev => ({ ...prev, isLoading: true, currentPage: page }));
-    setTrainingJobsError(null);
-    const params = new URLSearchParams({ skip: ((page - 1) * ITEMS_PER_PAGE).toString(), limit: ITEMS_PER_PAGE.toString() });
-    if (statusFilter && statusFilter !== ALL_FILTER_VALUE) params.append("status", statusFilter);
-    if (searchQuery) params.append("q", searchQuery); // Assuming backend 'q' searches relevant name fields
-
-    try {
-      const response = await apiService.get<PaginatedTrainingJobRead>(`/ml/train?${params.toString()}`);
-      setTrainingJobs(response.items || []);
-      setTrainingJobsPagination(prev => ({ ...prev, totalItems: response.total || 0, isLoading: false }));
-    } catch (err) {
-      handleApiError(err, "Failed to fetch training jobs");
-      setTrainingJobsError(err instanceof Error ? err.message : "Error.");
-      setTrainingJobsPagination(prev => ({ ...prev, totalItems: 0, isLoading: false }));
-    }
-  }, [statusFilter, searchQuery]);
-
-  const fetchHpSearchJobs = useCallback(async (page: number) => {
-    setHpSearchJobsPagination(prev => ({ ...prev, isLoading: true, currentPage: page }));
-    setHpSearchJobsError(null);
-    const params = new URLSearchParams({ skip: ((page - 1) * ITEMS_PER_PAGE).toString(), limit: ITEMS_PER_PAGE.toString() });
-    if (statusFilter && statusFilter !== ALL_FILTER_VALUE) params.append("status", statusFilter);
-    if (searchQuery) params.append("study_name", searchQuery); // HP search uses 'study_name' for search
-
-    try {
-      const response = await apiService.get<PaginatedHPSearchJobRead>(`/ml/search?${params.toString()}`);
-      setHpSearchJobs(response.items || []);
-      setHpSearchJobsPagination(prev => ({ ...prev, totalItems: response.total || 0, isLoading: false }));
-    } catch (err) {
-      handleApiError(err, "Failed to fetch HP search jobs");
-      setHpSearchJobsError(err instanceof Error ? err.message : "Error.");
-      setHpSearchJobsPagination(prev => ({ ...prev, totalItems: 0, isLoading: false }));
-    }
-  }, [statusFilter, searchQuery]);
-
-  const fetchInferenceJobs = useCallback(async (page: number) => {
-    setInferenceJobsPagination(prev => ({ ...prev, isLoading: true, currentPage: page }));
-    setInferenceJobsError(null);
-    const params = new URLSearchParams({ skip: ((page - 1) * ITEMS_PER_PAGE).toString(), limit: ITEMS_PER_PAGE.toString() });
-    if (statusFilter && statusFilter !== ALL_FILTER_VALUE) params.append("status", statusFilter);
-    // Note: Search query for inference jobs is not directly supported by backend via 'q'. 
-    // Client-side filtering would be needed if search is applied to this tab, or backend enhancement.
-
-    try {
-      const response = await apiService.get<PaginatedInferenceJobRead>(`/ml/infer?${params.toString()}`);
-      setInferenceJobs(response.items || []);
-      setInferenceJobsPagination(prev => ({ ...prev, totalItems: response.total || 0, isLoading: false }));
-    } catch (err) {
-      handleApiError(err, "Failed to fetch inference jobs");
-      setInferenceJobsError(err instanceof Error ? err.message : "Error.");
-      setInferenceJobsPagination(prev => ({ ...prev, totalItems: 0, isLoading: false }));
-    }
-  }, [statusFilter]);
-
+  /* ---------------- datasets for filter ---------------- */
+  const [datasets, setDatasets] = useState<DatasetRead[]>([]);
+  const [isLoadingDatasets, setIsLoadingDatasets] = useState(true);
 
   useEffect(() => {
-    if (activeTab === "training") fetchTrainingJobs(1);
-    else if (activeTab === "hpSearch") fetchHpSearchJobs(1);
-    else if (activeTab === "inference") fetchInferenceJobs(1);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, statusFilter, searchQuery]); // Refetch on tab or filter change
+    (async () => {
+      try {
+        const res = await apiService.get<PaginatedDatasetRead>(
+          "/datasets?skip=0&limit=1000"
+        );
+        setDatasets(res.items || []);
+      } catch (err) {
+        handleApiError(err, "Failed to fetch datasets");
+      } finally {
+        setIsLoadingDatasets(false);
+      }
+    })();
+  }, []);
 
-  const handlePageChange = (jobType: JobTypeKey, newPage: number) => {
-    if (jobType === "training" && newPage !== trainingJobsPagination.currentPage) fetchTrainingJobs(newPage);
-    else if (jobType === "hpSearch" && newPage !== hpSearchJobsPagination.currentPage) fetchHpSearchJobs(newPage);
-    else if (jobType === "inference" && newPage !== inferenceJobsPagination.currentPage) fetchInferenceJobs(newPage);
-  };
-  
-  const confirmCancelJob = (job: {id: string | number, celeryTaskId?: string | null, name: string}) => {
+  /* ---------------- fetchers ---------------- */
+  const fetchTraining = useCallback(
+    async (page: number) => {
+      setTrainingPag(prev => ({ ...prev, isLoading: true, currentPage: page }));
+      setTrainingErr(null);
+
+      const params = new URLSearchParams({
+        skip: ((page - 1) * ITEMS_PER_PAGE).toString(),
+        limit: ITEMS_PER_PAGE.toString()
+      });
+      if (statusFilter !== ALL_FILTER_VALUE) params.append("status", statusFilter);
+      if (datasetFilter !== ALL_FILTER_VALUE) params.append("dataset_id", datasetFilter);
+      if (debouncedSearch) params.append("q", debouncedSearch);
+
+      try {
+        const res = await apiService.get<PaginatedTrainingJobRead>(
+          `/ml/train?${params.toString()}`
+        );
+        setTrainingJobs(res.items || []);
+        setTrainingPag(prev => ({ ...prev, totalItems: res.total || 0, isLoading: false }));
+      } catch (err) {
+        handleApiError(err, "Failed to fetch training jobs");
+        setTrainingErr(err instanceof Error ? err.message : "Error");
+        setTrainingPag(prev => ({ ...prev, totalItems: 0, isLoading: false }));
+      }
+    },
+    [statusFilter, datasetFilter, debouncedSearch]
+  );
+
+  const fetchHp = useCallback(
+    async (page: number) => {
+      setHpPag(prev => ({ ...prev, isLoading: true, currentPage: page }));
+      setHpErr(null);
+
+      const params = new URLSearchParams({
+        skip: ((page - 1) * ITEMS_PER_PAGE).toString(),
+        limit: ITEMS_PER_PAGE.toString()
+      });
+      if (statusFilter !== ALL_FILTER_VALUE) params.append("status", statusFilter);
+      if (datasetFilter !== ALL_FILTER_VALUE) params.append("dataset_id", datasetFilter);
+      if (debouncedSearch) params.append("study_name", debouncedSearch);
+
+      try {
+        const res = await apiService.get<PaginatedHPSearchJobRead>(
+          `/ml/search?${params.toString()}`
+        );
+        setHpSearchJobs(res.items || []);
+        setHpPag(prev => ({ ...prev, totalItems: res.total || 0, isLoading: false }));
+      } catch (err) {
+        handleApiError(err, "Failed to fetch HP search jobs");
+        setHpErr(err instanceof Error ? err.message : "Error");
+        setHpPag(prev => ({ ...prev, totalItems: 0, isLoading: false }));
+      }
+    },
+    [statusFilter, datasetFilter, debouncedSearch]
+  );
+
+  const fetchInf = useCallback(
+    async (page: number) => {
+      setInfPag(prev => ({ ...prev, isLoading: true, currentPage: page }));
+      setInfErr(null);
+
+      const params = new URLSearchParams({
+        skip: ((page - 1) * ITEMS_PER_PAGE).toString(),
+        limit: ITEMS_PER_PAGE.toString()
+      });
+      if (statusFilter !== ALL_FILTER_VALUE) params.append("status", statusFilter);
+      if (datasetFilter !== ALL_FILTER_VALUE) params.append("dataset_id", datasetFilter);
+      // No backend search for inference yet.
+
+      try {
+        const res = await apiService.get<PaginatedInferenceJobRead>(
+          `/ml/infer?${params.toString()}`
+        );
+        setInferenceJobs(res.items || []);
+        setInfPag(prev => ({ ...prev, totalItems: res.total || 0, isLoading: false }));
+      } catch (err) {
+        handleApiError(err, "Failed to fetch inference jobs");
+        setInfErr(err instanceof Error ? err.message : "Error");
+        setInfPag(prev => ({ ...prev, totalItems: 0, isLoading: false }));
+      }
+    },
+    [statusFilter, datasetFilter]
+  );
+
+  /* ---------------- refetch on filters + first load ---------------- */
+  useEffect(() => {
+    if (activeTab === "training") fetchTraining(1);
+    if (activeTab === "hpSearch") fetchHp(1);
+    if (activeTab === "inference") fetchInf(1);
+  }, [activeTab, debouncedSearch, statusFilter, datasetFilter]);
+
+  /* ---------------- page-change effects ---------------- */
+  useEffect(() => {
+    fetchTraining(trainingPag.currentPage);
+  }, [trainingPag.currentPage]);
+
+  useEffect(() => {
+    fetchHp(hpPag.currentPage);
+  }, [hpPag.currentPage]);
+
+  useEffect(() => {
+    fetchInf(infPag.currentPage);
+  }, [infPag.currentPage]);
+
+  /* ---------------- cancel‑job dialog helpers ---------------- */
+  const [jobToCancel, setJobToCancel] = useState<
+    | { id: number | string; celeryTaskId: string | null; name: string }
+    | null
+  >(null);
+  const [isCancelling, setIsCancelling] = useState(false);
+
+  const confirmCancelJob = (job: {
+    id: string | number;
+    celeryTaskId?: string | null;
+    name: string;
+  }) => {
     if (!job.celeryTaskId) {
-        toast({ title: "Cannot Cancel", description: "This job does not have an active task ID to revoke.", variant: "destructive"});
-        return;
+      toast({
+        variant: "destructive",
+        title: "Cannot Cancel",
+        description: "This job does not have an active task ID to revoke."
+      });
+      return;
     }
-    setJobToCancel(job);
+    setJobToCancel({
+      id: job.id,
+      celeryTaskId: job.celeryTaskId ?? null,
+      name: job.name
+    });
   };
 
   const executeCancelJob = async () => {
-    if (!jobToCancel || !jobToCancel.celeryTaskId) return;
+    if (!jobToCancel?.celeryTaskId) return;
     setIsCancelling(true);
     try {
       await apiService.post(`/tasks/${jobToCancel.celeryTaskId}/revoke`);
-      toast({ title: "Revocation Sent", description: `Attempting to revoke job: ${jobToCancel.name}.`});
+      toast({
+        title: "Revocation Sent",
+        description: `Attempting to revoke job: ${jobToCancel.name}`
+      });
       setJobToCancel(null);
-      // Refresh list after a short delay for status to update
       setTimeout(() => {
-        if (activeTab === "training") fetchTrainingJobs(trainingJobsPagination.currentPage);
-        else if (activeTab === "hpSearch") fetchHpSearchJobs(hpSearchJobsPagination.currentPage);
-        // Inference jobs typically aren't long-running in a way that needs cancellation via this UI.
+        if (activeTab === "training") fetchTraining(trainingPag.currentPage);
+        if (activeTab === "hpSearch") fetchHp(hpPag.currentPage);
       }, 2500);
     } catch (err) {
       handleApiError(err, "Failed to send revoke command");
@@ -178,220 +557,376 @@ function JobsPageContent() {
     }
   };
 
+  /* ---------------- helpers ---------------- */
+  const formatDate = (d?: string | null) => (d ? new Date(d).toLocaleString() : "N/A");
 
-  const renderStatusBadge = (jobId: number, jobTypeKey: JobTypeKey, staticStatusDb?: JobStatusEnum | string) => {
-    const entityType = jobTypeKey === "training" ? "TrainingJob" : jobTypeKey === "hpSearch" ? "HPSearchJob" : "InferenceJob";
-    const taskJobType = jobTypeKey === "training" ? "model_training" : jobTypeKey === "hpSearch" ? "hp_search" : undefined;
-    const liveStatus = getLatestTaskForEntity(taskStatuses, entityType, jobId, taskJobType);
-    
-    const currentDisplayStatus = liveStatus || (staticStatusDb ? { status: staticStatusDb } as TaskStatusUpdatePayload : undefined);
-    if (!currentDisplayStatus || !currentDisplayStatus.status) return <Badge variant="secondary" className="text-xs">Unknown</Badge>;
+  const getStatusBadge = (jobId: number, key: JobTypeKey, staticStatus?: any) => {
+    const entityType =
+      key === "training" ? "TrainingJob" : key === "hpSearch" ? "HPSearchJob" : "InferenceJob";
+    const taskJobType = key === "training" ? "model_training" : key === "hpSearch" ? "hp_search" : undefined;
+    const live = getLatestTaskForEntity(taskStatuses, entityType, jobId, taskJobType);
 
-    const { status, status_message, progress } = currentDisplayStatus;
-    let badgeVariant: "default" | "secondary" | "destructive" | "outline" = "secondary";
-    let icon = null;
-    let text = status_message || String(status) || "Unknown";
-
-    switch (String(status).toUpperCase()) {
-      case JobStatusEnum.SUCCESS.toUpperCase(): badgeVariant = "default"; icon = <CheckCircle className="h-3 w-3 mr-1"/>; text = `Success`; break;
-      case JobStatusEnum.RUNNING.toUpperCase(): case JobStatusEnum.STARTED.toUpperCase():
-        badgeVariant = "outline"; icon = <RefreshCw className="h-3 w-3 mr-1 animate-spin"/>; text = `${status_message || status} (${progress ?? 0}%)`; break;
-      case JobStatusEnum.PENDING.toUpperCase():
-        badgeVariant = "outline"; icon = <Loader2 className="h-3 w-3 mr-1 animate-spin"/>; text = "Pending"; break;
-      case JobStatusEnum.FAILED.toUpperCase():
-        badgeVariant = "destructive"; icon = <AlertCircle className="h-3 w-3 mr-1"/>; text = `Failed`; break;
-      case JobStatusEnum.REVOKED.toUpperCase():
-        badgeVariant = "destructive"; icon = <StopCircle className="h-3 w-3 mr-1"/>; text = "Revoked"; break;
-      default: text = String(status).toUpperCase();
-    }
-    return <Badge variant={badgeVariant} className="whitespace-nowrap text-xs px-1.5 py-0.5" title={status_message || String(status) || ''}>{icon}{text}</Badge>;
-  };
-
-  const renderPagination = (paginationState: JobPaginationState, jobType: JobTypeKey) => {
-    const totalPages = Math.ceil(paginationState.totalItems / ITEMS_PER_PAGE);
-    if (totalPages <= 1) return null;
-    let pageNumbers: (number | string)[] = [];
-    if (totalPages <= 7) { pageNumbers = Array.from({ length: totalPages }, (_, i) => i + 1); } 
-    else { /* ... (ellipsis logic as before) ... */ 
-        pageNumbers.push(1);
-        if (paginationState.currentPage > 3) pageNumbers.push('...');
-        if (paginationState.currentPage > 2) pageNumbers.push(paginationState.currentPage - 1);
-        if (paginationState.currentPage > 1 && paginationState.currentPage < totalPages) pageNumbers.push(paginationState.currentPage);
-        if (paginationState.currentPage < totalPages -1) pageNumbers.push(paginationState.currentPage + 1);
-        if (paginationState.currentPage < totalPages - 2) pageNumbers.push('...');
-        pageNumbers.push(totalPages);
-        pageNumbers = [...new Set(pageNumbers)];
-    }
-    return (
-        <Pagination className="mt-4">
-          <PaginationContent>
-            <PaginationItem><PaginationPrevious onClick={() => handlePageChange(jobType, paginationState.currentPage - 1)} aria-disabled={paginationState.currentPage <= 1 || paginationState.isLoading} className={(paginationState.currentPage <= 1 || paginationState.isLoading) ? "pointer-events-none opacity-50" : ""} /></PaginationItem>
-            {pageNumbers.map((page, index) => ( <PaginationItem key={typeof page === 'number' ? `page-${page}` : `ellipsis-${index}`}> {typeof page === 'number' ? <PaginationLink onClick={() => handlePageChange(jobType, page)} isActive={paginationState.currentPage === page} aria-disabled={paginationState.isLoading} className={paginationState.isLoading ? "pointer-events-none opacity-50" : ""}>{page}</PaginationLink> : <PaginationEllipsis />} </PaginationItem> ))}
-            <PaginationItem><PaginationNext onClick={() => handlePageChange(jobType, paginationState.currentPage + 1)} aria-disabled={paginationState.currentPage >= totalPages || paginationState.isLoading} className={(paginationState.currentPage >= totalPages || paginationState.isLoading) ? "pointer-events-none opacity-50" : ""} /></PaginationItem>
-          </PaginationContent>
-        </Pagination>
+    const current = live || (staticStatus ? ({ status: staticStatus } as TaskStatusUpdatePayload) : undefined);
+    if (!current?.status)
+      return (
+        <Badge variant="secondary" className="text-xs">
+          Unknown
+        </Badge>
       );
-  };
 
-  const jobTableColumns = {
-    training: [
-        { header: "Job Name", accessor: (job: TrainingJobRead) => job.config.model_name, className: "font-medium break-all max-w-xs" },
-        { header: "Dataset", accessor: (job: TrainingJobRead) => <Link href={`/datasets/${job.dataset_id}`} className="hover:underline text-primary text-xs">ID: {job.dataset_id}</Link>, className: undefined },
-        { header: "Model Type", accessor: (job: TrainingJobRead) => <Badge variant="outline" className="text-xs">{job.config.model_type}</Badge>, className: undefined },
-        { header: "Status", accessor: (job: TrainingJobRead) => renderStatusBadge(job.id, "training", job.status), className: undefined },
-        { header: "Started", accessor: (job: TrainingJobRead) => formatDate(job.started_at), className: undefined },
-        { header: "Completed", accessor: (job: TrainingJobRead) => formatDate(job.completed_at), className: undefined },
-    ],
-    hpSearch: [
-        { header: "Study Name", accessor: (job: HPSearchJobRead) => job.optuna_study_name, className: "font-medium break-all max-w-xs" },
-        { header: "Dataset", accessor: (job: HPSearchJobRead) => <Link href={`/datasets/${job.dataset_id}`} className="hover:underline text-primary text-xs">ID: {job.dataset_id}</Link>, className: undefined },
-        { header: "Model Type", accessor: (job: HPSearchJobRead) => <Badge variant="outline" className="text-xs">{job.config.model_type}</Badge>, className: undefined },
-        { header: "Status", accessor: (job: HPSearchJobRead) => renderStatusBadge(job.id, "hpSearch", job.status), className: undefined },
-        { header: "Started", accessor: (job: HPSearchJobRead) => formatDate(job.started_at), className: undefined },
-        { header: "Trials", accessor: (job: HPSearchJobRead) => job.best_trial_id !== null ? `${job.best_trial_id} / ${job.config.optuna_config.n_trials}` : `0 / ${job.config.optuna_config.n_trials}`, className: undefined },
-    ],
-    inference: [
-        { header: "Commit Hash", accessor: (job: InferenceJobRead) => <span className="font-mono text-xs" title={job.input_reference?.commit_hash}>{String(job.input_reference?.commit_hash).substring(0,12) || "N/A"}...</span>, className: undefined },
-        { header: "Model Used", accessor: (job: InferenceJobRead) => <Link href={`/models/${job.ml_model_id}`} className="hover:underline text-primary text-xs">ID: {job.ml_model_id}</Link>, className: undefined },
-        { header: "Status", accessor: (job: InferenceJobRead) => renderStatusBadge(job.id, "inference", job.status), className: undefined },
-        { header: "Triggered At", accessor: (job: InferenceJobRead) => formatDate(job.created_at), className: undefined },
-        { header: "Result", accessor: (job: InferenceJobRead) => job.prediction_result?.commit_prediction !== undefined ? (job.prediction_result.commit_prediction === 1 ? <Badge variant="destructive">Defect</Badge> : <Badge className="bg-green-600 hover:bg-green-700">Clean</Badge>) : "N/A", className: undefined },
-    ],
-  };
-  
-  // Generic Table Renderer
-  const renderJobTableContent = (
-    jobs: any[], 
-    jobTypeKey: JobTypeKey, 
-    isLoading: boolean, 
-    error: string | null,
-    columns: { header: string; accessor: (job: any) => React.ReactNode; className?: string }[]
-  ) => {
-    if (isLoading && jobs.length === 0) {
-      return Array.from({ length: 3 }).map((_, i) => (
-        <TableRow key={`skel-${jobTypeKey}-${i}`}>
-          {columns.map((_, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}
-          <TableCell className="text-right"><Skeleton className="h-7 w-7 rounded-md" /></TableCell>
-        </TableRow>
-      ));
+    let variant: "default" | "secondary" | "destructive" | "outline" = "secondary";
+    let icon: React.ReactNode = null;
+    let text = String(current.status_message || current.status);
+
+    switch (String(current.status).toUpperCase()) {
+      case JobStatusEnum.SUCCESS.toUpperCase():
+        variant = "default";
+        icon = <CheckCircle className="h-3 w-3 mr-1" />;
+        text = "Success";
+        break;
+      case JobStatusEnum.RUNNING.toUpperCase():
+      case JobStatusEnum.STARTED.toUpperCase():
+        variant = "outline";
+        icon = <RefreshCw className="h-3 w-3 mr-1 animate-spin" />;
+        text = `${text} (${current.progress ?? 0}%)`;
+        break;
+      case JobStatusEnum.PENDING.toUpperCase():
+        variant = "outline";
+        icon = <Loader2 className="h-3 w-3 mr-1 animate-spin" />;
+        text = "Pending";
+        break;
+      case JobStatusEnum.FAILED.toUpperCase():
+        variant = "destructive";
+        icon = <AlertCircle className="h-3 w-3 mr-1" />;
+        text = "Failed";
+        break;
+      case JobStatusEnum.REVOKED.toUpperCase():
+        variant = "destructive";
+        icon = <StopCircle className="h-3 w-3 mr-1" />;
+        text = "Revoked";
+        break;
+      default:
+        text = String(current.status).toUpperCase();
     }
-    if (error) return <TableRow><TableCell colSpan={columns.length + 1} className="text-center text-destructive py-4"><Alert variant="destructive" className="justify-center"><AlertCircle className="mr-2 h-5 w-5" /><AlertDescription>{error}</AlertDescription></Alert></TableCell></TableRow>;
-    if (!isLoading && jobs.length === 0) return <TableRow><TableCell colSpan={columns.length + 1} className="text-center py-8 text-muted-foreground">No {jobTypeKey.replace(/([A-Z])/g, ' $1').toLowerCase()} jobs found.</TableCell></TableRow>;
 
-    return jobs.map((job: any) => (
-      <TableRow key={`${jobTypeKey}-${job.id}`}>
-        {columns.map(col => <TableCell key={col.header} className={`text-xs ${col.className || ""}`}>{col.accessor(job)}</TableCell>)}
-        <TableCell className="text-right">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Actions</DropdownMenuLabel>
-              {jobTypeKey !== 'inference' ? (
-                <DropdownMenuItem asChild><Link href={`/jobs/${job.id}?type=${jobTypeKey === "hpSearch" ? "hp_search" : jobTypeKey}`}><Eye className="mr-2 h-4 w-4" /> View Details</Link></DropdownMenuItem>
-              ) : (
-                <DropdownMenuItem asChild disabled={job.status !== JobStatusEnum.SUCCESS}><Link href={`/prediction-insights/${job.id}`}><Eye className="mr-2 h-4 w-4" /> View Insights</Link></DropdownMenuItem>
-              )}
-              {(job.status === JobStatusEnum.RUNNING || job.status === JobStatusEnum.PENDING) && job.celery_task_id && (
-                <DropdownMenuItem onClick={() => confirmCancelJob({id: job.id, celeryTaskId: job.celery_task_id, name: job.config?.model_name || job.optuna_study_name || `Inference ${job.id}` })}>
-                    <StopCircle className="mr-2 h-4 w-4 text-destructive" />Cancel Job
-                </DropdownMenuItem>
-              )}
-              {jobTypeKey === 'training' && job.ml_model_id && job.status === JobStatusEnum.SUCCESS && (
-                <DropdownMenuItem asChild><Link href={`/models/${job.ml_model_id}`}><Puzzle className="mr-2 h-4 w-4" />View Resulting Model</Link></DropdownMenuItem>
-              )}
-              {jobTypeKey === 'hpSearch' && job.best_ml_model_id && job.status === JobStatusEnum.SUCCESS && (
-                <DropdownMenuItem asChild><Link href={`/models/${job.best_ml_model_id}`}><Puzzle className="mr-2 h-4 w-4" />View Best Model</Link></DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </TableCell>
-      </TableRow>
-    ));
+    return (
+      <Badge variant={variant} className="whitespace-nowrap text-xs px-1.5 py-0.5">
+        {icon} {text}
+      </Badge>
+    );
   };
 
+  /* ---------------- column definitions ---------------- */
+  const trainingCols = [
+    {
+      header: "Job Name",
+      accessor: (j: TrainingJobRead) => j.config.model_name,
+      className: "font-medium break-all max-w-xs"
+    },
+    {
+      header: "Dataset",
+      accessor: (j: TrainingJobRead) => (
+        <Link
+          href={`/datasets/${j.dataset_id}`}
+          className="hover:underline text-primary text-xs"
+        >
+          ID: {j.dataset_id}
+        </Link>
+      )
+    },
+    {
+      header: "Model Type",
+      accessor: (j: TrainingJobRead) => (
+        <Badge variant="outline" className="text-xs">
+          {j.config.model_type}
+        </Badge>
+      )
+    },
+    {
+      header: "Status",
+      accessor: (j: TrainingJobRead) => getStatusBadge(j.id, "training", j.status)
+    },
+    { header: "Started", accessor: (j: TrainingJobRead) => formatDate(j.started_at) },
+    { header: "Completed", accessor: (j: TrainingJobRead) => formatDate(j.completed_at) }
+  ];
 
+  const hpCols = [
+    {
+      header: "Study Name",
+      accessor: (j: HPSearchJobRead) => j.optuna_study_name,
+      className: "font-medium break-all max-w-xs"
+    },
+    {
+      header: "Dataset",
+      accessor: (j: HPSearchJobRead) => (
+        <Link
+          href={`/datasets/${j.dataset_id}`}
+          className="hover:underline text-primary text-xs"
+        >
+          ID: {j.dataset_id}
+        </Link>
+      )
+    },
+    {
+      header: "Model Type",
+      accessor: (j: HPSearchJobRead) => (
+        <Badge variant="outline" className="text-xs">
+          {j.config.model_type}
+        </Badge>
+      )
+    },
+    { header: "Status", accessor: (j: HPSearchJobRead) => getStatusBadge(j.id, "hpSearch", j.status) },
+    { header: "Started", accessor: (j: HPSearchJobRead) => formatDate(j.started_at) },
+    {
+      header: "Trials",
+      accessor: (j: HPSearchJobRead) =>
+        j.best_trial_id !== null
+          ? `${j.best_trial_id} / ${j.config.optuna_config.n_trials}`
+          : `0 / ${j.config.optuna_config.n_trials}`
+    }
+  ];
+
+  const infCols = [
+    {
+      header: "Commit Hash",
+      accessor: (j: InferenceJobRead) => (
+        <span
+          className="font-mono text-xs"
+          title={j.input_reference?.commit_hash}
+        >
+          {String(j.input_reference?.commit_hash).substring(0, 12) || "N/A"}…
+        </span>
+      )
+    },
+    {
+      header: "Model Used",
+      accessor: (j: InferenceJobRead) => (
+        <Link
+          href={`/models/${j.ml_model_id}`}
+          className="hover:underline text-primary text-xs"
+        >
+          ID: {j.ml_model_id}
+        </Link>
+      )
+    },
+    {
+      header: "Status",
+      accessor: (j: InferenceJobRead) => getStatusBadge(j.id, "inference", j.status)
+    },
+    { header: "Triggered", accessor: (j: InferenceJobRead) => formatDate(j.created_at) },
+    {
+      header: "Result",
+      accessor: (j: InferenceJobRead) =>
+        j.prediction_result?.commit_prediction !== undefined ? (
+          j.prediction_result.commit_prediction === 1 ? (
+            <Badge variant="destructive">Defect</Badge>
+          ) : (
+            <Badge className="bg-green-600 hover:bg-green-700">Clean</Badge>
+          )
+        ) : (
+          "N/A"
+        )
+    }
+  ];
+
+  /* ---------------- search placeholder ---------------- */
+  const searchPlaceholder = useMemo(() => {
+    switch (activeTab) {
+      case "training":
+        return "Search by job name…";
+      case "hpSearch":
+        return "Search by study name…";
+      case "inference":
+        return "Search by commit hash…";
+      default:
+        return "Search…";
+    }
+  }, [activeTab]);
+
+  /* ---------------- onPageChange helpers (stable refs) ---------------- */
+  const changeTrainingPage = (p: number) => setTrainingPag(prev => ({ ...prev, currentPage: p }));
+  const changeHpPage = (p: number) => setHpPag(prev => ({ ...prev, currentPage: p }));
+  const changeInfPage = (p: number) => setInfPag(prev => ({ ...prev, currentPage: p }));
+
+  /* ---------------- JSX ---------------- */
   return (
     <MainLayout>
       <PageContainer
         title="ML Jobs Dashboard"
-        description="Monitor and manage your model training, hyperparameter searches, and inference tasks."
-        actions={ <div className="flex space-x-2"> <Button variant="outline" asChild><Link href="/jobs/train"><Plus className="mr-2 h-4 w-4"/>New Training</Link></Button> <Button variant="outline" asChild><Link href="/jobs/hp-search"><Plus className="mr-2 h-4 w-4"/>New HP Search</Link></Button> <Button asChild><Link href="/jobs/inference"><Play className="mr-2 h-4 w-4" />Run Inference</Link></Button> </div> }
+        description="Monitor and manage your model training, hyper‑parameter searches and inference tasks."
+        actions={
+          <div className="flex space-x-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/jobs/train">New Training</Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/jobs/hp-search">New HP Search</Link>
+            </Button>
+            <Button size="sm" asChild>
+              <Link href="/jobs/inference">Run Inference</Link>
+            </Button>
+          </div>
+        }
       >
-        <div className="flex flex-col md:flex-row gap-4 mb-6">
-          <div className="w-full md:flex-grow">
-            <Label htmlFor="search">Search (by Name / Study Name)</Label>
-            <Input id="search" placeholder="Enter search query..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-          </div>
-          <div className="w-full md:w-auto">
-            <Label htmlFor="status">Filter by Status</Label>
-            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as JobStatusEnum | typeof ALL_FILTER_VALUE)}>
-              <SelectTrigger id="status"><SelectValue placeholder="All Statuses" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_FILTER_VALUE}>All Statuses</SelectItem>
-                {availableJobStatuses.map(s => <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
+        {/* ---------------- filters ---------------- */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <Input
+            placeholder={searchPlaceholder}
+            value={searchQuery}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+          />
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder="All Statuses" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_FILTER_VALUE}>All Statuses</SelectItem>
+              {Object.values(JobStatusEnum).map(s => (
+                <SelectItem key={s} value={s}>
+                  {s.charAt(0).toUpperCase() + s.slice(1)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={datasetFilter}
+            onValueChange={setDatasetFilter}
+            disabled={isLoadingDatasets}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="All Datasets" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_FILTER_VALUE}>All Datasets</SelectItem>
+              {datasets.map(ds => (
+                <SelectItem key={ds.id} value={String(ds.id)}>
+                  {ds.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as JobTypeKey)} className="space-y-4">
+        {/* ---------------- tabs ---------------- */}
+        <Tabs value={activeTab} onValueChange={(v: string) => setActiveTab(v as JobTypeKey)}>
           <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="training">Training ({trainingJobsPagination.isLoading ? <Loader2 className="h-3 w-3 animate-spin"/> : trainingJobsPagination.totalItems})</TabsTrigger>
-            <TabsTrigger value="hpSearch">HP Search ({hpSearchJobsPagination.isLoading ? <Loader2 className="h-3 w-3 animate-spin"/> : hpSearchJobsPagination.totalItems})</TabsTrigger>
-            <TabsTrigger value="inference">Inference ({inferenceJobsPagination.isLoading ? <Loader2 className="h-3 w-3 animate-spin"/> : inferenceJobsPagination.totalItems})</TabsTrigger>
+            <TabsTrigger value="training">
+              Training {trainingPag.isLoading ? <Loader2 className="h-3 w-3 animate-spin ml-1" /> : `(${trainingPag.totalItems})`}
+            </TabsTrigger>
+            <TabsTrigger value="hpSearch">
+              HP Search {hpPag.isLoading ? <Loader2 className="h-3 w-3 animate-spin ml-1" /> : `(${hpPag.totalItems})`}
+            </TabsTrigger>
+            <TabsTrigger value="inference">
+              Inference {infPag.isLoading ? <Loader2 className="h-3 w-3 animate-spin ml-1" /> : `(${infPag.totalItems})`}
+            </TabsTrigger>
           </TabsList>
 
+          {/* ---------------- training tab ---------------- */}
           <TabsContent value="training">
-            <Card><CardHeader><CardTitle>Training Jobs</CardTitle></CardHeader><CardContent>
-                <div className="rounded-md border">
-                    <Table><TableHeader><TableRow>{jobTableColumns.training.map(col => <TableHead key={col.header}>{col.header}</TableHead>)}<TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
-                    <TableBody>{renderJobTableContent(trainingJobs, "training", trainingJobsPagination.isLoading, trainingJobsError, jobTableColumns.training)}</TableBody></Table>
-                </div>{renderPagination(trainingJobsPagination, "training")} </CardContent></Card>
-          </TabsContent>
-          
-          <TabsContent value="hpSearch">
-             <Card><CardHeader><CardTitle>Hyperparameter Search Jobs</CardTitle></CardHeader><CardContent>
-                 <div className="rounded-md border">
-                    <Table><TableHeader><TableRow>{jobTableColumns.hpSearch.map(col => <TableHead key={col.header}>{col.header}</TableHead>)}<TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
-                    <TableBody>{renderJobTableContent(hpSearchJobs, "hpSearch", hpSearchJobsPagination.isLoading, hpSearchJobsError, jobTableColumns.hpSearch)}</TableBody></Table>
-                 </div>{renderPagination(hpSearchJobsPagination, "hpSearch")}</CardContent></Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Training Jobs</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <JobTable
+                  entityType="training"
+                  columns={trainingCols}
+                  data={trainingJobs}
+                  isLoading={trainingPag.isLoading}
+                  error={trainingErr}
+                  paginationState={trainingPag}
+                  onPageChange={changeTrainingPage}
+                  onCancelJob={confirmCancelJob}
+                />
+              </CardContent>
+            </Card>
           </TabsContent>
 
+          {/* ---------------- hp search tab ---------------- */}
+          <TabsContent value="hpSearch">
+            <Card>
+              <CardHeader>
+                <CardTitle>Hyper‑parameter Search Jobs</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <JobTable
+                  entityType="hpSearch"
+                  columns={hpCols}
+                  data={hpSearchJobs}
+                  isLoading={hpPag.isLoading}
+                  error={hpErr}
+                  paginationState={hpPag}
+                  onPageChange={changeHpPage}
+                  onCancelJob={confirmCancelJob}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* ---------------- inference tab ---------------- */}
           <TabsContent value="inference">
-             <Card><CardHeader><CardTitle>Inference Jobs</CardTitle></CardHeader><CardContent>
-                 <div className="rounded-md border">
-                     <Table><TableHeader><TableRow>{jobTableColumns.inference.map(col => <TableHead key={col.header}>{col.header}</TableHead>)}<TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
-                    <TableBody>{renderJobTableContent(inferenceJobs, "inference", inferenceJobsPagination.isLoading, inferenceJobsError, jobTableColumns.inference)}</TableBody></Table>
-                 </div>{renderPagination(inferenceJobsPagination, "inference")}</CardContent></Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Inference Jobs</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <JobTable
+                  entityType="inference"
+                  columns={infCols}
+                  data={inferenceJobs}
+                  isLoading={infPag.isLoading}
+                  error={infErr}
+                  paginationState={infPag}
+                  onPageChange={changeInfPage}
+                  onCancelJob={confirmCancelJob}
+                />
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
-        
-        <AlertDialog open={!!jobToCancel} onOpenChange={(open) => !open && setJobToCancel(null)}>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>Confirm Cancel Job</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        Are you sure you want to attempt to cancel job: "{jobToCancel?.name}" (Task ID: {jobToCancel?.celeryTaskId})? 
-                        This action may not be immediately effective if the task is already in a non-interruptible state.
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel onClick={() => setJobToCancel(null)} disabled={isCancelling}>Back</AlertDialogCancel>
-                    <AlertDialogAction onClick={executeCancelJob} className="bg-destructive hover:bg-destructive/90" disabled={isCancelling}>
-                        {isCancelling ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Cancelling...</> : "Yes, Cancel Job"}
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
 
+        {/* ---------------- cancel‑job dialog ---------------- */}
+        <AlertDialog open={!!jobToCancel} onOpenChange={o => !o && setJobToCancel(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirm Cancel Job</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to attempt to cancel job: "{jobToCancel?.name}" (Task
+                ID: {jobToCancel?.celeryTaskId})? This action may not be immediately
+                effective if the task is already in a non‑interruptible state.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isCancelling}>
+                Back
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive hover:bg-destructive/90"
+                onClick={executeCancelJob}
+                disabled={isCancelling}
+              >
+                {isCancelling ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cancelling…
+                  </>
+                ) : (
+                  "Yes, Cancel Job"
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </PageContainer>
     </MainLayout>
   );
 }
 
-export default function JobsPage() { // New wrapper component
+/* -------------------------------------------------------------------------------------------------
+ * Top‑level default export (with Suspense wrapper)
+ * ------------------------------------------------------------------------------------------------*/
+export default function JobsPage() {
   return (
-    <Suspense fallback={<PageLoader message="Loading jobs dashboard..." />}>
+    <Suspense fallback={<PageLoader message="Loading jobs dashboard…" />}>
       <JobsPageContent />
     </Suspense>
   );
