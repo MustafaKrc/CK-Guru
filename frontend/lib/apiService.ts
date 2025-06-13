@@ -246,13 +246,19 @@ export const apiService = {
   createDataset: async (repoId: string | number, payload: DatasetCreatePayload): Promise<DatasetTaskResponse> => {
     return apiService.post<DatasetTaskResponse, DatasetCreatePayload>(`/repositories/${repoId}/datasets`, payload);
   },
-  getDatasets: async (params?: { skip?: number; limit?: number; status?: string; repository_id?: string | number }): Promise<PaginatedDatasetRead> => {
+  getDatasets: async (params?: { skip?: number; limit?: number; status?: string; repository_id?: string | number, nameFilter?: string, sortBy?: string, sortDir?: 'asc'|'desc' }): Promise<PaginatedDatasetRead> => {
     const queryParams = new URLSearchParams();
     if (params?.skip !== undefined) queryParams.append('skip', String(params.skip));
     if (params?.limit !== undefined) queryParams.append('limit', String(params.limit));
     if (params?.status) queryParams.append('status', params.status);
-    if (params?.repository_id !== undefined) queryParams.append('repository_id', String(params.repository_id)); // Add repo_id if provided
-    return apiService.get<PaginatedDatasetRead>(`/datasets?${queryParams.toString()}`);
+    if (params?.repository_id !== undefined) queryParams.append('repository_id', String(params.repository_id)); 
+    if (params?.nameFilter) queryParams.append('name_filter', params.nameFilter);
+    if (params?.sortBy) queryParams.append('sort_by', params.sortBy);
+    if (params?.sortDir) queryParams.append('sort_order', params.sortDir);
+    var a = apiService.get<PaginatedDatasetRead>(`/datasets?${queryParams.toString()}`);
+    console.log("getDatasets called with params:", params, "Result:", a);
+    return a;
+  
   },
   // --- ML Models ---
 

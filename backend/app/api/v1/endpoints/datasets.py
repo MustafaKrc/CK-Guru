@@ -93,7 +93,7 @@ async def get_available_cleaning_rules_endpoint(
 
 
 @router.get(
-    "/datasets",  # This will be /api/v1/datasets due to api_router prefix
+    "/datasets",
     response_model=PaginatedDatasetRead,
     summary="List All Datasets",
     description="Retrieves a list of all datasets with pagination and optional filters.",
@@ -101,20 +101,27 @@ async def get_available_cleaning_rules_endpoint(
 async def list_all_datasets_endpoint(
     db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
-    limit: int = Query(
-        100, ge=1, le=1000
-    ),  # Increased max limit for filter dropdown population
-    status: Optional[DatasetStatusEnumSchema] = Query(
-        None, description="Filter by dataset status (e.g., ready)"
-    ),
-    # Add user_id filter here once auth is integrated
+    limit: int = Query(100, ge=1, le=1000),
+    status: Optional[DatasetStatusEnumSchema] = Query(None, description="Filter by dataset status (e.g., ready)"),
+    repository_id: Optional[int] = Query(None, description="Filter by repository ID."),
+    name_filter: Optional[str] = Query(None, alias="name_filter", description="Filter datasets by name (case-insensitive)."),
+    sort_by: Optional[str] = Query('created_at', alias="sort_by", description="Column to sort by."),
+    sort_dir: Optional[str] = Query('desc', alias="sort_order", pattern="^(asc|desc)$")
 ):
     """
-    Retrieve all datasets.
-    Eventually, this should be scoped to the authenticated user or their team.
+    Retrieve all datasets with server-side sorting and filtering.
     """
+    print("AAA")
+    print(f"Listing datasets with filters: status={status}, repository_id={repository_id}, name_filter={name_filter}, sort_by={sort_by}, sort_dir={sort_dir}")
     items, total = await crud.crud_dataset.get_all_datasets(
-        db, skip=skip, limit=limit, status=status
+        db,
+        skip=skip,
+        limit=limit,
+        status=status,
+        repository_id=repository_id,
+        name_filter=name_filter,
+        sort_by=sort_by,
+        sort_dir=sort_dir
     )
     return PaginatedDatasetRead(items=items, total=total, skip=skip, limit=limit)
 

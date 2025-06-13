@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field  # Use Json for validation? maybe just Dict
 
 from shared.schemas.enums import DatasetStatusEnum, FeatureSelectionAlgorithmEnum
+from shared.schemas.repository import RepositoryRead
 
 # --- Feature Selection Configuration --- 
 class FeatureSelectionConfig(BaseModel):
@@ -63,6 +64,7 @@ class DatasetCreate(DatasetBase):
 class DatasetRead(DatasetBase):
     id: int
     repository_id: int
+    repository: Optional[RepositoryRead] = None
     status: DatasetStatusEnum  # This now correctly refers to the imported enum
     status_message: Optional[str] = None
     storage_path: Optional[str] = None

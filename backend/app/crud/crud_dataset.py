@@ -2,12 +2,13 @@
 import logging
 from typing import Any, Dict, Optional, Sequence, Tuple
 
-from sqlalchemy import func, select, update
+from sqlalchemy import asc, desc, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from shared.core.config import settings
 from shared.db.models.dataset import Dataset, DatasetStatusEnum
+from shared.db.models.repository import Repository
 from shared.schemas.dataset import DatasetCreate, DatasetUpdate
 from shared.schemas.enums import (
     DatasetStatusEnum as DatasetStatusEnumSchema,
@@ -36,33 +37,56 @@ async def get_all_datasets(
     skip: int = 0,
     limit: int = 100,
     status: Optional[DatasetStatusEnumSchema] = None,
-    # Add other filters like user_id when auth is integrated
+    repository_id: Optional[int] = None,
+    name_filter: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    sort_dir: Optional[str] = 'desc',
 ) -> Tuple[Sequence[Dataset], int]:
-    """Get all datasets with pagination and optional filtering."""
-    stmt_items = (
-        select(Dataset)
-        .options(selectinload(Dataset.repository))  # Good to load repository name
-        .order_by(Dataset.created_at.desc())
-    )
+    """Get all datasets with pagination, filtering, and sorting."""
+    
+    # Base query for items, including a join to the repository table for sorting/filtering
+    stmt_items = select(Dataset).join(Dataset.repository)
+    # Base query for total count with the same join
+    stmt_total = select(func.count(Dataset.id)).join(Dataset.repository)
 
+    # --- Build Filters ---
     filters = []
     if status:
         filters.append(Dataset.status == status)
-    # Example: if user_id filtering is added
-    # if user_id:
-    #     filters.append(Dataset.owner_id == user_id) # Assuming an owner_id field
-
+    if repository_id is not None:
+        filters.append(Dataset.repository_id == repository_id)
+    if name_filter:
+        print(f"Filtering datasets by name: {name_filter}")
+        filters.append(Dataset.name.ilike(f"%{name_filter}%"))
+    
     if filters:
         stmt_items = stmt_items.where(*filters)
-
-    stmt_total = select(func.count(Dataset.id))
-    if filters:
         stmt_total = stmt_total.where(*filters)
-
+    
+    # --- Get Total Count ---
     result_total = await db.execute(stmt_total)
     total = result_total.scalar_one_or_none() or 0
 
+    # --- Apply Sorting ---
+    sort_mapping = {
+        'name': Dataset.name,
+        'created_at': Dataset.created_at,
+        'status': Dataset.status,
+        'repository_name': Repository.name
+    }
+    sort_column = sort_mapping.get(sort_by, Dataset.created_at) # Default sort
+    
+    if sort_dir == 'desc':
+        stmt_items = stmt_items.order_by(desc(sort_column))
+    else:
+        stmt_items = stmt_items.order_by(asc(sort_column))
+
+    # Eager load the repository details to avoid N+1 query issues
+    stmt_items = stmt_items.options(selectinload(Dataset.repository))
+    
+    # Apply Pagination
     stmt_items = stmt_items.offset(skip).limit(limit)
+    
     result_items = await db.execute(stmt_items)
     items = result_items.scalars().all()
 

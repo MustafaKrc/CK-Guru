@@ -1,5 +1,6 @@
 // frontend/types/api/dataset.ts
 import { DatasetStatusEnum } from "./enums"; // Import from the local enums file
+import { Repository } from "./repository";
 
 // Mirrors CleaningRuleConfig from shared/schemas/dataset.py
 export interface CleaningRuleConfig {
@@ -25,6 +26,7 @@ export interface DatasetConfig {
 export interface DatasetRead {
   id: number;
   repository_id: number;
+  repository?: Repository;
   name: string;
   description?: string | null;
   config: DatasetConfig;
