@@ -407,24 +407,34 @@ function CreateDatasetPageContent() {
                         ))}
                     </div>
                 </div>
-                <ScrollArea className="h-[400px] rounded-md border p-4">
-                  {Object.entries(groupedMetrics).map(([groupName, metricsInGroup]) => (
-                    <div key={groupName} className="mb-4">
-                      <h4 className="text-md font-semibold mb-2 sticky top-0 bg-background/95 py-1 z-10">{groupName} ({metricsInGroup.filter(m => selectedFeatureColumns.includes(m.id)).length}/{metricsInGroup.length})</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-3">
-                        {metricsInGroup.map(metric => (
-                          <div key={metric.id} className="flex items-start space-x-2">
-                            <Checkbox id={`metric-${metric.id}`} checked={selectedFeatureColumns.includes(metric.id)} onCheckedChange={() => handleFeatureToggle(metric.id)} />
-                            <div className="grid gap-1.5 leading-none">
-                              <Label htmlFor={`metric-${metric.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer">{metric.name}</Label>
-                              <p className="text-xs text-muted-foreground">{metric.description}</p>
+                <TooltipProvider delayDuration={100}>
+                  <ScrollArea className="h-[400px] rounded-md border p-4">
+                    {Object.entries(groupedMetrics).map(([groupName, metricsInGroup]) => (
+                      <div key={groupName} className="mb-4">
+                        <h4 className="text-md font-semibold mb-2 sticky top-0 bg-background/95 py-1 z-10">{groupName} ({metricsInGroup.filter(m => selectedFeatureColumns.includes(m.id)).length}/{metricsInGroup.length})</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-3">
+                          {metricsInGroup.map(metric => (
+                            <div key={metric.id} className="flex items-center space-x-2">
+                              <Checkbox id={`metric-${metric.id}`} checked={selectedFeatureColumns.includes(metric.id)} onCheckedChange={() => handleFeatureToggle(metric.id)} />
+                              <Label htmlFor={`metric-${metric.id}`} className="text-sm font-normal cursor-pointer">{metric.name}</Label>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button type="button" className="cursor-help" onClick={(e) => e.preventDefault()}>
+                                    <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-xs text-sm">
+                                  <p className="font-bold">{metric.name} <span className="text-xs font-normal text-muted-foreground">({metric.group})</span></p>
+                                  <p className="mt-1 text-xs text-muted-foreground">{metric.description}</p>
+                                </TooltipContent>
+                              </Tooltip>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </ScrollArea>
+                    ))}
+                  </ScrollArea>
+                </TooltipProvider>
               </div>
               <Separator />
               <div className="space-y-4">
