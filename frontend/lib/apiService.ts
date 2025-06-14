@@ -83,8 +83,16 @@ export interface GetTrainingJobsParams {
 }
 
 export interface GetHpSearchJobsParams extends GetTrainingJobsParams {} 
-export interface GetInferenceJobsParams extends GetTrainingJobsParams { 
+
+export interface GetInferenceJobsParams {
+  skip?: number;
+  limit?: number;
   model_id?: number;
+  repository_id?: number;
+  status?: JobStatusEnum | string;
+  nameFilter?: string;
+  sortBy?: string;
+  sortDir?: 'asc' | 'desc';
 }
 
 async function downloadFile(endpoint: string, options: RequestInit = {}): Promise<Blob> {
@@ -324,7 +332,7 @@ export const apiService = {
   },
 
   getInferenceJobs: async (params?: GetInferenceJobsParams): Promise<PaginatedInferenceJobRead> => {
-    const queryParams = new URLSearchParams(params as any);
+    const queryParams = new URLSearchParams(params as any); 
     return apiService.get<PaginatedInferenceJobRead>(`/ml/infer?${queryParams.toString()}`);
   },
 

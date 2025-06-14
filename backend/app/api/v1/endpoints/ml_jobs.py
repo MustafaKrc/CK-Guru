@@ -599,17 +599,27 @@ async def get_inference_job_details(
 async def list_inference_jobs(
     db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(10, ge=1, le=500), # Default limit to 10
     model_id: Optional[int] = Query(None, description="Filter by ML Model ID used."),
     repository_id: Optional[int] = Query(None, description="Filter by repository ID."),
     status: Optional[JobStatusEnum] = Query(None, description="Filter by job status"),
     name_filter: Optional[str] = Query(None, alias="nameFilter", description="Filter by commit hash."),
-    sort_by: Optional[str] = Query('created_at', alias="sortBy"),
+    sort_by: Optional[str] = Query('triggered_at', alias="sortBy", description="Column to sort by. Options: job_id, repository_name, commit, model_name, status, triggered_at, prediction"),
     sort_dir: Optional[str] = Query('desc', alias="sortDir", pattern="^(asc|desc)$")
 ):
+    """
+    Retrieves a paginated list of all inference jobs, with server-side sorting and filtering.
+    """
     items, total = await crud.crud_inference_job.get_inference_jobs(
-        db, skip=skip, limit=limit, model_id=model_id, repository_id=repository_id, status=status,
-        name_filter=name_filter, sort_by=sort_by, sort_dir=sort_dir
+        db, 
+        skip=skip, 
+        limit=limit, 
+        model_id=model_id, 
+        repository_id=repository_id, 
+        status=status,
+        name_filter=name_filter, 
+        sort_by=sort_by, 
+        sort_dir=sort_dir
     )
     return schemas.PaginatedInferenceJobRead(items=items, total=total, skip=skip, limit=limit)
 

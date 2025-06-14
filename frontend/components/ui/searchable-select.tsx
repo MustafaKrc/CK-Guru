@@ -60,8 +60,8 @@ export function SearchableSelect({
           disabled={disabled || isLoading}
         >
           <span className="truncate">
-            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            {isLoading ? "Loading..." : value ? selectedLabel : placeholder}
+            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {isLoading ? "" : value ? selectedLabel : placeholder}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
