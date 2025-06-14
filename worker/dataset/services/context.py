@@ -2,13 +2,13 @@
 from typing import Any, List, Optional
 
 import pandas as pd
-from celery import Task
 from pydantic import BaseModel, ConfigDict, Field
+
+from shared.celery_config.base_task import EventPublishingTask
 
 # Import models needed for context typing
 from shared.db.models import BotPattern, Dataset, Repository
 from shared.schemas.dataset import DatasetConfig  # Use the schema for config
-from shared.celery_config.base_task import EventPublishingTask 
 
 
 class DatasetContext(BaseModel):
@@ -78,10 +78,10 @@ class DatasetContext(BaseModel):
     def __init__(self, **data: Any):
         super().__init__(**data)
         # Ensure lists are initialized if they are part of **data but could be None
-        self.warnings = data.get('warnings', [])
-        self.processed_batches_data = data.get('processed_batches_data', []) 
+        self.warnings = data.get("warnings", [])
+        self.processed_batches_data = data.get("processed_batches_data", [])
         # Ensure event context fields are set if passed, or remain None
-        self.event_job_type = data.get('event_job_type')
-        self.event_entity_id = data.get('event_entity_id')
-        self.event_entity_type = data.get('event_entity_type')
-        self.event_user_id = data.get('event_user_id')
+        self.event_job_type = data.get("event_job_type")
+        self.event_entity_id = data.get("event_entity_id")
+        self.event_entity_type = data.get("event_entity_type")
+        self.event_user_id = data.get("event_user_id")

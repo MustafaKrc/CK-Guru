@@ -13,11 +13,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 export interface ComboboxOption {
   value: string;
@@ -61,9 +57,7 @@ export const Combobox: React.FC<ComboboxProps> = ({
           disabled={disabled}
           className={cn("w-full justify-between", className)}
         >
-          <span className="truncate">
-            {value ? selectedLabel : placeholder}
-          </span>
+          <span className="truncate">{value ? selectedLabel : placeholder}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>

@@ -8,7 +8,8 @@ import { XAITypeEnum, XAIStatusEnum } from "./enums";
 // and the backend should ideally serialize with `by_alias=False` or ensure frontend matches the alias.
 // Assuming backend sends `class_name` or `populate_by_name=True` is used carefully in Pydantic.
 
-export interface FilePredictionDetail { // This is also used by InferenceJob, so it needs to be consistent or imported.
+export interface FilePredictionDetail {
+  // This is also used by InferenceJob, so it needs to be consistent or imported.
   file_path: string; // Path to the file
   predicted_label: number; // The prediction for this specific file
   prediction_probability: number; // The probability for this prediction
@@ -98,7 +99,14 @@ export interface XAIResultRead {
   xai_type: XAITypeEnum;
   status: XAIStatusEnum;
   status_message?: string | null;
-  result_data?: FeatureImportanceResultData | SHAPResultData | LIMEResultData | CounterfactualResultData | DecisionPathResultData | Record<string, any> | null;
+  result_data?:
+    | FeatureImportanceResultData
+    | SHAPResultData
+    | LIMEResultData
+    | CounterfactualResultData
+    | DecisionPathResultData
+    | Record<string, any>
+    | null;
   celery_task_id?: string | null;
   started_at?: string | null; // ISO date string
   completed_at?: string | null; // ISO date string

@@ -22,14 +22,14 @@ from services.steps.base import IngestionContext, IngestionStep
 from services.steps.calculate_ck import CalculateCKMetricsStep
 from services.steps.calculate_guru import CalculateCommitGuruMetricsStep
 from services.steps.ensure_commits_exist import EnsureCommitsExistLocallyStep
+from services.steps.extract_commit_details import ExtractCommitDetailsStep
 from services.steps.fetch_link_issues import FetchAndLinkIssuesStep
 from services.steps.link_bugs import LinkBugsStep
 from services.steps.persist_ck import PersistCKMetricsStep
+from services.steps.persist_commit_details import PersistCommitDetailsStep
 from services.steps.persist_guru import PersistCommitGuruMetricsStep
 from services.steps.prepare_repo import PrepareRepositoryStep
 from services.steps.resolve_commit_hashes import ResolveCommitHashesStep
-from services.steps.extract_commit_details import ExtractCommitDetailsStep
-from services.steps.persist_commit_details import PersistCommitDetailsStep
 from shared.core.config import settings
 
 # from services.gitlab_client import GitLabClient # Hypothetical future client

@@ -41,15 +41,15 @@ export interface DatasetRead {
 
 // Payload for creating a dataset, mirrors shared/schemas/dataset.py -> DatasetCreate
 export interface DatasetCreatePayload {
-    name: string;
-    description?: string | null;
-    config: DatasetConfig;
+  name: string;
+  description?: string | null;
+  config: DatasetConfig;
 }
 
 // Response when a dataset creation task is submitted, mirrors shared/schemas/dataset.py -> DatasetTaskResponse
 export interface DatasetTaskResponse {
-    dataset_id: number;
-    task_id: string;
+  dataset_id: number;
+  task_id: string;
 }
 
 export interface PaginatedDatasetRead {

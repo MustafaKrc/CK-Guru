@@ -15,21 +15,21 @@ export interface TrainingRunConfig {
 }
 
 export interface TrainingJobBase {
-    dataset_id: number;
-    config: TrainingRunConfig;
+  dataset_id: number;
+  config: TrainingRunConfig;
 }
 
 // Payload for creating a training job (sent to POST /ml/train)
 export interface TrainingJobCreatePayload {
   dataset_id: number;
-  training_job_name: string; 
+  training_job_name: string;
   training_job_description?: string | null;
   config: TrainingRunConfig;
 }
 
 export interface TrainingJobRead extends TrainingJobBase {
   id: number;
-  dataset?: DatasetRead | null; 
+  dataset?: DatasetRead | null;
   celery_task_id?: string | null;
   status: JobStatusEnum;
   status_message?: string | null;
@@ -42,9 +42,9 @@ export interface TrainingJobRead extends TrainingJobBase {
 }
 
 export interface TrainingJobSubmitResponse {
-    job_id: number;
-    celery_task_id: string;
-    message: string;
+  job_id: number;
+  celery_task_id: string;
+  message: string;
 }
 
 export interface PaginatedTrainingJobRead {

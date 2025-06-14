@@ -2,8 +2,9 @@
 "use client";
 
 import React, { useState, useCallback, Suspense, useMemo } from "react";
-import { useRouter } // , useSearchParams // if needed for initial params
-from "next/navigation";
+import {
+  useRouter, // , useSearchParams // if needed for initial params
+} from "next/navigation";
 import { MainLayout } from "@/components/main-layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,7 +12,7 @@ import { PageContainer } from "@/components/ui/page-container";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ArrowLeft, ArrowRight, Check, Link, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { PageLoader } from '@/components/ui/page-loader';
+import { PageLoader } from "@/components/ui/page-loader";
 
 import { TrainingJobFormData, initialTrainingJobFormData } from "@/types/jobs";
 import { TrainingJobStepper } from "@/components/jobs/train/TrainingJobStepper";
@@ -22,8 +23,11 @@ import { ConfigureFeaturesTargetStep } from "@/components/jobs/train/ConfigureFe
 import { ReviewAndSubmitStep } from "@/components/jobs/train/ReviewAndSubmitStep";
 
 import { apiService, handleApiError, ApiError } from "@/lib/apiService";
-import { TrainingJobCreatePayload, TrainingRunConfig, TrainingJobSubmitResponse } from "@/types/api/training-job";
-
+import {
+  TrainingJobCreatePayload,
+  TrainingRunConfig,
+  TrainingJobSubmitResponse,
+} from "@/types/api/training-job";
 
 const WIZARD_STEPS = [
   { name: "Source Data", description: "Select repository and dataset." },
@@ -48,16 +52,15 @@ function CreateTrainingJobPageContent() {
     setFormData((prev) => ({ ...prev, ...updates }));
   }, []);
 
-  
   const handleStepNavigation = (stepNumber: number) => {
     if (stepNumber <= maxCompletedStep + 1 && stepNumber <= TOTAL_STEPS && stepNumber >= 1) {
-        setCurrentStep(stepNumber);
+      setCurrentStep(stepNumber);
     } else {
-        toast({
-            title: "Navigation Restricted",
-            description: "Please complete the current step before navigating to a future step.",
-            variant: "default",
-        });
+      toast({
+        title: "Navigation Restricted",
+        description: "Please complete the current step before navigating to a future step.",
+        variant: "default",
+      });
     }
   };
 
@@ -65,13 +68,21 @@ function CreateTrainingJobPageContent() {
     switch (step) {
       case 1: // Repository & Dataset
         if (!formData.repositoryId || !formData.datasetId) {
-          toast({ title: "Missing Information", description: "Please select both a repository and a dataset.", variant: "destructive" });
+          toast({
+            title: "Missing Information",
+            description: "Please select both a repository and a dataset.",
+            variant: "destructive",
+          });
           return false;
         }
         return true;
       case 2: // Model Type
         if (!formData.modelType) {
-          toast({ title: "Missing Information", description: "Please select a model type.", variant: "destructive" });
+          toast({
+            title: "Missing Information",
+            description: "Please select a model type.",
+            variant: "destructive",
+          });
           return false;
         }
         return true;
@@ -79,21 +90,37 @@ function CreateTrainingJobPageContent() {
         return true; // For now, assume HPs are optional or defaults are fine
       case 4: // Features & Target
         if (formData.selectedFeatures.length === 0) {
-          toast({ title: "Missing Features", description: "Please select at least one feature for training.", variant: "destructive" });
+          toast({
+            title: "Missing Features",
+            description: "Please select at least one feature for training.",
+            variant: "destructive",
+          });
           return false;
         }
         if (!formData.trainingTargetColumn) {
-          toast({ title: "Missing Target", description: "Please select a target column for training.", variant: "destructive" });
+          toast({
+            title: "Missing Target",
+            description: "Please select a target column for training.",
+            variant: "destructive",
+          });
           return false;
         }
         return true;
       case 5: // Review & Submit (Job Name & Model Base Name)
         if (!formData.trainingJobName.trim()) {
-          toast({ title: "Job Name Required", description: "Please provide a name for this training job.", variant: "destructive" });
+          toast({
+            title: "Job Name Required",
+            description: "Please provide a name for this training job.",
+            variant: "destructive",
+          });
           return false;
         }
         if (!formData.modelBaseName.trim()) {
-          toast({ title: "Model Name Required", description: "Please provide a base name for the new model.", variant: "destructive" });
+          toast({
+            title: "Model Name Required",
+            description: "Please provide a base name for the new model.",
+            variant: "destructive",
+          });
           return false;
         }
         return true;
@@ -141,31 +168,31 @@ function CreateTrainingJobPageContent() {
 
   const handleSubmitTrainingJob = async () => {
     // Final validation before submission (redundant if handleNext already does it, but good for safety)
-    if (!validateStep(TOTAL_STEPS)) return; 
+    if (!validateStep(TOTAL_STEPS)) return;
 
     setIsSubmitting(true);
     setSubmissionError(null);
 
     // Construct the TrainingRunConfig part
     const trainingRunConfig: TrainingRunConfig = {
-        model_name: formData.modelBaseName!, // Use model_name instead of model_base_name
-        model_type: formData.modelType!,
-        hyperparameters: formData.configuredHyperparameters,
-        feature_columns: formData.selectedFeatures,
-        target_column: formData.trainingTargetColumn!,
-        // Defaulting these, or they could be part of formData if made configurable in UI
-        random_seed: 42, 
-        eval_test_split_size: 0.2,
+      model_name: formData.modelBaseName!, // Use model_name instead of model_base_name
+      model_type: formData.modelType!,
+      hyperparameters: formData.configuredHyperparameters,
+      feature_columns: formData.selectedFeatures,
+      target_column: formData.trainingTargetColumn!,
+      // Defaulting these, or they could be part of formData if made configurable in UI
+      random_seed: 42,
+      eval_test_split_size: 0.2,
     };
-    
+
     // Construct the final payload
     const payload: TrainingJobCreatePayload = {
-      dataset_id: formData.datasetId!, 
+      dataset_id: formData.datasetId!,
       training_job_name: formData.trainingJobName,
       training_job_description: formData.trainingJobDescription || null,
       config: trainingRunConfig, // Nest the training run config
     };
-    
+
     try {
       const response = await apiService.submitTrainingJob(payload);
       toast({
@@ -191,13 +218,39 @@ function CreateTrainingJobPageContent() {
   const renderStepContent = () => {
     switch (currentStep) {
       case 1:
-        return <SelectRepositoryAndDatasetStep formData={formData} updateFormData={updateFormData} onStepComplete={() => { /* Step completion handled by Next button */ }} />;
+        return (
+          <SelectRepositoryAndDatasetStep
+            formData={formData}
+            updateFormData={updateFormData}
+            onStepComplete={() => {
+              /* Step completion handled by Next button */
+            }}
+          />
+        );
       case 2:
-        return <SelectModelStep formData={formData} updateFormData={updateFormData} onStepComplete={() => {}} />;
+        return (
+          <SelectModelStep
+            formData={formData}
+            updateFormData={updateFormData}
+            onStepComplete={() => {}}
+          />
+        );
       case 3:
-        return <ConfigureHyperparametersStep formData={formData} updateFormData={updateFormData} onStepComplete={() => {}} />;
+        return (
+          <ConfigureHyperparametersStep
+            formData={formData}
+            updateFormData={updateFormData}
+            onStepComplete={() => {}}
+          />
+        );
       case 4:
-        return <ConfigureFeaturesTargetStep formData={formData} updateFormData={updateFormData} onStepComplete={() => {}} />;
+        return (
+          <ConfigureFeaturesTargetStep
+            formData={formData}
+            updateFormData={updateFormData}
+            onStepComplete={() => {}}
+          />
+        );
       case 5:
         return <ReviewAndSubmitStep formData={formData} updateFormData={updateFormData} />;
       default:
@@ -211,22 +264,29 @@ function CreateTrainingJobPageContent() {
         title="Create New Training Job"
         description="Follow these steps to configure and launch a new model training process."
       >
-        <TrainingJobStepper currentStep={currentStep} steps={WIZARD_STEPS} onStepClick={handleStepNavigation} maxCompletedStep={maxCompletedStep} />
+        <TrainingJobStepper
+          currentStep={currentStep}
+          steps={WIZARD_STEPS}
+          onStepClick={handleStepNavigation}
+          maxCompletedStep={maxCompletedStep}
+        />
 
         <Card className="mt-6">
-          <CardContent className="pt-6">
-            {renderStepContent()}
-          </CardContent>
+          <CardContent className="pt-6">{renderStepContent()}</CardContent>
         </Card>
 
         {submissionError && (
-            <Alert variant="destructive" className="mt-4">
-                <AlertDescription>{submissionError}</AlertDescription>
-            </Alert>
+          <Alert variant="destructive" className="mt-4">
+            <AlertDescription>{submissionError}</AlertDescription>
+          </Alert>
         )}
 
         <div className="mt-8 flex justify-between">
-          <Button variant="outline" onClick={handlePrevious} disabled={currentStep === 1 || isSubmitting}>
+          <Button
+            variant="outline"
+            onClick={handlePrevious}
+            disabled={currentStep === 1 || isSubmitting}
+          >
             <ArrowLeft className="mr-2 h-4 w-4" /> Previous
           </Button>
           <Button onClick={handleNext} disabled={isSubmitting || !isStepValid}>
@@ -237,7 +297,11 @@ function CreateTrainingJobPageContent() {
             ) : (
               <ArrowRight className="mr-2 h-4 w-4" />
             )}
-            {currentStep === TOTAL_STEPS ? (isSubmitting ? "Submitting..." : "Submit Training Job") : "Next"}
+            {currentStep === TOTAL_STEPS
+              ? isSubmitting
+                ? "Submitting..."
+                : "Submit Training Job"
+              : "Next"}
           </Button>
         </div>
       </PageContainer>

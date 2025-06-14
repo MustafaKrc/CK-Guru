@@ -13,21 +13,20 @@ from app.services.inference_service import InferenceService
 from app.services.xai_service import XAIService
 from shared import schemas
 from shared.core.config import settings
-from shared.db_session import get_async_db_session
-from shared.schemas.enums import (
-    DatasetStatusEnum,
-    JobStatusEnum,
-)
-
-from sqlalchemy.ext.asyncio import AsyncSession
-from shared.db_session import get_async_db_session # Ensure using async session for API
-from shared.repositories import MLModelTypeDefinitionRepository # Async version if exists, or adapt
-from shared.schemas.ml_model_type_definition import AvailableModelTypeResponse # For API response
+from shared.db_session import get_async_db_session  # Ensure using async session for API
+from shared.repositories import (
+    MLModelTypeDefinitionRepository,
+)  # Async version if exists, or adapt
+from shared.schemas.enums import DatasetStatusEnum, JobStatusEnum
+from shared.schemas.ml_model_type_definition import (
+    AvailableModelTypeResponse,
+)  # For API response
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
 
 router = APIRouter()
+
 
 # TODO: Implement proper implementation with repository...
 @router.get(
@@ -40,19 +39,25 @@ async def list_available_model_types(
     db: AsyncSession = Depends(get_async_db_session),
 ):
     logger.info("API: Fetching available model types.")
-    
+
     def get_types_sync(session: SyncSession):
         repo = MLModelTypeDefinitionRepository(lambda: session)
         db_model_types = repo.get_all_enabled(limit=500)
         # Convert each DB model to response schema properly
         response_list = []
         for mt in db_model_types:
-            response_list.append(AvailableModelTypeResponse(
-                type_name=mt.type_name.value if hasattr(mt.type_name, 'value') else str(mt.type_name),
-                display_name=mt.display_name,
-                description=mt.description,
-                hyperparameter_schema=mt.hyperparameter_schema
-            ))
+            response_list.append(
+                AvailableModelTypeResponse(
+                    type_name=(
+                        mt.type_name.value
+                        if hasattr(mt.type_name, "value")
+                        else str(mt.type_name)
+                    ),
+                    display_name=mt.display_name,
+                    description=mt.description,
+                    hyperparameter_schema=mt.hyperparameter_schema,
+                )
+            )
         return response_list
 
     try:
@@ -201,15 +206,26 @@ async def list_training_jobs(
     dataset_id: Optional[int] = Query(None, description="Filter by dataset ID"),
     repository_id: Optional[int] = Query(None, description="Filter by repository ID."),
     status: Optional[JobStatusEnum] = Query(None, description="Filter by job status"),
-    name_filter: Optional[str] = Query(None, alias="nameFilter", description="Filter by job name."),
-    sort_by: Optional[str] = Query('created_at', alias="sortBy"),
-    sort_dir: Optional[str] = Query('desc', alias="sortDir", pattern="^(asc|desc)$")
+    name_filter: Optional[str] = Query(
+        None, alias="nameFilter", description="Filter by job name."
+    ),
+    sort_by: Optional[str] = Query("created_at", alias="sortBy"),
+    sort_dir: Optional[str] = Query("desc", alias="sortDir", pattern="^(asc|desc)$"),
 ):
     items, total = await crud.crud_training_job.get_training_jobs(
-        db, skip=skip, limit=limit, dataset_id=dataset_id, repository_id=repository_id, status=status,
-        name_filter=name_filter, sort_by=sort_by, sort_dir=sort_dir
+        db,
+        skip=skip,
+        limit=limit,
+        dataset_id=dataset_id,
+        repository_id=repository_id,
+        status=status,
+        name_filter=name_filter,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
     )
-    return schemas.PaginatedTrainingJobRead(items=items, total=total, skip=skip, limit=limit)
+    return schemas.PaginatedTrainingJobRead(
+        items=items, total=total, skip=skip, limit=limit
+    )
 
 
 # === ML Models ===
@@ -225,11 +241,17 @@ async def list_ml_models(
     db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    model_name: Optional[str] = Query(None, alias="nameFilter", description="Filter by logical model name (case-insensitive)."),
+    model_name: Optional[str] = Query(
+        None,
+        alias="nameFilter",
+        description="Filter by logical model name (case-insensitive).",
+    ),
     model_type: Optional[str] = Query(None, description="Filter by model type."),
     dataset_id: Optional[int] = Query(None, description="Filter by dataset ID."),
-    sort_by: Optional[str] = Query('created_at', alias="sortBy", description="Column to sort by."),
-    sort_dir: Optional[str] = Query('desc', alias="sortDir", pattern="^(asc|desc)$")
+    sort_by: Optional[str] = Query(
+        "created_at", alias="sortBy", description="Column to sort by."
+    ),
+    sort_dir: Optional[str] = Query("desc", alias="sortDir", pattern="^(asc|desc)$"),
 ):
     logger.info(
         f"Listing ML models (Name: {model_name}, Type: {model_type}, Dataset: {dataset_id}, Skip: {skip}, Limit: {limit})"
@@ -242,7 +264,7 @@ async def list_ml_models(
         model_type=model_type,
         dataset_id=dataset_id,
         sort_by=sort_by,
-        sort_dir=sort_dir
+        sort_dir=sort_dir,
     )
     return schemas.PaginatedMLModelRead(
         items=items, total=total, skip=skip, limit=limit
@@ -336,7 +358,9 @@ async def submit_hp_search_job(
     )
 
     if existing_jobs and existing_jobs[0]:
-        first_job = existing_jobs[0][0]  # Get the most recent one if multiple somehow exist
+        first_job = existing_jobs[0][
+            0
+        ]  # Get the most recent one if multiple somehow exist
         if optuna_config.continue_if_exists:
             # Check if dataset matches
             if first_job.dataset_id != job_in.dataset_id:
@@ -533,15 +557,26 @@ async def list_hp_search_jobs(
     dataset_id: Optional[int] = Query(None, description="Filter by dataset ID"),
     repository_id: Optional[int] = Query(None, description="Filter by repository ID."),
     status: Optional[JobStatusEnum] = Query(None, description="Filter by job status"),
-    name_filter: Optional[str] = Query(None, alias="nameFilter", description="Filter by Optuna study name."),
-    sort_by: Optional[str] = Query('created_at', alias="sortBy"),
-    sort_dir: Optional[str] = Query('desc', alias="sortDir", pattern="^(asc|desc)$")
+    name_filter: Optional[str] = Query(
+        None, alias="nameFilter", description="Filter by Optuna study name."
+    ),
+    sort_by: Optional[str] = Query("created_at", alias="sortBy"),
+    sort_dir: Optional[str] = Query("desc", alias="sortDir", pattern="^(asc|desc)$"),
 ):
     items, total = await crud.crud_hp_search_job.get_hp_search_jobs(
-        db, skip=skip, limit=limit, dataset_id=dataset_id, repository_id=repository_id, status=status,
-        name_filter=name_filter, sort_by=sort_by, sort_dir=sort_dir
+        db,
+        skip=skip,
+        limit=limit,
+        dataset_id=dataset_id,
+        repository_id=repository_id,
+        status=status,
+        name_filter=name_filter,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
     )
-    return schemas.PaginatedHPSearchJobRead(items=items, total=total, skip=skip, limit=limit)
+    return schemas.PaginatedHPSearchJobRead(
+        items=items, total=total, skip=skip, limit=limit
+    )
 
 
 # === Manual Inference Trigger ===
@@ -599,29 +634,37 @@ async def get_inference_job_details(
 async def list_inference_jobs(
     db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
-    limit: int = Query(10, ge=1, le=500), # Default limit to 10
+    limit: int = Query(10, ge=1, le=500),  # Default limit to 10
     model_id: Optional[int] = Query(None, description="Filter by ML Model ID used."),
     repository_id: Optional[int] = Query(None, description="Filter by repository ID."),
     status: Optional[JobStatusEnum] = Query(None, description="Filter by job status"),
-    name_filter: Optional[str] = Query(None, alias="nameFilter", description="Filter by commit hash."),
-    sort_by: Optional[str] = Query('triggered_at', alias="sortBy", description="Column to sort by. Options: job_id, repository_name, commit, model_name, status, triggered_at, prediction"),
-    sort_dir: Optional[str] = Query('desc', alias="sortDir", pattern="^(asc|desc)$")
+    name_filter: Optional[str] = Query(
+        None, alias="nameFilter", description="Filter by commit hash."
+    ),
+    sort_by: Optional[str] = Query(
+        "triggered_at",
+        alias="sortBy",
+        description="Column to sort by. Options: job_id, repository_name, commit, model_name, status, triggered_at, prediction",
+    ),
+    sort_dir: Optional[str] = Query("desc", alias="sortDir", pattern="^(asc|desc)$"),
 ):
     """
     Retrieves a paginated list of all inference jobs, with server-side sorting and filtering.
     """
     items, total = await crud.crud_inference_job.get_inference_jobs(
-        db, 
-        skip=skip, 
-        limit=limit, 
-        model_id=model_id, 
-        repository_id=repository_id, 
+        db,
+        skip=skip,
+        limit=limit,
+        model_id=model_id,
+        repository_id=repository_id,
         status=status,
-        name_filter=name_filter, 
-        sort_by=sort_by, 
-        sort_dir=sort_dir
+        name_filter=name_filter,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
     )
-    return schemas.PaginatedInferenceJobRead(items=items, total=total, skip=skip, limit=limit)
+    return schemas.PaginatedInferenceJobRead(
+        items=items, total=total, skip=skip, limit=limit
+    )
 
 
 # --- XAI Orchestration ---

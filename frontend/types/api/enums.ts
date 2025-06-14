@@ -8,25 +8,24 @@ export enum DatasetStatusEnum {
 }
 
 export enum CommitIngestionStatusEnum {
-    NOT_INGESTED = "NOT_INGESTED",
-    PENDING = "PENDING",
-    RUNNING = "RUNNING",
-    COMPLETE = "COMPLETE",
-    FAILED = "FAILED",
+  NOT_INGESTED = "NOT_INGESTED",
+  PENDING = "PENDING",
+  RUNNING = "RUNNING",
+  COMPLETE = "COMPLETE",
+  FAILED = "FAILED",
 }
 
 export enum FileChangeTypeEnum {
-    A = "A", // Added
-    M = "M", // Modified
-    D = "D", // Deleted
-    R = "R", // Renamed
-    C = "C", // Copied
-    T = "T", // Type change
-    U = "U", // Unmerged
-    X = "X", // Unknown
-    B = "B", // Broken
+  A = "A", // Added
+  M = "M", // Modified
+  D = "D", // Deleted
+  R = "R", // Renamed
+  C = "C", // Copied
+  T = "T", // Type change
+  U = "U", // Unmerged
+  X = "X", // Unknown
+  B = "B", // Broken
 }
-
 
 export enum JobStatusEnum {
   STARTED = "started",
@@ -53,39 +52,39 @@ export enum ModelTypeEnum {
 }
 
 export enum XAITypeEnum {
-    SHAP = "shap",
-    LIME = "lime",
-    FEATURE_IMPORTANCE = "feature_importance",
-    DECISION_PATH = "decision_path",
-    COUNTERFACTUALS = "counterfactuals",
+  SHAP = "shap",
+  LIME = "lime",
+  FEATURE_IMPORTANCE = "feature_importance",
+  DECISION_PATH = "decision_path",
+  COUNTERFACTUALS = "counterfactuals",
 }
 
 export enum XAIStatusEnum {
-    PENDING = "pending",
-    RUNNING = "running",
-    SUCCESS = "success",
-    FAILED = "failed",
-    REVOKED = "revoked",
+  PENDING = "pending",
+  RUNNING = "running",
+  SUCCESS = "success",
+  FAILED = "failed",
+  REVOKED = "revoked",
 }
 
 export enum ObjectiveMetricEnum {
-    F1_WEIGHTED = "f1_weighted",
-    AUC = "auc",
-    PRECISION_WEIGHTED = "precision_weighted",
-    RECALL_WEIGHTED = "recall_weighted",
-    ACCURACY = "accuracy",
+  F1_WEIGHTED = "f1_weighted",
+  AUC = "auc",
+  PRECISION_WEIGHTED = "precision_weighted",
+  RECALL_WEIGHTED = "recall_weighted",
+  ACCURACY = "accuracy",
 }
 
 export enum SamplerTypeEnum {
-    TPE = "tpe",
-    RANDOM = "random",
-    CMAES = "cmaes",
+  TPE = "tpe",
+  RANDOM = "random",
+  CMAES = "cmaes",
 }
 
 export enum PrunerTypeEnum {
-    MEDIAN = "median",
-    HYPERBAND = "hyperband",
-    NOP = "nop",
-    PERCENTILE = "percentile",
-    SUCCESSIVEHALVING = "successivehalving",
+  MEDIAN = "median",
+  HYPERBAND = "hyperband",
+  NOP = "nop",
+  PERCENTILE = "percentile",
+  SUCCESSIVEHALVING = "successivehalving",
 }

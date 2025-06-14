@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from shared.db.models.dataset import Dataset
 from shared.db.models.ml_model import MLModel
-from shared.db.models.repository import Repository # Added import
+from shared.db.models.repository import Repository  # Added import
 from shared.db.models.training_job import JobStatusEnum, TrainingJob
 from shared.schemas.training_job import TrainingJobCreate, TrainingJobUpdate
 
@@ -23,7 +23,7 @@ async def get_training_job(db: AsyncSession, job_id: int) -> Optional[TrainingJo
             selectinload(TrainingJob.dataset).selectinload(Dataset.repository),
             selectinload(TrainingJob.ml_model)
             .selectinload(MLModel.dataset)
-            .selectinload(Dataset.repository)
+            .selectinload(Dataset.repository),
         )
         .filter(TrainingJob.id == job_id)
     )
@@ -41,7 +41,7 @@ async def get_training_job_by_task_id(
             selectinload(TrainingJob.dataset).selectinload(Dataset.repository),
             selectinload(TrainingJob.ml_model)
             .selectinload(MLModel.dataset)
-            .selectinload(Dataset.repository)
+            .selectinload(Dataset.repository),
         )
         .filter(TrainingJob.celery_task_id == celery_task_id)
     )
@@ -58,30 +58,29 @@ async def get_training_jobs(
     repository_id: Optional[int] = None,
     status: Optional[JobStatusEnum] = None,
     name_filter: Optional[str] = None,
-    sort_by: Optional[str] = 'created_at',
-    sort_dir: Optional[str] = 'desc'
+    sort_by: Optional[str] = "created_at",
+    sort_dir: Optional[str] = "desc",
 ) -> Tuple[Sequence[TrainingJob], int]:
     """Get multiple training jobs with optional filtering and pagination."""
-    
+
     stmt_items = select(TrainingJob).options(
         selectinload(TrainingJob.dataset).selectinload(Dataset.repository),
         selectinload(TrainingJob.ml_model)
         # Eager load ml_model.dataset.repository if needed for response serialization
-        .selectinload(MLModel.dataset)
-        .selectinload(Dataset.repository)
+        .selectinload(MLModel.dataset).selectinload(Dataset.repository),
     )
     stmt_total = select(func.count(TrainingJob.id))
 
     # Determine required joins based on filters and sorting
     needs_dataset_join = False
-    needs_repository_join = False # For joining Repository table via Dataset
+    needs_repository_join = False  # For joining Repository table via Dataset
 
     if repository_id is not None:
-        needs_dataset_join = True # Filtering by repository_id requires joining Dataset
-    
-    if sort_by == 'dataset_name':
+        needs_dataset_join = True  # Filtering by repository_id requires joining Dataset
+
+    if sort_by == "dataset_name":
         needs_dataset_join = True
-    elif sort_by == 'repository_name':
+    elif sort_by == "repository_name":
         needs_dataset_join = True
         needs_repository_join = True
 
@@ -90,12 +89,11 @@ async def get_training_jobs(
     if needs_dataset_join:
         stmt_items = stmt_items.join(TrainingJob.dataset.of_type(Dataset))
         stmt_total = stmt_total.join(TrainingJob.dataset.of_type(Dataset))
-        
+
         # If repository_name sort or repository_id filter, further join Repository
-        if needs_repository_join: # This implies Dataset was already joined
+        if needs_repository_join:  # This implies Dataset was already joined
             stmt_items = stmt_items.join(Dataset.repository.of_type(Repository))
             stmt_total = stmt_total.join(Dataset.repository.of_type(Repository))
-
 
     filters = []
     if dataset_id is not None:
@@ -106,28 +104,32 @@ async def get_training_jobs(
     if status:
         filters.append(TrainingJob.status == status)
     if name_filter:
-        filters.append(TrainingJob.config.op('->>')('model_name').ilike(f"%{name_filter}%"))
+        filters.append(
+            TrainingJob.config.op("->>")("model_name").ilike(f"%{name_filter}%")
+        )
 
     if filters:
         stmt_items = stmt_items.where(*filters)
         stmt_total = stmt_total.where(*filters)
-        
+
     # Get total count
     result_total = await db.execute(stmt_total)
     total = result_total.scalar_one_or_none() or 0
 
     # Sorting
     sort_mapping = {
-        'name': TrainingJob.config.op('->>')('model_name'),
-        'status': TrainingJob.status,
-        'created_at': TrainingJob.created_at,
-        'repository_name': Repository.name, # Requires Repository join
-        'dataset_name': Dataset.name,       # Requires Dataset join
-        'model_type': TrainingJob.config.op('->>')('model_type'),
+        "name": TrainingJob.config.op("->>")("model_name"),
+        "status": TrainingJob.status,
+        "created_at": TrainingJob.created_at,
+        "repository_name": Repository.name,  # Requires Repository join
+        "dataset_name": Dataset.name,  # Requires Dataset join
+        "model_type": TrainingJob.config.op("->>")("model_type"),
     }
     sort_column = sort_mapping.get(sort_by, TrainingJob.created_at)
-    
-    stmt_items = stmt_items.order_by(desc(sort_column) if sort_dir == 'desc' else asc(sort_column))
+
+    stmt_items = stmt_items.order_by(
+        desc(sort_column) if sort_dir == "desc" else asc(sort_column)
+    )
 
     # Pagination
     stmt_items = stmt_items.offset(skip).limit(limit)
@@ -205,7 +207,7 @@ async def get_training_jobs_by_repository(
             selectinload(TrainingJob.dataset).selectinload(Dataset.repository),
             selectinload(TrainingJob.ml_model)
             .selectinload(MLModel.dataset)
-            .selectinload(Dataset.repository)
+            .selectinload(Dataset.repository),
         )
         .where(TrainingJob.dataset_id.in_(dataset_ids_stmt))
         .order_by(TrainingJob.created_at.desc())

@@ -1,15 +1,15 @@
 # backend/app/services/commit_service.py
 import logging
 
+from app import crud
+from app.core.celery_app import backend_celery_app
 from celery import Celery
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import crud
-from app.core.celery_app import backend_celery_app
 from shared.db_session import get_async_db_session
 from shared.schemas.commit import CommitPageResponse
-from shared.schemas.enums import CommitIngestionStatusEnum, JobStatusEnum
+from shared.schemas.enums import CommitIngestionStatusEnum
 from shared.schemas.task import TaskResponse
 
 logger = logging.getLogger(__name__)
@@ -94,10 +94,8 @@ class CommitService:
             args=[None, repo_id, commit_hash],
             queue="ingestion",
         )
-        
+
         # Update the placeholder with the new task ID
-        await crud.crud_commit_details.set_ingestion_task(
-            self.db, detail_id, task.id
-        )
+        await crud.crud_commit_details.set_ingestion_task(self.db, detail_id, task.id)
 
         return TaskResponse(task_id=task.id)

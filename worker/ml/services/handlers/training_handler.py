@@ -1,7 +1,7 @@
 # worker/ml/services/handlers/training_handler.py
+import asyncio
 import logging
 from typing import Any, Dict, Optional, Tuple
-import asyncio
 
 import pandas as pd
 

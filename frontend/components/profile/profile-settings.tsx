@@ -1,25 +1,25 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { useState, useEffect } from "react"
-import { useAuth } from "@/components/auth/auth-provider"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Separator } from "@/components/ui/separator"
-import { Switch } from "@/components/ui/switch"
-import { Loader2, Upload } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
-import { useTheme } from "@/components/theme-provider"
+import { useState, useEffect } from "react";
+import { useAuth } from "@/components/auth/auth-provider";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import { Loader2, Upload } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { useTheme } from "@/components/theme-provider";
 
 export function ProfileSettings() {
-  const { user, updateUser } = useAuth()
-  const { toast } = useToast()
-  const { theme } = useTheme()
-  const [isLoading, setIsLoading] = useState(false)
+  const { user, updateUser } = useAuth();
+  const { toast } = useToast();
+  const { theme } = useTheme();
+  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: user?.name || "",
     email: user?.email || "",
@@ -27,7 +27,7 @@ export function ProfileSettings() {
     company: user?.company || "",
     darkMode: user?.preferences?.darkMode || false,
     compactView: user?.preferences?.compactView || false,
-  })
+  });
 
   // Update form data when user changes
   useEffect(() => {
@@ -39,26 +39,26 @@ export function ProfileSettings() {
         company: user.company || "",
         darkMode: user.preferences?.darkMode || false,
         compactView: user.preferences?.compactView || false,
-      })
+      });
     }
-  }, [user])
+  }, [user]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
-  }
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
 
   const handleSwitchChange = (name: string, checked: boolean) => {
-    setFormData((prev) => ({ ...prev, [name]: checked }))
-  }
+    setFormData((prev) => ({ ...prev, [name]: checked }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
+    e.preventDefault();
+    setIsLoading(true);
 
     try {
       // In a real app, this would be an API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       // Update user in auth context
       updateUser({
@@ -71,22 +71,22 @@ export function ProfileSettings() {
           darkMode: formData.darkMode,
           compactView: formData.compactView,
         },
-      })
+      });
 
       toast({
         title: "Profile updated",
         description: "Your profile has been updated successfully",
-      })
+      });
     } catch (error) {
       toast({
         title: "Error",
         description: "Failed to update profile",
         variant: "destructive",
-      })
+      });
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   return (
     <div className="space-y-6">
@@ -101,7 +101,9 @@ export function ProfileSettings() {
               <div className="flex flex-col items-center space-y-4">
                 <Avatar className="h-24 w-24">
                   <AvatarImage src={user?.avatar || "/placeholder.svg"} alt={user?.name} />
-                  <AvatarFallback className="text-2xl">{user?.name?.charAt(0) || "U"}</AvatarFallback>
+                  <AvatarFallback className="text-2xl">
+                    {user?.name?.charAt(0) || "U"}
+                  </AvatarFallback>
                 </Avatar>
                 <Button variant="outline" size="sm" className="w-full">
                   <Upload className="mr-2 h-4 w-4" />
@@ -176,7 +178,9 @@ export function ProfileSettings() {
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label htmlFor="compactView">Compact View</Label>
-                    <p className="text-sm text-muted-foreground">Display more content on screen with reduced spacing</p>
+                    <p className="text-sm text-muted-foreground">
+                      Display more content on screen with reduced spacing
+                    </p>
                   </div>
                   <Switch
                     id="compactView"
@@ -203,5 +207,5 @@ export function ProfileSettings() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

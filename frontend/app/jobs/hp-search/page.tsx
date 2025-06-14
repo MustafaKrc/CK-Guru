@@ -10,7 +10,7 @@ import { PageContainer } from "@/components/ui/page-container";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ArrowLeft, ArrowRight, Check, Loader2, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { PageLoader } from '@/components/ui/page-loader';
+import { PageLoader } from "@/components/ui/page-loader";
 import Link from "next/link";
 
 import { HpSearchJobFormData, initialHpSearchJobFormData } from "@/types/jobs";
@@ -64,35 +64,59 @@ function CreateHpSearchJobPageContent() {
     switch (step) {
       case 1:
         if (!formData.repositoryId || !formData.datasetId) {
-          toast({ title: "Missing Information", description: "Please select both a repository and a dataset.", variant: "destructive" });
+          toast({
+            title: "Missing Information",
+            description: "Please select both a repository and a dataset.",
+            variant: "destructive",
+          });
           return false;
         }
         return true;
       case 2:
         if (!formData.modelType) {
-          toast({ title: "Missing Information", description: "Please select a model type.", variant: "destructive" });
+          toast({
+            title: "Missing Information",
+            description: "Please select a model type.",
+            variant: "destructive",
+          });
           return false;
         }
         return true;
       case 3:
         if (formData.hpSpace.length === 0) {
-          toast({ title: "Empty Search Space", description: "Please enable and configure at least one hyperparameter for the search.", variant: "destructive" });
+          toast({
+            title: "Empty Search Space",
+            description: "Please enable and configure at least one hyperparameter for the search.",
+            variant: "destructive",
+          });
           return false;
         }
         return true;
       case 4:
-         if (!formData.optunaConfig.n_trials || formData.optunaConfig.n_trials < 1) {
-          toast({ title: "Invalid Trials", description: "Number of trials must be at least 1.", variant: "destructive" });
+        if (!formData.optunaConfig.n_trials || formData.optunaConfig.n_trials < 1) {
+          toast({
+            title: "Invalid Trials",
+            description: "Number of trials must be at least 1.",
+            variant: "destructive",
+          });
           return false;
         }
         return true;
       case 5:
         if (!formData.studyName.trim()) {
-          toast({ title: "Study Name Required", description: "Please provide a name for this study.", variant: "destructive" });
+          toast({
+            title: "Study Name Required",
+            description: "Please provide a name for this study.",
+            variant: "destructive",
+          });
           return false;
         }
         if (formData.saveBestModel && !formData.modelBaseName.trim()) {
-          toast({ title: "Model Name Required", description: "Please provide a base name for saving the best model.", variant: "destructive" });
+          toast({
+            title: "Model Name Required",
+            description: "Please provide a base name for saving the best model.",
+            variant: "destructive",
+          });
           return false;
         }
         return true;
@@ -103,12 +127,21 @@ function CreateHpSearchJobPageContent() {
 
   const isStepValid = useMemo(() => {
     switch (currentStep) {
-      case 1: return !!(formData.repositoryId && formData.datasetId);
-      case 2: return !!formData.modelType;
-      case 3: return formData.hpSpace.length > 0;
-      case 4: return !!(formData.optunaConfig.n_trials && formData.optunaConfig.n_trials > 0);
-      case 5: return !!(formData.studyName.trim() && (!formData.saveBestModel || formData.modelBaseName.trim()));
-      default: return false;
+      case 1:
+        return !!(formData.repositoryId && formData.datasetId);
+      case 2:
+        return !!formData.modelType;
+      case 3:
+        return formData.hpSpace.length > 0;
+      case 4:
+        return !!(formData.optunaConfig.n_trials && formData.optunaConfig.n_trials > 0);
+      case 5:
+        return !!(
+          formData.studyName.trim() &&
+          (!formData.saveBestModel || formData.modelBaseName.trim())
+        );
+      default:
+        return false;
     }
   }, [currentStep, formData]);
 
@@ -160,7 +193,8 @@ function CreateHpSearchJobPageContent() {
       });
       router.push(`/jobs/${response.job_id}?type=hp_search`);
     } catch (error) {
-      const errorMsg = error instanceof ApiError ? error.message : "Failed to submit HP search job.";
+      const errorMsg =
+        error instanceof ApiError ? error.message : "Failed to submit HP search job.";
       setSubmissionError(errorMsg);
       handleApiError(error, "HP Search Job Submission Failed");
     } finally {
@@ -170,12 +204,20 @@ function CreateHpSearchJobPageContent() {
 
   const renderStepContent = () => {
     switch (currentStep) {
-      case 1: return <SelectRepositoryAndDatasetStep formData={formData} updateFormData={updateFormData} />;
-      case 2: return <SelectModelForHpSearchStep formData={formData} updateFormData={updateFormData} />;
-      case 3: return <ConfigureSearchSpaceStep formData={formData} updateFormData={updateFormData} />;
-      case 4: return <ConfigureSearchSettingsStep formData={formData} updateFormData={updateFormData} />;
-      case 5: return <ReviewAndSubmitHpSearchStep formData={formData} updateFormData={updateFormData} />;
-      default: return <div>Invalid Step</div>;
+      case 1:
+        return (
+          <SelectRepositoryAndDatasetStep formData={formData} updateFormData={updateFormData} />
+        );
+      case 2:
+        return <SelectModelForHpSearchStep formData={formData} updateFormData={updateFormData} />;
+      case 3:
+        return <ConfigureSearchSpaceStep formData={formData} updateFormData={updateFormData} />;
+      case 4:
+        return <ConfigureSearchSettingsStep formData={formData} updateFormData={updateFormData} />;
+      case 5:
+        return <ReviewAndSubmitHpSearchStep formData={formData} updateFormData={updateFormData} />;
+      default:
+        return <div>Invalid Step</div>;
     }
   };
 
@@ -185,12 +227,15 @@ function CreateHpSearchJobPageContent() {
         title="Create New Hyperparameter Search Job"
         description="Follow these steps to configure and launch a new HP search."
       >
-        <HpSearchJobStepper currentStep={currentStep} steps={WIZARD_STEPS} onStepClick={handleStepNavigation} maxCompletedStep={maxCompletedStep} />
+        <HpSearchJobStepper
+          currentStep={currentStep}
+          steps={WIZARD_STEPS}
+          onStepClick={handleStepNavigation}
+          maxCompletedStep={maxCompletedStep}
+        />
 
         <Card className="mt-6">
-          <CardContent className="pt-6">
-            {renderStepContent()}
-          </CardContent>
+          <CardContent className="pt-6">{renderStepContent()}</CardContent>
         </Card>
 
         {submissionError && (
@@ -201,7 +246,11 @@ function CreateHpSearchJobPageContent() {
         )}
 
         <div className="mt-8 flex justify-between">
-          <Button variant="outline" onClick={handlePrevious} disabled={currentStep === 1 || isSubmitting}>
+          <Button
+            variant="outline"
+            onClick={handlePrevious}
+            disabled={currentStep === 1 || isSubmitting}
+          >
             <ArrowLeft className="mr-2 h-4 w-4" /> Previous
           </Button>
           <Button onClick={handleNext} disabled={isSubmitting || !isStepValid}>
@@ -212,7 +261,11 @@ function CreateHpSearchJobPageContent() {
             ) : (
               <ArrowRight className="mr-2 h-4 w-4" />
             )}
-            {currentStep === TOTAL_STEPS ? (isSubmitting ? "Submitting..." : "Submit HP Search Job") : "Next"}
+            {currentStep === TOTAL_STEPS
+              ? isSubmitting
+                ? "Submitting..."
+                : "Submit HP Search Job"
+              : "Next"}
           </Button>
         </div>
       </PageContainer>

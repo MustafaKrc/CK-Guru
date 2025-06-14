@@ -6,20 +6,14 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.db.models.dataset import Dataset, DatasetStatusEnum
-from shared.db.models.hp_search_job import (
-    HyperparameterSearchJob,
-    JobStatusEnum as HPSearchJobStatusEnum,
-)
-from shared.db.models.inference_job import (
-    InferenceJob,
-    JobStatusEnum as InferenceJobStatusEnum,
-)
+from shared.db.models.hp_search_job import HyperparameterSearchJob
+from shared.db.models.hp_search_job import JobStatusEnum as HPSearchJobStatusEnum
+from shared.db.models.inference_job import InferenceJob
+from shared.db.models.inference_job import JobStatusEnum as InferenceJobStatusEnum
 from shared.db.models.ml_model import MLModel
 from shared.db.models.repository import Repository
-from shared.db.models.training_job import (
-    TrainingJob,
-    JobStatusEnum as TrainingJobStatusEnum,
-)
+from shared.db.models.training_job import JobStatusEnum as TrainingJobStatusEnum
+from shared.db.models.training_job import TrainingJob
 from shared.schemas.dashboard import DashboardSummaryStats, DatasetsByStatus
 
 logger = logging.getLogger(__name__)
@@ -77,7 +71,7 @@ class DashboardService:
                     [
                         TrainingJobStatusEnum.PENDING,
                         TrainingJobStatusEnum.RUNNING,
-                        #TrainingJobStatusEnum.STARTED,
+                        # TrainingJobStatusEnum.STARTED,
                     ]
                 )
             )
@@ -90,7 +84,7 @@ class DashboardService:
                     [
                         HPSearchJobStatusEnum.PENDING,
                         HPSearchJobStatusEnum.RUNNING,
-                        #HPSearchJobStatusEnum.STARTED,
+                        # HPSearchJobStatusEnum.STARTED,
                     ]
                 )
             )
@@ -103,7 +97,7 @@ class DashboardService:
                     [
                         InferenceJobStatusEnum.PENDING,
                         InferenceJobStatusEnum.RUNNING,
-                        #InferenceJobStatusEnum.STARTED,
+                        # InferenceJobStatusEnum.STARTED,
                     ]
                 )
             )
@@ -116,11 +110,11 @@ class DashboardService:
         active_dataset_generation_tasks = (
             datasets_by_status_obj.generating + datasets_by_status_obj.pending
         )
-        
+
         # Placeholder for active ingestion tasks.
         # A robust count requires tracking Celery task states for repository ingestion
         # or adding an 'ingestion_status' field to the Repository model.
-        active_ingestion_tasks = 0 
+        active_ingestion_tasks = 0
 
         return DashboardSummaryStats(
             total_repositories=total_repositories,
@@ -133,5 +127,6 @@ class DashboardService:
             active_ml_jobs=total_active_ml_jobs,
         )
 
-#TODO: singleton may not be the best pattern here, consider using dependency injection
+
+# TODO: singleton may not be the best pattern here, consider using dependency injection
 dashboard_service = DashboardService()

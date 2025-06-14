@@ -1,7 +1,7 @@
 import time
 from typing import Optional
-from unittest.mock import (  # ANY is useful for comparing headers loosely
-    ANY,
+from unittest.mock import (
+    ANY,  # ANY is useful for comparing headers loosely
     MagicMock,
     patch,
 )
@@ -13,11 +13,11 @@ from requests.exceptions import ConnectionError, RequestException, Timeout
 # Import functions and classes to test
 from shared.utils import github_utils
 from shared.utils.github_utils import (
-    GitHubAPIResponse,  # Import for type hinting and comparison
+    GitHubAPIResponse,
     GitHubIssueFetcher,
     extract_issue_ids,
     extract_repo_owner_name,
-)
+)  # Import for type hinting and comparison
 
 # --- Tests for extract_repo_owner_name ---
 

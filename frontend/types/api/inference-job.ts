@@ -1,14 +1,14 @@
 // frontend/types/api/inference-job.ts
 import { JobStatusEnum } from "./enums";
-import { MLModelRead } from './ml-model';
-import { FilePredictionDetail } from "./xai"; 
+import { MLModelRead } from "./ml-model";
+import { FilePredictionDetail } from "./xai";
 
 export interface InferenceResultPackage {
-    commit_prediction: number;
-    max_bug_probability: number;
-    num_files_analyzed: number;
-    details?: FilePredictionDetail[] | null;
-    error?: string | null;
+  commit_prediction: number;
+  max_bug_probability: number;
+  num_files_analyzed: number;
+  details?: FilePredictionDetail[] | null;
+  error?: string | null;
 }
 
 export interface InferenceJobRead {
@@ -28,15 +28,15 @@ export interface InferenceJobRead {
 
 // For triggering manual inference (matches ManualInferenceRequest)
 export interface ManualInferenceRequestPayload {
-    repo_id: number;
-    target_commit_hash: string;
-    ml_model_id: number;
+  repo_id: number;
+  target_commit_hash: string;
+  ml_model_id: number;
 }
 
 // For the API response when triggering inference (matches InferenceTriggerResponse)
 export interface InferenceTriggerResponse {
-    inference_job_id: number;
-    initial_task_id: string; // This is the feature extraction task ID
+  inference_job_id: number;
+  initial_task_id: string; // This is the feature extraction task ID
 }
 
 export interface PaginatedInferenceJobRead {

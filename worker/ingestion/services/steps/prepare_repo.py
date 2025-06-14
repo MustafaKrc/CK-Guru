@@ -1,7 +1,7 @@
 # worker/ingestion/services/steps/prepare_repo.py
+import asyncio
 import logging
 import shutil
-import asyncio
 from pathlib import Path
 
 # Use GitPython directly for this step's core function
@@ -98,7 +98,9 @@ class PrepareRepositoryStep(IngestionStep):
     async def execute(self, context: IngestionContext, **kwargs) -> IngestionContext:
         self._log_info(context, f"Ensuring clone at {context.repo_local_path}")
         try:
-            repo = await asyncio.to_thread(_ensure_repository_prepared, context.git_url, context.repo_local_path)
+            repo = await asyncio.to_thread(
+                _ensure_repository_prepared, context.git_url, context.repo_local_path
+            )
             context.repo_object = repo or None
             if not repo:
                 raise ValueError("Repo object missing")

@@ -1,6 +1,6 @@
 # shared/repositories/commit_details_repository.py
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -18,9 +18,7 @@ logger = logging.getLogger(__name__)
 class CommitDetailsRepository(BaseRepository[CommitDetails]):
     """Handles synchronous database operations for CommitDetails."""
 
-    def get_by_hash(
-        self, repo_id: int, commit_hash: str
-    ) -> Optional[CommitDetails]:
+    def get_by_hash(self, repo_id: int, commit_hash: str) -> Optional[CommitDetails]:
         with self._session_scope() as session:
             stmt = (
                 select(CommitDetails)
@@ -58,7 +56,7 @@ class CommitDetailsRepository(BaseRepository[CommitDetails]):
                 "status_message": "Ingestion task has been queued.",
             }
             stmt = pg_insert(CommitDetails).values(insert_values)
-            
+
             # If the commit already exists, just update the task_id and reset status.
             update_stmt = stmt.on_conflict_do_update(
                 index_elements=["repository_id", "commit_hash"],
@@ -72,24 +70,25 @@ class CommitDetailsRepository(BaseRepository[CommitDetails]):
             result = session.execute(update_stmt).scalar_one()
             session.commit()
             return result
-    
+
     def upsert_from_payload(self, payload: Dict):
         """
         Upserts a single commit's full details and its file diffs atomically.
         """
         with self._session_scope() as session:
             try:
-                commit_payload = payload['details']
-                diffs_payload = payload['diffs']
+                commit_payload = payload["details"]
+                diffs_payload = payload["diffs"]
 
                 # Use PostgreSQL's ON CONFLICT to either insert or update the commit details.
                 stmt = pg_insert(CommitDetails).values(commit_payload)
                 update_dict = {
                     col.name: getattr(stmt.excluded, col.name)
                     for col in CommitDetails.__table__.columns
-                    if col.name not in ["id", "repository_id", "commit_hash", "created_at"]
+                    if col.name
+                    not in ["id", "repository_id", "commit_hash", "created_at"]
                 }
-                
+
                 final_stmt = stmt.on_conflict_do_update(
                     index_elements=["repository_id", "commit_hash"],
                     set_=update_dict,
@@ -97,18 +96,26 @@ class CommitDetailsRepository(BaseRepository[CommitDetails]):
 
                 result = session.execute(final_stmt)
                 commit_detail_id = result.scalar_one()
-                
+
                 # Atomically replace diffs: delete old, insert new.
-                session.execute(delete(CommitFileDiff).where(CommitFileDiff.commit_detail_id == commit_detail_id))
-                
+                session.execute(
+                    delete(CommitFileDiff).where(
+                        CommitFileDiff.commit_detail_id == commit_detail_id
+                    )
+                )
+
                 if diffs_payload:
                     for diff in diffs_payload:
-                        diff['commit_detail_id'] = commit_detail_id
+                        diff["commit_detail_id"] = commit_detail_id
                     session.bulk_insert_mappings(CommitFileDiff, diffs_payload)
-                
+
                 session.commit()
-                logger.info(f"Successfully upserted details and diffs for commit_detail_id: {commit_detail_id}")
+                logger.info(
+                    f"Successfully upserted details and diffs for commit_detail_id: {commit_detail_id}"
+                )
             except SQLAlchemyError as e:
-                logger.error(f"Database error during commit details upsert: {e}", exc_info=True)
+                logger.error(
+                    f"Database error during commit details upsert: {e}", exc_info=True
+                )
                 session.rollback()
                 raise

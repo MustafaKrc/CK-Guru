@@ -17,7 +17,10 @@ class CKMetric(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     repository_id = Column(
-        Integer, ForeignKey("repositories.id", ondelete="CASCADE"), nullable=False, index=True
+        Integer,
+        ForeignKey("repositories.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     # Link back to the Repository model (optional but good practice)
     repository = relationship("Repository")  # Assumes you have a Repository model

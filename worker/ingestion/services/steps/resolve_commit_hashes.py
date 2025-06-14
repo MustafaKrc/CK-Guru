@@ -66,49 +66,71 @@ class ResolveCommitHashesStep(IngestionStep):
             visited_hashes: Set[str] = set()
             current_hash: str | None = context.target_commit_hash
 
-            MAX_RECURSION_DEPTH = 100 # Safety break
+            MAX_RECURSION_DEPTH = 100  # Safety break
             recursion_count = 0
 
-            while current_hash and current_hash not in visited_hashes and recursion_count < MAX_RECURSION_DEPTH:
+            while (
+                current_hash
+                and current_hash not in visited_hashes
+                and recursion_count < MAX_RECURSION_DEPTH
+            ):
                 recursion_count += 1
                 visited_hashes.add(current_hash)
-                
+
                 # Check if this commit's metrics already exist
                 existing_metric = await asyncio.to_thread(
                     guru_repo.get_by_hash, context.repository_id, current_hash
                 )
-                
+
                 if existing_metric:
-                    self._log_info(context, f"Found already ingested ancestor: {current_hash[:7]}. Stopping walk.")
-                    break # Stop: We found the boundary
+                    self._log_info(
+                        context,
+                        f"Found already ingested ancestor: {current_hash[:7]}. Stopping walk.",
+                    )
+                    break  # Stop: We found the boundary
                 else:
                     # This commit needs to be processed
                     commits_to_ingest.append(current_hash)
-                    self._log_info(context, f"Commit {current_hash[:7]} needs ingestion. Adding to queue.")
-                    
+                    self._log_info(
+                        context,
+                        f"Commit {current_hash[:7]} needs ingestion. Adding to queue.",
+                    )
+
                     # Move to the next parent
                     parent_hash = await asyncio.to_thread(
                         git_service.get_first_parent_hash, current_hash
                     )
                     current_hash = parent_hash
-            
+
             if recursion_count >= MAX_RECURSION_DEPTH:
-                self._log_warning(context, f"Reached max recursion depth ({MAX_RECURSION_DEPTH}) walking parent history. Stopping.")
+                self._log_warning(
+                    context,
+                    f"Reached max recursion depth ({MAX_RECURSION_DEPTH}) walking parent history. Stopping.",
+                )
 
             # The list is built from child -> parent, but pipeline should process parent -> child. Reverse it.
             context.commits_to_process = list(reversed(commits_to_ingest))
-            
+
             # For clarity, still set the immediate parent in the context, as other steps might rely on it.
             if len(commits_to_ingest) > 1:
-                context.parent_commit_hash = commits_to_ingest[1] # The second item added was the immediate parent
+                context.parent_commit_hash = commits_to_ingest[
+                    1
+                ]  # The second item added was the immediate parent
             elif context.target_commit_hash:
-                 context.parent_commit_hash = await asyncio.to_thread(git_service.get_first_parent_hash, context.target_commit_hash)
-            
-            if not context.commits_to_process:
-                 self._log_warning(context, f"Target commit {context.target_commit_hash[:7]} seems to be already ingested. No new commits to process.")
-            else:
-                 self._log_info(context, f"Final list of commits to process: {len(context.commits_to_process)}")
+                context.parent_commit_hash = await asyncio.to_thread(
+                    git_service.get_first_parent_hash, context.target_commit_hash
+                )
 
+            if not context.commits_to_process:
+                self._log_warning(
+                    context,
+                    f"Target commit {context.target_commit_hash[:7]} seems to be already ingested. No new commits to process.",
+                )
+            else:
+                self._log_info(
+                    context,
+                    f"Final list of commits to process: {len(context.commits_to_process)}",
+                )
 
         except GitRefNotFoundError as e:
             self._log_error(context, str(e), exc_info=False)

@@ -1,15 +1,16 @@
 # worker/dataset/services/pipeline.py
+import asyncio
 import logging
 from typing import List, Type
 
+from shared.schemas.enums import JobStatusEnum
 from shared.utils.pipeline_logging import StepLogger
 
 from .context import DatasetContext  # Import Context
 from .dependencies import DependencyProvider, StepRegistry  # Import DI classes
 from .interfaces import IDatasetGeneratorStep  # Import Step interface
 from .strategies import IDatasetGenerationStrategy  # Import Strategy interface
-import asyncio
-from shared.schemas.enums import JobStatusEnum
+
 logger = logging.getLogger(__name__)
 
 
@@ -70,14 +71,14 @@ class PipelineRunner:
                 # Update overall progress based on step completion
                 runner_progress = min(99, int(100 * ((i + 1) / total_steps)))
                 if context.task_instance:
-                    await context.task_instance.update_task_state( 
+                    await context.task_instance.update_task_state(
                         state=JobStatusEnum.RUNNING.value,
                         progress=runner_progress,
                         status_message=f"Pipeline: Completed step {self.current_step_instance.name}",
                         job_type=context.event_job_type,
                         entity_id=context.event_entity_id,
                         entity_type=context.event_entity_type,
-                        user_id=context.event_user_id 
+                        user_id=context.event_user_id,
                     )
 
             pipeline_logger.info("Pipeline execution finished successfully.")
@@ -92,8 +93,10 @@ class PipelineRunner:
             error_msg = f"Pipeline failed at step [{step_name_failed}]"
             full_error_details = f"{error_msg}: {type(e).__name__}: {str(e)[:500]}"
             # pipeline_logger.error(...)
-            
-            context.warnings.append(f"Pipeline critical failure at {step_name_failed}: {type(e).__name__}")
+
+            context.warnings.append(
+                f"Pipeline critical failure at {step_name_failed}: {type(e).__name__}"
+            )
 
             if context.task_instance:
                 try:
@@ -104,8 +107,10 @@ class PipelineRunner:
                         job_type=context.event_job_type,
                         entity_id=context.event_entity_id,
                         entity_type=context.event_entity_type,
-                        user_id=context.event_user_id
+                        user_id=context.event_user_id,
                     )
                 except Exception as final_update_err:
-                    logger.error(f"Failed to update task to FAILED state after pipeline error: {final_update_err}")
+                    logger.error(
+                        f"Failed to update task to FAILED state after pipeline error: {final_update_err}"
+                    )
             raise

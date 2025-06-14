@@ -1,13 +1,13 @@
 // frontend/components/main-layout.tsx
-"use client"
+"use client";
 
-import React from "react"
+import React from "react";
 
-import { useState, useEffect, useCallback } from "react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import {
   BarChart3,
   Database,
@@ -35,9 +35,9 @@ import {
   ArrowLeft,
   Puzzle,
   Wand2,
-} from "lucide-react"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
-import { ScrollArea } from "@/components/ui/scroll-area"
+} from "lucide-react";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,93 +45,93 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { useAuth } from "@/components/auth/auth-provider"
-import { useTheme } from "@/components/theme-provider"
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useAuth } from "@/components/auth/auth-provider";
+import { useTheme } from "@/components/theme-provider";
 import {
   Breadcrumb,
   BreadcrumbItem,
   BreadcrumbLink,
   BreadcrumbList,
   BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
+} from "@/components/ui/breadcrumb";
 
 interface MainLayoutProps {
-  children: React.ReactNode
+  children: React.ReactNode;
 }
 
 interface NavItem {
-  name: string
-  path: string
-  icon: React.ReactNode
-  children?: NavItem[]
-  exactPath?: boolean
+  name: string;
+  path: string;
+  icon: React.ReactNode;
+  children?: NavItem[];
+  exactPath?: boolean;
 }
 
 export function MainLayout({ children }: MainLayoutProps) {
-  const pathname = usePathname()
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const [isMobileView, setIsMobileView] = useState(false)
+  const pathname = usePathname();
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isMobileView, setIsMobileView] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     repositories: true,
     datasets: true,
     models: true,
     jobs: true,
     insights: true,
-  })
-  const { user, logout, toggleDarkMode, toggleCompactView } = useAuth()
-  const { theme } = useTheme()
-  const [isCompact, setIsCompact] = useState(false)
-  const [isInitialized, setIsInitialized] = useState(false)
+  });
+  const { user, logout, toggleDarkMode, toggleCompactView } = useAuth();
+  const { theme } = useTheme();
+  const [isCompact, setIsCompact] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Check if mobile view on mount and window resize
   useEffect(() => {
     const checkIfMobile = () => {
-      setIsMobileView(window.innerWidth < 1024)
-    }
+      setIsMobileView(window.innerWidth < 1024);
+    };
 
-    checkIfMobile()
-    window.addEventListener("resize", checkIfMobile)
+    checkIfMobile();
+    window.addEventListener("resize", checkIfMobile);
 
     return () => {
-      window.removeEventListener("resize", checkIfMobile)
-    }
-  }, [])
+      window.removeEventListener("resize", checkIfMobile);
+    };
+  }, []);
 
   // Load sidebar state from localStorage on mount only once
   useEffect(() => {
     if (!isInitialized) {
-      const savedState = localStorage.getItem("sidebarState")
+      const savedState = localStorage.getItem("sidebarState");
       if (savedState) {
         try {
-          const parsedState = JSON.parse(savedState)
-          setOpenGroups(parsedState)
+          const parsedState = JSON.parse(savedState);
+          setOpenGroups(parsedState);
         } catch (e) {
-          console.error("Failed to parse sidebar state from localStorage", e)
+          console.error("Failed to parse sidebar state from localStorage", e);
         }
       }
-      setIsInitialized(true)
+      setIsInitialized(true);
     }
-  }, [isInitialized])
+  }, [isInitialized]);
 
   // Save sidebar state to localStorage when it changes, but only after initialization
   useEffect(() => {
     if (isInitialized && Object.keys(openGroups).length > 0) {
-      localStorage.setItem("sidebarState", JSON.stringify(openGroups))
+      localStorage.setItem("sidebarState", JSON.stringify(openGroups));
     }
-  }, [openGroups, isInitialized])
+  }, [openGroups, isInitialized]);
 
   // Set compact view based on user preferences
   useEffect(() => {
     if (user?.preferences?.compactView) {
-      document.body.classList.add("compact-view")
-      setIsCompact(true)
+      document.body.classList.add("compact-view");
+      setIsCompact(true);
     } else {
-      document.body.classList.remove("compact-view")
-      setIsCompact(false)
+      document.body.classList.remove("compact-view");
+      setIsCompact(false);
     }
-  }, [user?.preferences?.compactView])
+  }, [user?.preferences?.compactView]);
 
   // Organized navigation structure with grouping
   const navItems: NavItem[] = [
@@ -159,7 +159,7 @@ export function MainLayout({ children }: MainLayoutProps) {
           icon: <Server className="h-4 w-4" />,
         },
         */
-        
+
         {
           name: "Bot Patterns",
           path: "/bot-patterns",
@@ -236,26 +236,28 @@ export function MainLayout({ children }: MainLayoutProps) {
       path: "/profile",
       icon: <Settings className="h-5 w-5" />,
     },
-  ]
+  ];
 
   // Use useCallback to prevent recreating this function on every render
   const toggleGroup = useCallback((groupName: string) => {
     setOpenGroups((prev) => ({
       ...prev,
       [groupName]: !prev[groupName],
-    }))
-  }, [])
+    }));
+  }, []);
 
   // Generate breadcrumbs based on current path
   const generateBreadcrumbs = () => {
-    if (pathname === "/dashboard") return null
+    if (pathname === "/dashboard") return null;
 
-    const pathSegments = pathname.split("/").filter(Boolean)
-    if (pathSegments.length === 0) return null
+    const pathSegments = pathname.split("/").filter(Boolean);
+    if (pathSegments.length === 0) return null;
 
     // Determine the previous path for the back button
     const previousPath =
-      pathSegments.length > 1 ? `/${pathSegments.slice(0, pathSegments.length - 1).join("/")}` : "/dashboard"
+      pathSegments.length > 1
+        ? `/${pathSegments.slice(0, pathSegments.length - 1).join("/")}`
+        : "/dashboard";
 
     return (
       <div className="flex items-center gap-2">
@@ -276,20 +278,20 @@ export function MainLayout({ children }: MainLayoutProps) {
 
             {pathSegments.map((segment, index) => {
               // Create the path up to this segment
-              const path = `/${pathSegments.slice(0, index + 1).join("/")}`
+              const path = `/${pathSegments.slice(0, index + 1).join("/")}`;
 
               // Format the segment name
-              let segmentName = segment.charAt(0).toUpperCase() + segment.slice(1)
-              segmentName = segmentName.replace(/-/g, " ")
+              let segmentName = segment.charAt(0).toUpperCase() + segment.slice(1);
+              segmentName = segmentName.replace(/-/g, " ");
 
               // If it's an ID (contains only alphanumeric and hyphens), format it
               if (/^[a-zA-Z0-9-]+$/.test(segment) && segment.length > 20) {
-                segmentName = `${segment.substring(0, 20)}...`
+                segmentName = `${segment.substring(0, 20)}...`;
               }
 
               // If it's the last segment, don't make it a link
               if (index === pathSegments.length - 1) {
-                return <BreadcrumbItem key={path}>{segmentName}</BreadcrumbItem>
+                return <BreadcrumbItem key={path}>{segmentName}</BreadcrumbItem>;
               }
 
               return (
@@ -299,29 +301,29 @@ export function MainLayout({ children }: MainLayoutProps) {
                   </BreadcrumbItem>
                   <BreadcrumbSeparator />
                 </React.Fragment>
-              )
+              );
             })}
           </BreadcrumbList>
         </Breadcrumb>
       </div>
-    )
-  }
+    );
+  };
 
   // Check if a path is active
   const isPathActive = (item: NavItem) => {
     if (item.exactPath) {
-      return pathname === item.path
+      return pathname === item.path;
     }
-    return pathname === item.path || pathname.startsWith(item.path + "/")
-  }
+    return pathname === item.path || pathname.startsWith(item.path + "/");
+  };
 
   // Memoize the renderNavItem function to prevent recreating it on every render
   const renderNavItem = useCallback(
     (item: NavItem, isChild = false) => {
-      const isActive = isPathActive(item)
-      const hasChildren = item.children && item.children.length > 0
-      const isOpen = hasChildren && openGroups[item.name.toLowerCase()]
-      const anyChildActive = hasChildren && item.children?.some((child) => isPathActive(child))
+      const isActive = isPathActive(item);
+      const hasChildren = item.children && item.children.length > 0;
+      const isOpen = hasChildren && openGroups[item.name.toLowerCase()];
+      const anyChildActive = hasChildren && item.children?.some((child) => isPathActive(child));
 
       if (!hasChildren) {
         return (
@@ -332,13 +334,13 @@ export function MainLayout({ children }: MainLayoutProps) {
             className={cn(
               "flex items-center gap-2 rounded-lg px-3 py-2 text-muted-foreground hover:text-foreground transition-colors",
               isActive ? "bg-primary/10 text-primary dark:bg-primary/20 font-medium" : "",
-              isChild ? "pl-10 text-sm" : "",
+              isChild ? "pl-10 text-sm" : ""
             )}
           >
             {item.icon}
             <span>{item.name}</span>
           </Link>
-        )
+        );
       }
 
       return (
@@ -347,7 +349,7 @@ export function MainLayout({ children }: MainLayoutProps) {
             onClick={() => toggleGroup(item.name.toLowerCase())}
             className={cn(
               "flex w-full items-center justify-between rounded-lg px-3 py-2 text-muted-foreground hover:text-foreground transition-colors",
-              isActive || anyChildActive ? "text-primary font-medium" : "",
+              isActive || anyChildActive ? "text-primary font-medium" : ""
             )}
           >
             <div className="flex items-center gap-2">
@@ -357,12 +359,16 @@ export function MainLayout({ children }: MainLayoutProps) {
             {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </button>
 
-          {isOpen && <div className="pt-1 pl-2">{item.children?.map((child) => renderNavItem(child, true))}</div>}
+          {isOpen && (
+            <div className="pt-1 pl-2">
+              {item.children?.map((child) => renderNavItem(child, true))}
+            </div>
+          )}
         </div>
-      )
+      );
     },
-    [pathname, openGroups, isMobileView, toggleGroup],
-  )
+    [pathname, openGroups, isMobileView, toggleGroup]
+  );
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -466,7 +472,10 @@ export function MainLayout({ children }: MainLayoutProps) {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                   <Avatar className="h-8 w-8">
-                    <AvatarImage src={user?.avatar || "/placeholder.svg"} alt={user?.name || "User"} />
+                    <AvatarImage
+                      src={user?.avatar || "/placeholder.svg"}
+                      alt={user?.name || "User"}
+                    />
                     <AvatarFallback>{user?.name?.charAt(0) || "U"}</AvatarFallback>
                   </Avatar>
                 </Button>
@@ -500,5 +509,5 @@ export function MainLayout({ children }: MainLayoutProps) {
         </main>
       </div>
     </div>
-  )
+  );
 }

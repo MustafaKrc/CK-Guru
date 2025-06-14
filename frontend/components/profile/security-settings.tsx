@@ -1,108 +1,110 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Switch } from "@/components/ui/switch"
-import { AlertCircle, Loader2, Shield, KeyRound } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Switch } from "@/components/ui/switch";
+import { AlertCircle, Loader2, Shield, KeyRound } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 export function SecuritySettings() {
-  const { toast } = useToast()
-  const [isLoading, setIsLoading] = useState(false)
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
   const [passwordData, setPasswordData] = useState({
     currentPassword: "",
     newPassword: "",
     confirmPassword: "",
-  })
-  const [passwordError, setPasswordError] = useState<string | null>(null)
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false)
-  const [sessionTimeout, setSessionTimeout] = useState(60)
+  });
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [sessionTimeout, setSessionTimeout] = useState(60);
 
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target
-    setPasswordData((prev) => ({ ...prev, [name]: value }))
-    setPasswordError(null)
-  }
+    const { name, value } = e.target;
+    setPasswordData((prev) => ({ ...prev, [name]: value }));
+    setPasswordError(null);
+  };
 
   const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setPasswordError(null)
+    e.preventDefault();
+    setPasswordError(null);
 
     // Validate passwords
     if (!passwordData.currentPassword) {
-      setPasswordError("Current password is required")
-      return
+      setPasswordError("Current password is required");
+      return;
     }
 
     if (!passwordData.newPassword) {
-      setPasswordError("New password is required")
-      return
+      setPasswordError("New password is required");
+      return;
     }
 
     if (passwordData.newPassword.length < 8) {
-      setPasswordError("New password must be at least 8 characters long")
-      return
+      setPasswordError("New password must be at least 8 characters long");
+      return;
     }
 
     if (passwordData.newPassword !== passwordData.confirmPassword) {
-      setPasswordError("New passwords do not match")
-      return
+      setPasswordError("New passwords do not match");
+      return;
     }
 
-    setIsLoading(true)
+    setIsLoading(true);
 
     try {
       // In a real app, this would be an API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       // Reset form
       setPasswordData({
         currentPassword: "",
         newPassword: "",
         confirmPassword: "",
-      })
+      });
 
       toast({
         title: "Password updated",
         description: "Your password has been updated successfully",
-      })
+      });
     } catch (error) {
-      setPasswordError("Failed to update password. Please try again.")
+      setPasswordError("Failed to update password. Please try again.");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const handleToggleTwoFactor = async (checked: boolean) => {
     // In a real app, this would be an API call
-    setTwoFactorEnabled(checked)
+    setTwoFactorEnabled(checked);
 
     toast({
       title: checked ? "Two-factor authentication enabled" : "Two-factor authentication disabled",
-      description: checked ? "Your account is now more secure" : "Two-factor authentication has been disabled",
-    })
-  }
+      description: checked
+        ? "Your account is now more secure"
+        : "Two-factor authentication has been disabled",
+    });
+  };
 
   const handleSessionTimeoutChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = Number.parseInt(e.target.value)
+    const value = Number.parseInt(e.target.value);
     if (!isNaN(value) && value >= 5) {
-      setSessionTimeout(value)
+      setSessionTimeout(value);
     }
-  }
+  };
 
   const handleSaveSessionTimeout = () => {
     // In a real app, this would be an API call
     toast({
       title: "Session timeout updated",
       description: `Session timeout set to ${sessionTimeout} minutes`,
-    })
-  }
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -134,7 +136,8 @@ export function SecuritySettings() {
                 onChange={handlePasswordChange}
               />
               <p className="text-sm text-muted-foreground">
-                Password must be at least 8 characters long and include a mix of letters, numbers, and symbols.
+                Password must be at least 8 characters long and include a mix of letters, numbers,
+                and symbols.
               </p>
             </div>
 
@@ -183,16 +186,24 @@ export function SecuritySettings() {
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label htmlFor="two-factor">Two-Factor Authentication</Label>
-              <p className="text-sm text-muted-foreground">Require a verification code when signing in</p>
+              <p className="text-sm text-muted-foreground">
+                Require a verification code when signing in
+              </p>
             </div>
-            <Switch id="two-factor" checked={twoFactorEnabled} onCheckedChange={handleToggleTwoFactor} />
+            <Switch
+              id="two-factor"
+              checked={twoFactorEnabled}
+              onCheckedChange={handleToggleTwoFactor}
+            />
           </div>
 
           {twoFactorEnabled && (
             <Alert>
               <Shield className="h-4 w-4" />
               <AlertTitle>Two-factor authentication is enabled</AlertTitle>
-              <AlertDescription>Your account is protected with an additional layer of security.</AlertDescription>
+              <AlertDescription>
+                Your account is protected with an additional layer of security.
+              </AlertDescription>
             </Alert>
           )}
         </CardContent>
@@ -224,5 +235,5 @@ export function SecuritySettings() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

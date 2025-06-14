@@ -6,25 +6,45 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { MainLayout } from "@/components/main-layout";
 import { Button } from "@/components/ui/button";
-import {
-  SearchableSelect,
-  SearchableSelectOption,
-} from "@/components/ui/searchable-select";
+import { SearchableSelect, SearchableSelectOption } from "@/components/ui/searchable-select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageContainer } from "@/components/ui/page-container";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Play, Wand2, GitBranch, BarChart3, Loader2, AlertCircle, CheckCircle, Eye, RefreshCw } from "lucide-react";
+import {
+  ArrowLeft,
+  Play,
+  Wand2,
+  GitBranch,
+  BarChart3,
+  Loader2,
+  AlertCircle,
+  CheckCircle,
+  Eye,
+  RefreshCw,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 import { apiService, handleApiError, ApiError } from "@/lib/apiService";
 import { Repository, PaginatedRepositoryRead } from "@/types/api/repository";
 import { MLModelRead, PaginatedMLModelRead } from "@/types/api/ml-model";
-import { InferenceJobRead, PaginatedInferenceJobRead, ManualInferenceRequestPayload, InferenceTriggerResponse } from "@/types/api/inference-job";
+import {
+  InferenceJobRead,
+  PaginatedInferenceJobRead,
+  ManualInferenceRequestPayload,
+  InferenceTriggerResponse,
+} from "@/types/api/inference-job";
 import { useTaskStore } from "@/store/taskStore";
 import { getLatestTaskForEntity } from "@/lib/taskUtils";
 import { JobStatusEnum } from "@/types/api/enums";
@@ -48,7 +68,7 @@ export default function ManualInferencePage() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  
+
   const { taskStatuses } = useTaskStore();
 
   const fetchRepositories = useCallback(async () => {
@@ -72,7 +92,9 @@ export default function ManualInferencePage() {
       return;
     }
     try {
-      const paginatedModels = await apiService.get<PaginatedMLModelRead>(`/repositories/${repoId}/models?limit=200`);
+      const paginatedModels = await apiService.get<PaginatedMLModelRead>(
+        `/repositories/${repoId}/models?limit=200`
+      );
       setModels(paginatedModels.items || []);
     } catch (err) {
       handleApiError(err, "Failed to fetch models for repository");
@@ -80,16 +102,16 @@ export default function ManualInferencePage() {
       setIsLoadingModels(false);
     }
   }, []);
-  
+
   const fetchRecentInferenceJobs = useCallback(async () => {
     setIsLoadingRecentJobs(true);
     try {
-        const response = await apiService.getInferenceJobs({ limit: 10 });
-        setRecentInferenceJobs(response.items || []);
+      const response = await apiService.getInferenceJobs({ limit: 10 });
+      setRecentInferenceJobs(response.items || []);
     } catch (err) {
-        handleApiError(err, "Failed to fetch recent inference jobs");
+      handleApiError(err, "Failed to fetch recent inference jobs");
     } finally {
-        setIsLoadingRecentJobs(false);
+      setIsLoadingRecentJobs(false);
     }
   }, []);
 
@@ -120,10 +142,22 @@ export default function ManualInferencePage() {
     e.preventDefault();
     setFormError(null);
 
-    if (!selectedRepoId) { setFormError("Please select a repository."); return; }
-    if (!selectedModelId) { setFormError("Please select a model."); return; }
-    if (!commitHash.trim()) { setFormError("Please enter a commit hash."); return; }
-    if (commitHash.trim().length < 7) { setFormError("Commit hash must be at least 7 characters long."); return; }
+    if (!selectedRepoId) {
+      setFormError("Please select a repository.");
+      return;
+    }
+    if (!selectedModelId) {
+      setFormError("Please select a model.");
+      return;
+    }
+    if (!commitHash.trim()) {
+      setFormError("Please enter a commit hash.");
+      return;
+    }
+    if (commitHash.trim().length < 7) {
+      setFormError("Commit hash must be at least 7 characters long.");
+      return;
+    }
 
     setIsSubmitting(true);
     const payload: ManualInferenceRequestPayload = {
@@ -133,10 +167,10 @@ export default function ManualInferencePage() {
     };
 
     try {
-      const response = await apiService.post<InferenceTriggerResponse, ManualInferenceRequestPayload>(
-        "/ml/infer/manual",
-        payload
-      );
+      const response = await apiService.post<
+        InferenceTriggerResponse,
+        ManualInferenceRequestPayload
+      >("/ml/infer/manual", payload);
       toast({
         title: "Inference Triggered",
         description: `Job ${response.inference_job_id} is processing. Task: ${response.initial_task_id}`,
@@ -159,11 +193,17 @@ export default function ManualInferencePage() {
       setIsSubmitting(false);
     }
   };
-  
+
   const formatDate = (dateString?: string | Date | null): string => {
     if (!dateString) return "N/A";
-    const date = typeof dateString === 'string' ? new Date(dateString) : dateString;
-    return date.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const date = typeof dateString === "string" ? new Date(dateString) : dateString;
+    return date.toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   };
 
   const renderTaskAwareStatusBadge = (job: InferenceJobRead) => {
@@ -176,30 +216,65 @@ export default function ManualInferencePage() {
     let icon = null;
     let text = String(displayStatus).toUpperCase();
 
-    switch (displayStatus.toUpperCase().replace("JOBSTATUSENUM", "").replace("TASKSTATUSENUM", "").replace(".", "")) {
-      case JobStatusEnum.SUCCESS.toUpperCase(): badgeVariant = "default"; icon = <CheckCircle className="h-3 w-3 mr-1" />; text = "Success"; break;
+    switch (
+      displayStatus
+        .toUpperCase()
+        .replace("JOBSTATUSENUM", "")
+        .replace("TASKSTATUSENUM", "")
+        .replace(".", "")
+    ) {
+      case JobStatusEnum.SUCCESS.toUpperCase():
+        badgeVariant = "default";
+        icon = <CheckCircle className="h-3 w-3 mr-1" />;
+        text = "Success";
+        break;
       case JobStatusEnum.RUNNING.toUpperCase():
       case JobStatusEnum.STARTED.toUpperCase():
       case "GENERATING": // From dataset generation tasks
       case "EXTRACTING_FEATURES": // Custom status from task
-        badgeVariant = "outline"; icon = <RefreshCw className="h-3 w-3 mr-1 animate-spin" />; text = `${displayMessage || displayStatus} (${progress ?? 0}%)`; break;
+        badgeVariant = "outline";
+        icon = <RefreshCw className="h-3 w-3 mr-1 animate-spin" />;
+        text = `${displayMessage || displayStatus} (${progress ?? 0}%)`;
+        break;
       case JobStatusEnum.PENDING.toUpperCase():
-        badgeVariant = "outline"; icon = <Loader2 className="h-3 w-3 mr-1 animate-spin" />; text = "Pending"; break;
+        badgeVariant = "outline";
+        icon = <Loader2 className="h-3 w-3 mr-1 animate-spin" />;
+        text = "Pending";
+        break;
       case JobStatusEnum.FAILED.toUpperCase():
-        badgeVariant = "destructive"; icon = <AlertCircle className="h-3 w-3 mr-1" />; text = "Failed"; break;
+        badgeVariant = "destructive";
+        icon = <AlertCircle className="h-3 w-3 mr-1" />;
+        text = "Failed";
+        break;
       case JobStatusEnum.REVOKED.toUpperCase():
-        badgeVariant = "destructive"; icon = <AlertCircle className="h-3 w-3 mr-1" />; text = "Revoked"; break;
+        badgeVariant = "destructive";
+        icon = <AlertCircle className="h-3 w-3 mr-1" />;
+        text = "Revoked";
+        break;
     }
-    return <Badge variant={badgeVariant} className="whitespace-nowrap text-xs px-1.5 py-0.5" title={displayMessage || String(displayStatus)}>{icon}{text}</Badge>;
+    return (
+      <Badge
+        variant={badgeVariant}
+        className="whitespace-nowrap text-xs px-1.5 py-0.5"
+        title={displayMessage || String(displayStatus)}
+      >
+        {icon}
+        {text}
+      </Badge>
+    );
   };
 
-  const repositoryOptions: SearchableSelectOption[] = useMemo(() => 
-    repositories.map(repo => ({ value: repo.id.toString(), label: repo.name })),
+  const repositoryOptions: SearchableSelectOption[] = useMemo(
+    () => repositories.map((repo) => ({ value: repo.id.toString(), label: repo.name })),
     [repositories]
   );
 
-  const modelOptions: SearchableSelectOption[] = useMemo(() =>
-    models.map(model => ({ value: model.id.toString(), label: `${model.name} (v${model.version})` })),
+  const modelOptions: SearchableSelectOption[] = useMemo(
+    () =>
+      models.map((model) => ({
+        value: model.id.toString(),
+        label: `${model.name} (v${model.version})`,
+      })),
     [models]
   );
 
@@ -208,18 +283,27 @@ export default function ManualInferencePage() {
       <PageContainer
         title="Manual Inference"
         description="Run a trained model against a specific commit for defect prediction."
-        actions={<Button variant="outline" onClick={() => router.push('/jobs')}><ArrowLeft className="mr-2 h-4 w-4" /> All Jobs</Button>}
+        actions={
+          <Button variant="outline" onClick={() => router.push("/jobs")}>
+            <ArrowLeft className="mr-2 h-4 w-4" /> All Jobs
+          </Button>
+        }
       >
         <div className="grid md:grid-cols-3 gap-6">
           <Card className="md:col-span-1">
             <CardHeader>
-              <CardTitle className="flex items-center"><Wand2 className="mr-2 h-5 w-5 text-primary"/>Configure Inference</CardTitle>
+              <CardTitle className="flex items-center">
+                <Wand2 className="mr-2 h-5 w-5 text-primary" />
+                Configure Inference
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="space-y-2">
                   <Label htmlFor="repository_id">Repository *</Label>
-                  {isLoadingRepositories ? <Skeleton className="h-10 w-full" /> : (
+                  {isLoadingRepositories ? (
+                    <Skeleton className="h-10 w-full" />
+                  ) : (
                     <SearchableSelect
                       value={selectedRepoId}
                       onValueChange={setSelectedRepoId}
@@ -234,12 +318,20 @@ export default function ManualInferencePage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="ml_model_id">Model *</Label>
-                  {isLoadingModels ? <Skeleton className="h-10 w-full" /> : (
+                  {isLoadingModels ? (
+                    <Skeleton className="h-10 w-full" />
+                  ) : (
                     <SearchableSelect
                       value={selectedModelId}
                       onValueChange={setSelectedModelId}
                       options={modelOptions}
-                      placeholder={!selectedRepoId ? "Select repository first" : (models.length === 0 ? "No models for this repo" : "Select a model...")}
+                      placeholder={
+                        !selectedRepoId
+                          ? "Select repository first"
+                          : models.length === 0
+                            ? "No models for this repo"
+                            : "Select a model..."
+                      }
                       searchPlaceholder="Search models..."
                       emptyMessage="No models found."
                       disabled={isLoadingModels || !selectedRepoId || models.length === 0}
@@ -249,13 +341,36 @@ export default function ManualInferencePage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="target_commit_hash">Commit Hash *</Label>
-                  <Input id="target_commit_hash" value={commitHash} onChange={(e) => setCommitHash(e.target.value)} placeholder="Enter full or short commit SHA" required />
+                  <Input
+                    id="target_commit_hash"
+                    value={commitHash}
+                    onChange={(e) => setCommitHash(e.target.value)}
+                    placeholder="Enter full or short commit SHA"
+                    required
+                  />
                 </div>
-                
-                {formError && (<Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>{formError}</AlertDescription></Alert>)}
 
-                <Button type="submit" className="w-full" disabled={isSubmitting || !selectedRepoId || !selectedModelId || !commitHash}>
-                  {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Triggering...</> : <><Play className="mr-2 h-4 w-4" /> Trigger Inference</>}
+                {formError && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{formError}</AlertDescription>
+                  </Alert>
+                )}
+
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={isSubmitting || !selectedRepoId || !selectedModelId || !commitHash}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Triggering...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="mr-2 h-4 w-4" /> Trigger Inference
+                    </>
+                  )}
                 </Button>
               </form>
             </CardContent>
@@ -263,45 +378,92 @@ export default function ManualInferencePage() {
 
           <Card className="md:col-span-2">
             <CardHeader>
-              <CardTitle className="flex items-center"><BarChart3 className="mr-2 h-5 w-5 text-primary"/>Recent Inference Jobs</CardTitle>
-              <CardDescription>Latest inference jobs submitted across all repositories.</CardDescription>
+              <CardTitle className="flex items-center">
+                <BarChart3 className="mr-2 h-5 w-5 text-primary" />
+                Recent Inference Jobs
+              </CardTitle>
+              <CardDescription>
+                Latest inference jobs submitted across all repositories.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="rounded-md border">
                 <Table>
-                  <TableHeader><TableRow><TableHead>Commit</TableHead><TableHead>Model Used</TableHead><TableHead>Status</TableHead><TableHead>Created</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Commit</TableHead>
+                      <TableHead>Model Used</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
                   <TableBody>
                     {isLoadingRecentJobs ? (
-                        Array.from({ length: 3 }).map((_, i) => <TableRow key={i}><TableCell colSpan={5}><Skeleton className="h-8 w-full"/></TableCell></TableRow>)
+                      Array.from({ length: 3 }).map((_, i) => (
+                        <TableRow key={i}>
+                          <TableCell colSpan={5}>
+                            <Skeleton className="h-8 w-full" />
+                          </TableCell>
+                        </TableRow>
+                      ))
                     ) : recentInferenceJobs.length === 0 ? (
-                        <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No recent jobs to display.</TableCell></TableRow>
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                          No recent jobs to display.
+                        </TableCell>
+                      </TableRow>
                     ) : (
-                      recentInferenceJobs.map(job => {
-                        const repo = repositories.find(r => r.id === job.input_reference.repo_id);
-                        const model = models.find(m => m.id === job.ml_model_id) || 
-                                      (selectedRepoId === job.input_reference.repo_id.toString() ? 
-                                        models.find(m => m.id === job.ml_model_id) : 
-                                        null); // Attempt to find model in current list if repo matches
+                      recentInferenceJobs.map((job) => {
+                        const repo = repositories.find((r) => r.id === job.input_reference.repo_id);
+                        const model =
+                          models.find((m) => m.id === job.ml_model_id) ||
+                          (selectedRepoId === job.input_reference.repo_id.toString()
+                            ? models.find((m) => m.id === job.ml_model_id)
+                            : null); // Attempt to find model in current list if repo matches
                         return (
                           <TableRow key={job.id}>
                             <TableCell className="font-mono text-xs">
-                                <Link href={`/repositories/${job.input_reference.repo_id}/commits/${job.input_reference.commit_hash}`} className="hover:underline text-primary">
-                                  {String(job.input_reference.commit_hash).substring(0, 8)}...
-                                </Link>
-                                <span className="block text-muted-foreground">{repo?.name || `Repo ${job.input_reference.repo_id}`}</span>
+                              <Link
+                                href={`/repositories/${job.input_reference.repo_id}/commits/${job.input_reference.commit_hash}`}
+                                className="hover:underline text-primary"
+                              >
+                                {String(job.input_reference.commit_hash).substring(0, 8)}...
+                              </Link>
+                              <span className="block text-muted-foreground">
+                                {repo?.name || `Repo ${job.input_reference.repo_id}`}
+                              </span>
                             </TableCell>
-                            <TableCell className="text-xs truncate max-w-[150px]" title={model ? `${model.name} v${model.version}`: `ID: ${job.ml_model_id}`}>
-                                {model ? <Link href={`/models/${job.ml_model_id}`} className="hover:underline">{`${model.name.substring(0,20)}... v${model.version}`}</Link> : `Model ID: ${job.ml_model_id}`}
+                            <TableCell
+                              className="text-xs truncate max-w-[150px]"
+                              title={
+                                model ? `${model.name} v${model.version}` : `ID: ${job.ml_model_id}`
+                              }
+                            >
+                              {model ? (
+                                <Link
+                                  href={`/models/${job.ml_model_id}`}
+                                  className="hover:underline"
+                                >{`${model.name.substring(0, 20)}... v${model.version}`}</Link>
+                              ) : (
+                                `Model ID: ${job.ml_model_id}`
+                              )}
                             </TableCell>
                             <TableCell>{renderTaskAwareStatusBadge(job)}</TableCell>
                             <TableCell className="text-xs">{formatDate(job.created_at)}</TableCell>
                             <TableCell className="text-right">
                               {job.status === JobStatusEnum.SUCCESS ? (
                                 <Button variant="outline" size="sm" asChild>
-                                    <Link href={`/prediction-insights/${job.id}`}><Eye className="mr-1 h-3 w-3"/>Insights</Link>
+                                  <Link href={`/prediction-insights/${job.id}`}>
+                                    <Eye className="mr-1 h-3 w-3" />
+                                    Insights
+                                  </Link>
                                 </Button>
                               ) : (
-                                 <Button variant="outline" size="sm" disabled><Eye className="mr-1 h-3 w-3"/>Insights</Button>
+                                <Button variant="outline" size="sm" disabled>
+                                  <Eye className="mr-1 h-3 w-3" />
+                                  Insights
+                                </Button>
                               )}
                             </TableCell>
                           </TableRow>

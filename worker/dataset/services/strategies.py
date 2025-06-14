@@ -6,12 +6,12 @@ from typing import List, Type
 # Import step interface and concrete step classes
 from services.interfaces import IDatasetGeneratorStep
 from services.steps import (
+    ApplyBotPatternsStep,
+    FeatureSelectionStep,
     LoadConfigurationStep,
     ProcessGloballyStep,
     SelectFinalColumnsStep,
-    FeatureSelectionStep,
     StreamAndProcessBatchesStep,
-    ApplyBotPatternsStep,
     WriteOutputStep,
 )
 
@@ -39,7 +39,7 @@ class DefaultDatasetGenerationStrategy(IDatasetGenerationStrategy):
             LoadConfigurationStep,
             StreamAndProcessBatchesStep,  # This step orchestrates batch sub-steps
             ProcessGloballyStep,  # This step orchestrates global sub-steps
-            ApplyBotPatternsStep, 
+            ApplyBotPatternsStep,
             SelectFinalColumnsStep,
             FeatureSelectionStep,
             WriteOutputStep,

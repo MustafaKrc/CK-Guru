@@ -1,7 +1,7 @@
 # worker/ml/services/handlers/hp_search_handler.py
+import asyncio
 import logging
 from typing import Any, Dict, Optional, Tuple  # Added Tuple
-import asyncio
 
 import optuna
 import pandas as pd
@@ -356,7 +356,9 @@ class HPSearchJobHandler(BaseMLJobHandler):
         n_trials = optuna_specific_config.get("n_trials", 10)
         timeout_seconds = optuna_specific_config.get("timeout_seconds")  # Can be None
 
-        async def progress_callback(study: optuna.Study, trial: optuna.trial.FrozenTrial):
+        async def progress_callback(
+            study: optuna.Study, trial: optuna.trial.FrozenTrial
+        ):
             # Calculate progress based on completed trials relative to n_trials
             # This doesn't account for timeout well, but is a simple progress indicator.
             progress_percent = (

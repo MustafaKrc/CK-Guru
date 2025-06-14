@@ -1,75 +1,75 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { createContext, useContext, useState, useEffect, useRef } from "react"
-import { useRouter } from "next/navigation"
-import { useTheme } from "@/components/theme-provider"
+import { createContext, useContext, useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { useTheme } from "@/components/theme-provider";
 
 type UserPreferences = {
-  darkMode: boolean
-  compactView: boolean
-}
+  darkMode: boolean;
+  compactView: boolean;
+};
 
 type User = {
-  id: string
-  name: string
-  email: string
-  role: "admin" | "user"
-  avatar?: string
-  jobTitle?: string
-  company?: string
-  preferences?: UserPreferences
-}
+  id: string;
+  name: string;
+  email: string;
+  role: "admin" | "user";
+  avatar?: string;
+  jobTitle?: string;
+  company?: string;
+  preferences?: UserPreferences;
+};
 
 type AuthContextType = {
-  user: User | null
-  isLoading: boolean
-  login: (email: string, password: string) => Promise<void>
-  logout: () => void
-  updateUser: (updatedUser: User) => void
-  isAuthenticated: boolean
-  toggleDarkMode: () => void
-  toggleCompactView: () => void
-}
+  user: User | null;
+  isLoading: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => void;
+  updateUser: (updatedUser: User) => void;
+  isAuthenticated: boolean;
+  toggleDarkMode: () => void;
+  toggleCompactView: () => void;
+};
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const router = useRouter()
-  const { theme, setTheme } = useTheme()
-  const initialThemeSet = useRef(false)
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
+  const { theme, setTheme } = useTheme();
+  const initialThemeSet = useRef(false);
 
   // Check if user is already logged in
   useEffect(() => {
-    const storedUser = localStorage.getItem("ck-guru-user")
+    const storedUser = localStorage.getItem("ck-guru-user");
     if (storedUser) {
       try {
-        setUser(JSON.parse(storedUser))
+        setUser(JSON.parse(storedUser));
       } catch (error) {
-        console.error("Failed to parse stored user:", error)
-        localStorage.removeItem("ck-guru-user")
+        console.error("Failed to parse stored user:", error);
+        localStorage.removeItem("ck-guru-user");
       }
     }
-    setIsLoading(false)
-  }, [])
+    setIsLoading(false);
+  }, []);
 
   // This will sync the theme with user preferences only on initial load
   useEffect(() => {
     if (user && !initialThemeSet.current) {
       if (user.preferences?.darkMode) {
-        setTheme("dark")
+        setTheme("dark");
       } else {
-        setTheme("light")
+        setTheme("light");
       }
-      initialThemeSet.current = true
+      initialThemeSet.current = true;
     }
-  }, [user, setTheme])
+  }, [user, setTheme]);
 
   const login = async (email: string, password: string) => {
-    setIsLoading(true)
+    setIsLoading(true);
     try {
       // In a real app, this would be an API call to authenticate
       // For demo purposes, we'll simulate a successful login with mock data
@@ -85,74 +85,74 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             darkMode: false,
             compactView: false,
           },
-        }
+        };
 
         // Store user in localStorage for persistence
-        localStorage.setItem("ck-guru-user", JSON.stringify(mockUser))
-        setUser(mockUser)
-        initialThemeSet.current = false // Reset so theme will be set on login
-        router.push("/dashboard")
+        localStorage.setItem("ck-guru-user", JSON.stringify(mockUser));
+        setUser(mockUser);
+        initialThemeSet.current = false; // Reset so theme will be set on login
+        router.push("/dashboard");
       } else {
-        throw new Error("Invalid credentials")
+        throw new Error("Invalid credentials");
       }
     } catch (error) {
-      console.error("Login failed:", error)
-      throw error
+      console.error("Login failed:", error);
+      throw error;
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const updateUser = (updatedUser: User) => {
     // Update user in state and localStorage
-    setUser(updatedUser)
-    localStorage.setItem("ck-guru-user", JSON.stringify(updatedUser))
+    setUser(updatedUser);
+    localStorage.setItem("ck-guru-user", JSON.stringify(updatedUser));
 
     // Update theme based on user preferences
     if (updatedUser.preferences?.darkMode) {
-      setTheme("dark")
+      setTheme("dark");
     } else {
-      setTheme("light")
+      setTheme("light");
     }
-  }
+  };
 
   const toggleDarkMode = () => {
-    if (!user) return
+    if (!user) return;
 
-    const newDarkMode = !user.preferences?.darkMode
+    const newDarkMode = !user.preferences?.darkMode;
     const updatedUser = {
       ...user,
       preferences: {
         ...user.preferences,
         darkMode: newDarkMode,
       },
-    }
+    };
 
     // Update user with new preference
-    updateUser(updatedUser)
-  }
+    updateUser(updatedUser);
+  };
 
   const toggleCompactView = () => {
-    if (!user) return
+    if (!user) return;
 
-    const newCompactView = !user.preferences?.compactView
+    const newCompactView = !user.preferences?.compactView;
     const updatedUser = {
       ...user,
       preferences: {
         ...user.preferences,
         compactView: newCompactView,
       },
-    }
+    };
 
     // Update user with new preference
-    updateUser(updatedUser)
-  }
+    updateUser(updatedUser);
+  };
 
   const logout = () => {
-    localStorage.removeItem("ck-guru-user")
-    setUser(null)
-    router.push("/")
-  }
+    localStorage.removeItem("ck-guru-user");
+    setUser(null);
+    router.push("/");
+  };
 
   return (
     <AuthContext.Provider
@@ -169,13 +169,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     >
       {children}
     </AuthContext.Provider>
-  )
+  );
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext)
+  const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider")
+    throw new Error("useAuth must be used within an AuthProvider");
   }
-  return context
+  return context;
 }

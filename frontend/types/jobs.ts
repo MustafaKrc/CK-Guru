@@ -20,13 +20,13 @@ export interface TrainingJobFormData {
   repositoryId: number | null;
   repositoryName?: string;
   datasetId: number | null;
-  datasetName?: string; 
-  datasetFeatureSpace: string[]; 
+  datasetName?: string;
+  datasetFeatureSpace: string[];
   datasetTargetColumn?: string | null;
 
   // Step 2: Model Type Selection
-  modelType: ModelTypeEnum | null; 
-  modelDisplayName?: string; 
+  modelType: ModelTypeEnum | null;
+  modelDisplayName?: string;
   modelHyperparametersSchema: HyperparameterDefinition[];
 
   // Step 3: Hyperparameter Configuration
@@ -66,7 +66,6 @@ export const initialTrainingJobFormData: TrainingJobFormData = {
   trainingJobDescription: "",
 };
 
-
 export interface HpSearchJobFormData {
   // Step 1
   repositoryId: number | null;
@@ -105,9 +104,9 @@ export const initialHpSearchJobFormData: HpSearchJobFormData = {
   modelType: null,
   modelDisplayName: undefined,
   modelHyperparametersSchema: [],
-  
+
   hpSpace: [],
-  
+
   optunaConfig: {
     n_trials: 20,
     objective_metric: ObjectiveMetricEnum.F1_WEIGHTED,
@@ -118,7 +117,7 @@ export const initialHpSearchJobFormData: HpSearchJobFormData = {
     sampler_config: {},
     pruner_config: {},
   },
-  
+
   studyName: "",
   saveBestModel: true,
   modelBaseName: "",

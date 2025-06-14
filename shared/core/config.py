@@ -4,14 +4,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from pydantic import (
-    AmqpDsn,
-    Field,
-    PostgresDsn,
-    SecretStr,
-    computed_field,
-    RedisDsn,
-)
+from pydantic import AmqpDsn, Field, PostgresDsn, RedisDsn, SecretStr, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Setup logger before class definition if needed for methods inside
@@ -24,11 +17,13 @@ class Settings(BaseSettings):
     and potentially a .env file.
     """
 
-    REDIS_URL: RedisDsn = Field("redis://ckguru_redis:6379/1", validation_alias="REDIS_URL")
+    REDIS_URL: RedisDsn = Field(
+        "redis://ckguru_redis:6379/1", validation_alias="REDIS_URL"
+    )
     REDIS_MAX_CONNECTIONS: int = 20
     REDIS_TASK_EVENTS_CHANNEL: str = "task_events_channel"
 
-    SSE_HEARTBEAT_INTERVAL: int = 3 # seconds
+    SSE_HEARTBEAT_INTERVAL: int = 3  # seconds
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", case_sensitive=True, extra="ignore"

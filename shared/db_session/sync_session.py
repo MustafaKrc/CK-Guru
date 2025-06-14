@@ -6,9 +6,7 @@ from typing import Generator, Optional
 from sqlalchemy import create_engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session as SqlaSession  # Rename Session to avoid conflict
-from sqlalchemy.orm import (
-    sessionmaker,
-)
+from sqlalchemy.orm import sessionmaker
 
 from shared.core.config import settings  # Use shared config
 

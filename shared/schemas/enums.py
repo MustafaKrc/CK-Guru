@@ -20,7 +20,7 @@ class DatasetStatusEnum(str, enum.Enum):
 
 
 class CommitIngestionStatusEnum(str, enum.Enum):
-    NOT_INGESTED = "NOT_INGESTED" # A state for the API response, not stored in DB
+    NOT_INGESTED = "NOT_INGESTED"  # A state for the API response, not stored in DB
     PENDING = "PENDING"
     RUNNING = "RUNNING"
     COMPLETE = "COMPLETE"
@@ -28,21 +28,24 @@ class CommitIngestionStatusEnum(str, enum.Enum):
 
 
 class FileChangeTypeEnum(str, enum.Enum):
-    A = "A" # Added
-    M = "M" # Modified
-    D = "D" # Deleted
-    R = "R" # Renamed
-    C = "C" # Copied
-    T = "T" # Type change (e.g., from file to directory)
-    U = "U" # Unmerged (conflict)
-    X = "X" # Unknown (e.g., file type not recognized)
-    B = "B" # Broken (e.g., file was deleted but still exists in the index)
+    A = "A"  # Added
+    M = "M"  # Modified
+    D = "D"  # Deleted
+    R = "R"  # Renamed
+    C = "C"  # Copied
+    T = "T"  # Type change (e.g., from file to directory)
+    U = "U"  # Unmerged (conflict)
+    X = "X"  # Unknown (e.g., file type not recognized)
+    B = "B"  # Broken (e.g., file was deleted but still exists in the index)
+
 
 class FeatureSelectionAlgorithmEnum(str, enum.Enum):
     """Enum defining the supported feature selection algorithm names."""
+
     CBFS = "cbfs"
     MRMR = "mrmr"
     MODEL_BASED = "model_based"
+
 
 class ObjectiveMetricEnum(str, enum.Enum):
     F1_WEIGHTED = "f1_weighted"

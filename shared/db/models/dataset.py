@@ -23,7 +23,9 @@ class Dataset(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    num_rows: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, comment="Number of rows in the generated dataset")
+    num_rows: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True, comment="Number of rows in the generated dataset"
+    )
 
     # Store configuration as JSON
     config: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
@@ -37,7 +39,7 @@ class Dataset(Base):
     feature_selection_config: Mapped[Dict[str, Any] | None] = mapped_column(
         JSON,
         nullable=True,
-        comment="Configuration for the feature selection algorithm, e.g., {'name': 'mrmr', 'params': {'k': 20}}"
+        comment="Configuration for the feature selection algorithm, e.g., {'name': 'mrmr', 'params': {'k': 20}}",
     )
 
     status: Mapped[DatasetStatusEnum] = mapped_column(

@@ -29,14 +29,14 @@ from .output_writer import OutputWriter
 
 # Import all step classes
 from .steps import (
+    ApplyBotPatternsStep,
+    FeatureSelectionStep,
     GetParentCKMetricsStep,
     LoadConfigurationStep,
     ProcessGloballyStep,
     SelectFinalColumnsStep,
     StreamAndProcessBatchesStep,
     WriteOutputStep,
-    FeatureSelectionStep,
-    ApplyBotPatternsStep,
 )
 
 logger = logging.getLogger(__name__)

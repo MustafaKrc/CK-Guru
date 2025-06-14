@@ -47,31 +47,30 @@ function ModelComparisonPageContent() {
 
   const selectedModels = useMemo(() => {
     return selectedModelIds
-      .map(id => allModels.find(m => String(m.id) === id))
+      .map((id) => allModels.find((m) => String(m.id) === id))
       .filter((m): m is MLModelRead => !!m);
   }, [selectedModelIds, allModels]);
 
   const handleToggleModelSelection = useCallback((modelId: string) => {
-    setSelectedModelIds(prev => {
+    setSelectedModelIds((prev) => {
       if (prev.includes(modelId)) {
-        return prev.filter(id => id !== modelId);
+        return prev.filter((id) => id !== modelId);
       }
       if (prev.length >= MAX_SELECTED_MODELS) {
         toast({
           title: "Selection Limit Reached",
           description: `You can select up to ${MAX_SELECTED_MODELS} models for comparison.`,
-          variant: "default"
+          variant: "default",
         });
         return prev;
       }
       return [...prev, modelId];
     });
   }, []);
-  
+
   const handleExportReport = () => {
     toast({ title: "Export Report", description: "This feature is coming soon!" });
   };
-
 
   if (isLoading) {
     return <PageLoader message="Loading models for comparison..." />;
@@ -86,7 +85,10 @@ function ModelComparisonPageContent() {
             <AlertTitle>Loading Failed</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
-          <Button onClick={fetchAllModels}><RefreshCw className="mr-2 h-4 w-4"/>Try Again</Button>
+          <Button onClick={fetchAllModels}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Try Again
+          </Button>
         </PageContainer>
       </MainLayout>
     );
@@ -97,7 +99,12 @@ function ModelComparisonPageContent() {
       <PageContainer
         title="Model Comparison"
         description="Select and compare models based on their performance metrics."
-        actions={<Button variant="outline" onClick={handleExportReport}><Download className="mr-2 h-4 w-4" />Export Report</Button>}
+        actions={
+          <Button variant="outline" onClick={handleExportReport}>
+            <Download className="mr-2 h-4 w-4" />
+            Export Report
+          </Button>
+        }
         className="p-0 pt-0 md:p-0"
       >
         <div className="h-[calc(100vh-theme(spacing.24))]">

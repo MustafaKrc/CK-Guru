@@ -1,6 +1,6 @@
 # worker/ingestion/services/steps/link_bugs.py
-import logging
 import asyncio
+import logging
 from typing import Dict, List, Optional, Set, Tuple
 
 from services.bug_linker import GitCommitLinker
@@ -41,7 +41,9 @@ class LinkBugsStep(IngestionStep):
             context,
             "Preparing data for bug linking (checking keywords and issue timestamps)...",
         )
-        await self._update_progress(context, "Checking fix keywords and issue links...", 0)
+        await self._update_progress(
+            context, "Checking fix keywords and issue links...", 0
+        )
 
         # Query timestamps using the GitHubIssueRepository
         processed_corrective_count = 0
@@ -62,7 +64,9 @@ class LinkBugsStep(IngestionStep):
         # Fetch timestamps (Consider if this needs optimization or batching within the repo)
         for commit_hash, db_id in commits_for_ts_query:
             processed_corrective_count += 1
-            ts = await asyncio.to_thread(guru_repo.get_earliest_linked_issue_timestamp, db_id)
+            ts = await asyncio.to_thread(
+                guru_repo.get_earliest_linked_issue_timestamp, db_id
+            )
             corrective_info[commit_hash] = ts
             if processed_corrective_count % 50 == 0:
                 progress = (
@@ -96,7 +100,9 @@ class LinkBugsStep(IngestionStep):
 
         try:
             linker = GitCommitLinker(git_service)
-            map_hash = await asyncio.to_thread(linker.link_corrective_commits, corrective_info)
+            map_hash = await asyncio.to_thread(
+                linker.link_corrective_commits, corrective_info
+            )
             context.bug_link_map_hash = map_hash
             self._log_info(
                 context,

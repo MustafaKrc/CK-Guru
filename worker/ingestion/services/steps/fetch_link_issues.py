@@ -1,6 +1,6 @@
 # worker/ingestion/services/steps/fetch_link_issues.py
-import logging
 import asyncio
+import logging
 from typing import Dict, List
 
 from services.interfaces import IRepositoryApiClient

@@ -7,10 +7,16 @@ from pydantic import BaseModel, Field  # Use Json for validation? maybe just Dic
 from shared.schemas.enums import DatasetStatusEnum, FeatureSelectionAlgorithmEnum
 from shared.schemas.repository import RepositoryRead
 
-# --- Feature Selection Configuration --- 
+
+# --- Feature Selection Configuration ---
 class FeatureSelectionConfig(BaseModel):
-    name: FeatureSelectionAlgorithmEnum = Field(..., description="Name of the feature selection algorithm to apply.")
-    params: Dict[str, Any] = Field(default_factory=dict, description="Parameters for the selected algorithm.")
+    name: FeatureSelectionAlgorithmEnum = Field(
+        ..., description="Name of the feature selection algorithm to apply."
+    )
+    params: Dict[str, Any] = Field(
+        default_factory=dict, description="Parameters for the selected algorithm."
+    )
+
 
 # --- Cleaning Rule Configuration ---
 class CleaningRuleParams(BaseModel):
@@ -45,9 +51,8 @@ class DatasetConfig(BaseModel):
     )
     feature_selection: Optional[FeatureSelectionConfig] = Field(
         None,
-        description="Configuration for the feature selection step, which runs after cleaning."
+        description="Configuration for the feature selection step, which runs after cleaning.",
     )
-
 
 
 # --- Dataset Schemas ---
@@ -71,7 +76,7 @@ class DatasetRead(DatasetBase):
     created_at: datetime
     updated_at: datetime
     background_data_path: Optional[str] = None
-    num_rows: Optional[int] = None 
+    num_rows: Optional[int] = None
 
     model_config = {
         "from_attributes": True,  # Pydantic V2 way
@@ -99,8 +104,9 @@ class DatasetTaskResponse(BaseModel):
     dataset_id: int
     task_id: str
 
+
 class PaginatedDatasetRead(BaseModel):
     items: List[DatasetRead]
     total: int
     skip: Optional[int] = None
-    limit: Optional[int] = None 
+    limit: Optional[int] = None

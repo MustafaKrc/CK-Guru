@@ -1,22 +1,22 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
-import { Switch } from "@/components/ui/switch"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { GitBranch, GitFork, Server, Key, AlertCircle, Loader2, Check, X } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { GitBranch, GitFork, Server, Key, AlertCircle, Loader2, Check, X } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 export function IntegrationSettings() {
-  const { toast } = useToast()
-  const [activeTab, setActiveTab] = useState("github")
+  const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState("github");
 
   // GitHub integration state
   const [githubIntegration, setGithubIntegration] = useState({
@@ -25,7 +25,7 @@ export function IntegrationSettings() {
     username: "",
     testingConnection: false,
     error: null as string | null,
-  })
+  });
 
   // GitLab integration state
   const [gitlabIntegration, setGitlabIntegration] = useState({
@@ -34,7 +34,7 @@ export function IntegrationSettings() {
     username: "",
     testingConnection: false,
     error: null as string | null,
-  })
+  });
 
   // Self-hosted GitLab state
   const [selfHostedGitlab, setSelfHostedGitlab] = useState({
@@ -44,38 +44,38 @@ export function IntegrationSettings() {
     verifySSL: true,
     testingConnection: false,
     error: null as string | null,
-  })
+  });
 
   const handleGithubInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target
-    setGithubIntegration((prev) => ({ ...prev, [name]: value, error: null }))
-  }
+    const { name, value } = e.target;
+    setGithubIntegration((prev) => ({ ...prev, [name]: value, error: null }));
+  };
 
   const handleGitlabInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target
-    setGitlabIntegration((prev) => ({ ...prev, [name]: value, error: null }))
-  }
+    const { name, value } = e.target;
+    setGitlabIntegration((prev) => ({ ...prev, [name]: value, error: null }));
+  };
 
   const handleSelfHostedGitlabInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target
-    setSelfHostedGitlab((prev) => ({ ...prev, [name]: value, error: null }))
-  }
+    const { name, value } = e.target;
+    setSelfHostedGitlab((prev) => ({ ...prev, [name]: value, error: null }));
+  };
 
   const handleSelfHostedGitlabSwitchChange = (name: string, checked: boolean) => {
-    setSelfHostedGitlab((prev) => ({ ...prev, [name]: checked, error: null }))
-  }
+    setSelfHostedGitlab((prev) => ({ ...prev, [name]: checked, error: null }));
+  };
 
   const testGithubConnection = async () => {
     if (!githubIntegration.token) {
-      setGithubIntegration((prev) => ({ ...prev, error: "Please enter a personal access token" }))
-      return
+      setGithubIntegration((prev) => ({ ...prev, error: "Please enter a personal access token" }));
+      return;
     }
 
-    setGithubIntegration((prev) => ({ ...prev, testingConnection: true, error: null }))
+    setGithubIntegration((prev) => ({ ...prev, testingConnection: true, error: null }));
 
     try {
       // In a real app, this would be an API call to test the GitHub connection
-      await new Promise((resolve) => setTimeout(resolve, 1500))
+      await new Promise((resolve) => setTimeout(resolve, 1500));
 
       // Simulate successful connection
       setGithubIntegration((prev) => ({
@@ -83,32 +83,32 @@ export function IntegrationSettings() {
         connected: true,
         username: "github-user",
         testingConnection: false,
-      }))
+      }));
 
       toast({
         title: "GitHub connection successful",
         description: "Your GitHub account has been connected successfully",
-      })
+      });
     } catch (error) {
       setGithubIntegration((prev) => ({
         ...prev,
         testingConnection: false,
         error: "Failed to connect to GitHub. Please check your token and try again.",
-      }))
+      }));
     }
-  }
+  };
 
   const testGitlabConnection = async () => {
     if (!gitlabIntegration.token) {
-      setGitlabIntegration((prev) => ({ ...prev, error: "Please enter a personal access token" }))
-      return
+      setGitlabIntegration((prev) => ({ ...prev, error: "Please enter a personal access token" }));
+      return;
     }
 
-    setGitlabIntegration((prev) => ({ ...prev, testingConnection: true, error: null }))
+    setGitlabIntegration((prev) => ({ ...prev, testingConnection: true, error: null }));
 
     try {
       // In a real app, this would be an API call to test the GitLab connection
-      await new Promise((resolve) => setTimeout(resolve, 1500))
+      await new Promise((resolve) => setTimeout(resolve, 1500));
 
       // Simulate successful connection
       setGitlabIntegration((prev) => ({
@@ -116,52 +116,52 @@ export function IntegrationSettings() {
         connected: true,
         username: "gitlab-user",
         testingConnection: false,
-      }))
+      }));
 
       toast({
         title: "GitLab connection successful",
         description: "Your GitLab account has been connected successfully",
-      })
+      });
     } catch (error) {
       setGitlabIntegration((prev) => ({
         ...prev,
         testingConnection: false,
         error: "Failed to connect to GitLab. Please check your token and try again.",
-      }))
+      }));
     }
-  }
+  };
 
   const testSelfHostedGitlabConnection = async () => {
     if (!selfHostedGitlab.url || !selfHostedGitlab.token) {
-      setSelfHostedGitlab((prev) => ({ ...prev, error: "Please enter both URL and token" }))
-      return
+      setSelfHostedGitlab((prev) => ({ ...prev, error: "Please enter both URL and token" }));
+      return;
     }
 
-    setSelfHostedGitlab((prev) => ({ ...prev, testingConnection: true, error: null }))
+    setSelfHostedGitlab((prev) => ({ ...prev, testingConnection: true, error: null }));
 
     try {
       // In a real app, this would be an API call to test the self-hosted GitLab connection
-      await new Promise((resolve) => setTimeout(resolve, 1500))
+      await new Promise((resolve) => setTimeout(resolve, 1500));
 
       // Simulate successful connection
       setSelfHostedGitlab((prev) => ({
         ...prev,
         enabled: true,
         testingConnection: false,
-      }))
+      }));
 
       toast({
         title: "Self-hosted GitLab connection successful",
         description: "Your self-hosted GitLab server has been connected successfully",
-      })
+      });
     } catch (error) {
       setSelfHostedGitlab((prev) => ({
         ...prev,
         testingConnection: false,
         error: "Failed to connect to self-hosted GitLab. Please check your settings and try again.",
-      }))
+      }));
     }
-  }
+  };
 
   const disconnectGithub = () => {
     setGithubIntegration({
@@ -170,13 +170,13 @@ export function IntegrationSettings() {
       username: "",
       testingConnection: false,
       error: null,
-    })
+    });
 
     toast({
       title: "GitHub disconnected",
       description: "Your GitHub account has been disconnected",
-    })
-  }
+    });
+  };
 
   const disconnectGitlab = () => {
     setGitlabIntegration({
@@ -185,13 +185,13 @@ export function IntegrationSettings() {
       username: "",
       testingConnection: false,
       error: null,
-    })
+    });
 
     toast({
       title: "GitLab disconnected",
       description: "Your GitLab account has been disconnected",
-    })
-  }
+    });
+  };
 
   const disconnectSelfHostedGitlab = () => {
     setSelfHostedGitlab({
@@ -201,13 +201,13 @@ export function IntegrationSettings() {
       verifySSL: true,
       testingConnection: false,
       error: null,
-    })
+    });
 
     toast({
       title: "Self-hosted GitLab disconnected",
       description: "Your self-hosted GitLab server has been disconnected",
-    })
-  }
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -271,7 +271,8 @@ export function IntegrationSettings() {
                       <div>
                         <h3 className="font-medium">GitHub Connected</h3>
                         <p className="text-sm text-muted-foreground">
-                          Connected as <span className="font-medium">{githubIntegration.username}</span>
+                          Connected as{" "}
+                          <span className="font-medium">{githubIntegration.username}</span>
                         </p>
                       </div>
                       <Badge className="ml-auto">Active</Badge>
@@ -316,7 +317,10 @@ export function IntegrationSettings() {
                     </Alert>
                   )}
 
-                  <Button onClick={testGithubConnection} disabled={githubIntegration.testingConnection}>
+                  <Button
+                    onClick={testGithubConnection}
+                    disabled={githubIntegration.testingConnection}
+                  >
                     {githubIntegration.testingConnection ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -342,7 +346,8 @@ export function IntegrationSettings() {
                       <div>
                         <h3 className="font-medium">GitLab Connected</h3>
                         <p className="text-sm text-muted-foreground">
-                          Connected as <span className="font-medium">{gitlabIntegration.username}</span>
+                          Connected as{" "}
+                          <span className="font-medium">{gitlabIntegration.username}</span>
                         </p>
                       </div>
                       <Badge className="ml-auto">Active</Badge>
@@ -387,7 +392,10 @@ export function IntegrationSettings() {
                     </Alert>
                   )}
 
-                  <Button onClick={testGitlabConnection} disabled={gitlabIntegration.testingConnection}>
+                  <Button
+                    onClick={testGitlabConnection}
+                    disabled={gitlabIntegration.testingConnection}
+                  >
                     {gitlabIntegration.testingConnection ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -449,7 +457,8 @@ export function IntegrationSettings() {
                       placeholder="glpat-xxxxxxxxxxxxxxxxxxxx"
                     />
                     <p className="text-sm text-muted-foreground">
-                      Create a personal access token with <code>api</code> scope in your self-hosted GitLab instance.
+                      Create a personal access token with <code>api</code> scope in your self-hosted
+                      GitLab instance.
                     </p>
                   </div>
 
@@ -457,7 +466,9 @@ export function IntegrationSettings() {
                     <Switch
                       id="verify-ssl"
                       checked={selfHostedGitlab.verifySSL}
-                      onCheckedChange={(checked) => handleSelfHostedGitlabSwitchChange("verifySSL", checked)}
+                      onCheckedChange={(checked) =>
+                        handleSelfHostedGitlabSwitchChange("verifySSL", checked)
+                      }
                     />
                     <Label htmlFor="verify-ssl">Verify SSL Certificate</Label>
                   </div>
@@ -470,7 +481,10 @@ export function IntegrationSettings() {
                     </Alert>
                   )}
 
-                  <Button onClick={testSelfHostedGitlabConnection} disabled={selfHostedGitlab.testingConnection}>
+                  <Button
+                    onClick={testSelfHostedGitlabConnection}
+                    disabled={selfHostedGitlab.testingConnection}
+                  >
                     {selfHostedGitlab.testingConnection ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -490,5 +504,5 @@ export function IntegrationSettings() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

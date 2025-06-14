@@ -1,6 +1,6 @@
 # worker/ingestion/services/steps/persist_guru.py
-import logging
 import asyncio
+import logging
 from typing import Any, Dict, List
 
 from shared.repositories import CommitGuruMetricRepository
@@ -83,7 +83,9 @@ class PersistCommitGuruMetricsStep(IngestionStep):
                 f"Performing bulk UPSERT for {len(commits_to_upsert)} CommitGuruMetrics...",
             )
             try:
-                db_ids_map = await asyncio.to_thread(guru_repo.bulk_upsert, commits_to_upsert)
+                db_ids_map = await asyncio.to_thread(
+                    guru_repo.bulk_upsert, commits_to_upsert
+                )
                 context.commit_hash_to_db_id_map.update(db_ids_map)
                 context.inserted_guru_metrics_count = len(db_ids_map)
                 self._log_info(

@@ -39,7 +39,9 @@ class BotPatternRepository(BaseRepository[BotPattern]):
             if repository_id is not None:
                 repo_specific_filter = BotPattern.repository_id == repository_id
                 if include_global:
-                    filters.append(or_(repo_specific_filter, BotPattern.repository_id.is_(None)))
+                    filters.append(
+                        or_(repo_specific_filter, BotPattern.repository_id.is_(None))
+                    )
                 else:
                     filters.append(repo_specific_filter)
             else:  # No repository_id specified, assume we want only global patterns
@@ -50,14 +52,18 @@ class BotPatternRepository(BaseRepository[BotPattern]):
                 count_stmt = select(func.count(BotPattern.id)).where(*filters)
             else:
                 count_stmt = select(func.count(BotPattern.id))
-            
+
             total_result = session.execute(count_stmt)
             total = total_result.scalar_one()
 
             # Order by repo ID (nulls last for global) then by ID
-            stmt = stmt_items.order_by(BotPattern.repository_id.nullslast(), BotPattern.id).offset(skip).limit(limit)
+            stmt = (
+                stmt_items.order_by(BotPattern.repository_id.nullslast(), BotPattern.id)
+                .offset(skip)
+                .limit(limit)
+            )
             items = session.execute(stmt).scalars().all()
-            
+
             return items, total
 
     def create(self, obj_in: BotPatternCreate) -> BotPattern:
@@ -68,14 +74,22 @@ class BotPatternRepository(BaseRepository[BotPattern]):
                 session.add(db_obj)
                 session.commit()
                 session.refresh(db_obj)
-                logger.info(f"Created bot pattern ID {db_obj.id} for repo {db_obj.repository_id or 'Global'}")
+                logger.info(
+                    f"Created bot pattern ID {db_obj.id} for repo {db_obj.repository_id or 'Global'}"
+                )
                 return db_obj
             except SQLAlchemyError as e:
-                logger.error(f"BotPatternRepository: DB error creating pattern: {e}", exc_info=True)
+                logger.error(
+                    f"BotPatternRepository: DB error creating pattern: {e}",
+                    exc_info=True,
+                )
                 session.rollback()
                 raise
             except Exception as e:
-                logger.error(f"BotPatternRepository: Unexpected error creating pattern: {e}", exc_info=True)
+                logger.error(
+                    f"BotPatternRepository: Unexpected error creating pattern: {e}",
+                    exc_info=True,
+                )
                 session.rollback()
                 raise
 
@@ -95,11 +109,17 @@ class BotPatternRepository(BaseRepository[BotPattern]):
                 logger.info(f"Updated bot pattern ID {db_obj.id}")
                 return db_obj
             except SQLAlchemyError as e:
-                logger.error(f"BotPatternRepository: DB error updating pattern {db_obj.id}: {e}", exc_info=True)
+                logger.error(
+                    f"BotPatternRepository: DB error updating pattern {db_obj.id}: {e}",
+                    exc_info=True,
+                )
                 session.rollback()
                 raise
             except Exception as e:
-                logger.error(f"BotPatternRepository: Unexpected error updating pattern {db_obj.id}: {e}", exc_info=True)
+                logger.error(
+                    f"BotPatternRepository: Unexpected error updating pattern {db_obj.id}: {e}",
+                    exc_info=True,
+                )
                 session.rollback()
                 raise
 
@@ -112,16 +132,26 @@ class BotPatternRepository(BaseRepository[BotPattern]):
                     pattern_repo_id = db_obj.repository_id
                     session.delete(db_obj)
                     session.commit()
-                    logger.info(f"Deleted bot pattern ID {pattern_id} for repo {pattern_repo_id or 'Global'}")
+                    logger.info(
+                        f"Deleted bot pattern ID {pattern_id} for repo {pattern_repo_id or 'Global'}"
+                    )
                     return True
                 else:
-                    logger.warning(f"Bot pattern ID {pattern_id} not found for deletion.")
+                    logger.warning(
+                        f"Bot pattern ID {pattern_id} not found for deletion."
+                    )
                     return False
             except SQLAlchemyError as e:
-                logger.error(f"BotPatternRepository: DB error deleting pattern {pattern_id}: {e}", exc_info=True)
+                logger.error(
+                    f"BotPatternRepository: DB error deleting pattern {pattern_id}: {e}",
+                    exc_info=True,
+                )
                 session.rollback()
                 raise
             except Exception as e:
-                logger.error(f"BotPatternRepository: Unexpected error deleting pattern {pattern_id}: {e}", exc_info=True)
+                logger.error(
+                    f"BotPatternRepository: Unexpected error deleting pattern {pattern_id}: {e}",
+                    exc_info=True,
+                )
                 session.rollback()
                 raise

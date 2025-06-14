@@ -14,8 +14,8 @@ from shared import schemas
 from shared.core.config import settings
 from shared.db_session import get_async_db_session
 from shared.exceptions import ConflictError, InternalError, NotFoundError
-from shared.schemas.enums import (  # Import XAITypeEnum
-    JobStatusEnum,
+from shared.schemas.enums import (
+    JobStatusEnum,  # Import XAITypeEnum
     XAIStatusEnum,
     XAITypeEnum,
 )

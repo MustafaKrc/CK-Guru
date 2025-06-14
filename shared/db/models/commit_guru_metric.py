@@ -19,9 +19,6 @@ from shared.db.base_class import Base
 
 # stop formatters deleting this import
 # noinspection PyUnresolvedReferences
-from .commit_github_issue_association import (  # noqa: F401
-    commit_github_issue_association_table,
-)
 
 if TYPE_CHECKING:
     from .github_issue import GitHubIssue  # noqa: F401

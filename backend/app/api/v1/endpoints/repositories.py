@@ -56,9 +56,11 @@ async def read_repositories_endpoint(
     limit: int = Query(
         10, ge=1, le=500, description="Maximum number of records to return"
     ),
-    q: Optional[str] = Query(None, description="Search query to filter repositories by name."),
-    sort_by: Optional[str] = Query('created_at', description="Column to sort by."),
-    sort_order: str = Query('desc', description="Sort order: 'asc' or 'desc'."),
+    q: Optional[str] = Query(
+        None, description="Search query to filter repositories by name."
+    ),
+    sort_by: Optional[str] = Query("created_at", description="Column to sort by."),
+    sort_order: str = Query("desc", description="Sort order: 'asc' or 'desc'."),
 ):
     """
     Retrieve repositories with filtering and sorting.

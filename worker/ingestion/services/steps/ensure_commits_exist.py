@@ -1,6 +1,6 @@
 # worker/ingestion/services/steps/ensure_commits_exist.py
-import logging
 import asyncio
+import logging
 
 from services.interfaces import IGitService
 
@@ -37,7 +37,9 @@ class EnsureCommitsExistLocallyStep(IngestionStep):
 
         for commit_hash in commits_to_check:
             try:
-                exists = await asyncio.to_thread(git_service.does_commit_exist, commit_hash)
+                exists = await asyncio.to_thread(
+                    git_service.does_commit_exist, commit_hash
+                )
                 if exists:
                     self._log_info(
                         context, f"Commit {commit_hash[:7]} verified locally."

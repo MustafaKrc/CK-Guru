@@ -9,9 +9,7 @@ from celery.result import AsyncResult
 from shared import schemas  # Import your response schema
 from shared.core.config import settings
 from shared.schemas.enums import JobStatusEnum
-from shared.schemas.task import (
-    TaskStatusEnum,
-)
+from shared.schemas.task import TaskStatusEnum
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())

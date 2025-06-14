@@ -1,9 +1,8 @@
 # worker/ingestion/services/pipeline.py
 import logging
-from typing import List, Type
 
 from services.dependencies import DependencyProvider, StepRegistry
-from services.steps.base import IngestionContext, IngestionStep
+from services.steps.base import IngestionContext
 from services.strategies import IngestionStrategy
 from shared.core.config import settings
 from shared.schemas.enums import JobStatusEnum
@@ -35,7 +34,10 @@ class PipelineRunner:
         try:
             for idx, StepCls in enumerate(steps, start=1):
                 step = self.step_registry.get_step(StepCls)
-                context = await step.execute(context, **self.dependency_provider.get_dependencies_for_step(step, context))
+                context = await step.execute(
+                    context,
+                    **self.dependency_provider.get_dependencies_for_step(step, context),
+                )
                 runner_progress = int(100 * (idx / total))
                 await context.task_instance.update_task_state(
                     state=JobStatusEnum.RUNNING.value,

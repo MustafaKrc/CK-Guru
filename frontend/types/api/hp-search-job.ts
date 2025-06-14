@@ -1,5 +1,11 @@
 // frontend/types/api/hp-search-job.ts
-import { JobStatusEnum, ModelTypeEnum, ObjectiveMetricEnum, SamplerTypeEnum, PrunerTypeEnum } from "./enums";
+import {
+  JobStatusEnum,
+  ModelTypeEnum,
+  ObjectiveMetricEnum,
+  SamplerTypeEnum,
+  PrunerTypeEnum,
+} from "./enums";
 import { MLModelRead } from "./ml-model";
 import { DatasetRead } from "./dataset"; // Import DatasetRead
 
@@ -36,23 +42,23 @@ export interface HPSearchConfig {
 }
 
 export interface HPSearchJobBase {
-    dataset_id: number;
-    optuna_study_name: string;
-    config: HPSearchConfig;
+  dataset_id: number;
+  optuna_study_name: string;
+  config: HPSearchConfig;
 }
 
 // For creating an HP search job
 export interface HPSearchJobCreatePayload {
-    dataset_id: number;
-    optuna_study_name: string;
-    config: HPSearchConfig;
+  dataset_id: number;
+  optuna_study_name: string;
+  config: HPSearchConfig;
 }
 
 // For the API response when submitting an HP search job
 export interface HPSearchJobSubmitResponse {
-    job_id: number;
-    celery_task_id: string;
-    message: string;
+  job_id: number;
+  celery_task_id: string;
+  message: string;
 }
 
 export interface HPSearchJobRead extends HPSearchJobBase {

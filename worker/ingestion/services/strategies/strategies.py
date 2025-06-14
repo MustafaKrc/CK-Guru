@@ -6,12 +6,12 @@ from typing import TYPE_CHECKING, List, Type
 from services.steps.calculate_ck import CalculateCKMetricsStep
 from services.steps.calculate_guru import CalculateCommitGuruMetricsStep
 from services.steps.ensure_commits_exist import EnsureCommitsExistLocallyStep
+from services.steps.extract_commit_details import ExtractCommitDetailsStep
 from services.steps.fetch_link_issues import FetchAndLinkIssuesStep
 from services.steps.link_bugs import LinkBugsStep
 from services.steps.persist_ck import PersistCKMetricsStep
-from services.steps.persist_guru import PersistCommitGuruMetricsStep
-from services.steps.extract_commit_details import ExtractCommitDetailsStep
 from services.steps.persist_commit_details import PersistCommitDetailsStep
+from services.steps.persist_guru import PersistCommitGuruMetricsStep
 
 # Import step base class for type hinting if needed, but preferably use keys
 # from services.steps.base import IngestionStep

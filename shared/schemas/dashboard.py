@@ -17,6 +17,6 @@ class DashboardSummaryStats(BaseModel):
     datasets_by_status: DatasetsByStatus
     total_ml_models: int
     average_f1_score_ml_models: Optional[float] = None
-    active_ingestion_tasks: int 
+    active_ingestion_tasks: int
     active_dataset_generation_tasks: int
     active_ml_jobs: int

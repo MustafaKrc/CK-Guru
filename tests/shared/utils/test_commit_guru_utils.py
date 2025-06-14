@@ -11,7 +11,7 @@ import pytest
 # Import functions and classes to test
 from shared.utils import commit_guru_utils
 from shared.utils.commit_guru_utils import (
-    CommitFile,  # Import helper classes if needed for state setup
+    CommitFile,
     DevExperienceMetrics,
     FileUpdateResult,
     GitCommitLinker,
@@ -23,7 +23,7 @@ from shared.utils.commit_guru_utils import (
     _update_dev_experience,
     _update_file_state,
     calculate_commit_guru_metrics,
-)
+)  # Import helper classes if needed for state setup
 
 
 # Mock the logger to avoid actual logging during tests

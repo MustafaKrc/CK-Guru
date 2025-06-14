@@ -4,8 +4,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-from shared.schemas.enums import ModelTypeEnum
 from shared.schemas.dataset import DatasetRead
+from shared.schemas.enums import ModelTypeEnum
 
 
 # --- Base ---

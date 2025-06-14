@@ -6,13 +6,14 @@ from pydantic import BaseModel, Field
 
 from shared.schemas.enums import JobStatusEnum, ModelTypeEnum  # Import ModelTypeEnum
 
-from .ml_model import MLModelRead  # To show nested model info
 from .dataset import DatasetRead
+from .ml_model import MLModelRead  # To show nested model info
 
 
 # --- Training Run Config (More specific than raw JSON) ---
 class TrainingRunConfig(BaseModel):
     """Configuration for a specific training run."""
+
     model_name: str = Field(
         ..., description="Base name for the MLModelDB record (e.g., 'MyDataset_RF')"
     )
@@ -40,12 +41,15 @@ class TrainingRunConfig(BaseModel):
 # --- Base ---
 class TrainingJobBase(BaseModel):
     dataset_id: int = Field(..., description="ID of the dataset to use for training.")
-    config: TrainingRunConfig = Field(..., description="Training configuration details.")
+    config: TrainingRunConfig = Field(
+        ..., description="Training configuration details."
+    )
 
 
 # --- Create (API Request Body) ---
 class TrainingJobCreate(TrainingJobBase):
     """Schema for creating a new training job."""
+
     training_job_name: str = Field(..., min_length=1, max_length=100)
     training_job_description: Optional[str] = None
 
@@ -53,6 +57,7 @@ class TrainingJobCreate(TrainingJobBase):
 # --- Update (Used internally by worker) ---
 class TrainingJobUpdate(BaseModel):
     """Schema for updating a training job."""
+
     celery_task_id: Optional[str] = None
     status: Optional[JobStatusEnum] = None
     status_message: Optional[str] = None
@@ -64,6 +69,7 @@ class TrainingJobUpdate(BaseModel):
 # --- Read (API Response) ---
 class TrainingJobRead(TrainingJobBase):
     """Schema for reading training job data."""
+
     id: int
     dataset: Optional[DatasetRead] = None
     celery_task_id: Optional[str] = None
@@ -87,6 +93,7 @@ class TrainingJobRead(TrainingJobBase):
 # --- API Response for Job Submission ---
 class TrainingJobSubmitResponse(BaseModel):
     """Response schema for training job submission."""
+
     job_id: int
     celery_task_id: str
     message: str = "Training job submitted successfully."
@@ -94,6 +101,7 @@ class TrainingJobSubmitResponse(BaseModel):
 
 class PaginatedTrainingJobRead(BaseModel):
     """Paginated response for training jobs."""
+
     items: List[TrainingJobRead]
     total: int
     skip: Optional[int] = Field(

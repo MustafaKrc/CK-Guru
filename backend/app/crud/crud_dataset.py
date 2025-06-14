@@ -40,10 +40,10 @@ async def get_all_datasets(
     repository_id: Optional[int] = None,
     name_filter: Optional[str] = None,
     sort_by: Optional[str] = None,
-    sort_dir: Optional[str] = 'desc',
+    sort_dir: Optional[str] = "desc",
 ) -> Tuple[Sequence[Dataset], int]:
     """Get all datasets with pagination, filtering, and sorting."""
-    
+
     # Base query for items, including a join to the repository table for sorting/filtering
     stmt_items = select(Dataset).join(Dataset.repository)
     # Base query for total count with the same join
@@ -58,35 +58,35 @@ async def get_all_datasets(
     if name_filter:
         print(f"Filtering datasets by name: {name_filter}")
         filters.append(Dataset.name.ilike(f"%{name_filter}%"))
-    
+
     if filters:
         stmt_items = stmt_items.where(*filters)
         stmt_total = stmt_total.where(*filters)
-    
+
     # --- Get Total Count ---
     result_total = await db.execute(stmt_total)
     total = result_total.scalar_one_or_none() or 0
 
     # --- Apply Sorting ---
     sort_mapping = {
-        'name': Dataset.name,
-        'created_at': Dataset.created_at,
-        'status': Dataset.status,
-        'repository_name': Repository.name
+        "name": Dataset.name,
+        "created_at": Dataset.created_at,
+        "status": Dataset.status,
+        "repository_name": Repository.name,
     }
-    sort_column = sort_mapping.get(sort_by, Dataset.created_at) # Default sort
-    
-    if sort_dir == 'desc':
+    sort_column = sort_mapping.get(sort_by, Dataset.created_at)  # Default sort
+
+    if sort_dir == "desc":
         stmt_items = stmt_items.order_by(desc(sort_column))
     else:
         stmt_items = stmt_items.order_by(asc(sort_column))
 
     # Eager load the repository details to avoid N+1 query issues
     stmt_items = stmt_items.options(selectinload(Dataset.repository))
-    
+
     # Apply Pagination
     stmt_items = stmt_items.offset(skip).limit(limit)
-    
+
     result_items = await db.execute(stmt_items)
     items = result_items.scalars().all()
 
@@ -177,7 +177,7 @@ async def update_dataset_status(
         values_to_update["background_data_path"] = background_data_path
     if num_rows is not None:
         values_to_update["num_rows"] = num_rows
-        
+
     if not values_to_update:
         return await get_dataset(db, dataset_id)  # Nothing to update
 
@@ -192,7 +192,9 @@ async def update_dataset_status(
     updated_dataset = result.scalar_one_or_none()
 
     if updated_dataset:
-        logger.info(f"Updated status for dataset ID {dataset_id} to {status.value} with {num_rows or 'unknown'} rows")
+        logger.info(
+            f"Updated status for dataset ID {dataset_id} to {status.value} with {num_rows or 'unknown'} rows"
+        )
     else:
         logger.warning(
             f"Attempted to update status for non-existent dataset ID {dataset_id}"

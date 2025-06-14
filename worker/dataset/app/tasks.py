@@ -1,4 +1,5 @@
 # worker/dataset/app/tasks.py
+import asyncio
 import logging
 from typing import Optional  # Import traceback
 
@@ -10,9 +11,11 @@ from celery.exceptions import Ignore, Reject, Terminated  # Import Reject
 from services.context import DatasetContext
 from services.dependencies import DependencyProvider, StepRegistry
 from services.pipeline import PipelineRunner
-from services.strategies import (  # Import default strategy
+from services.strategies import (
     DefaultDatasetGenerationStrategy,
-)
+)  # Import default strategy
+
+from shared.celery_config.base_task import EventPublishingTask
 
 # --- Import Config, Session, Enums, Status Updater Interface ---
 from shared.core.config import settings
@@ -20,10 +23,6 @@ from shared.db_session import SyncSessionLocal  # Import factory
 from shared.exceptions import build_failure_meta
 from shared.schemas.enums import DatasetStatusEnum, JobStatusEnum
 from shared.services.interfaces import IJobStatusUpdater  # For type hint if needed
-
-import asyncio 
-from shared.celery_config.base_task import EventPublishingTask
-
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
@@ -57,14 +56,14 @@ async def _generate_dataset_task_async(self: EventPublishingTask, dataset_id: in
         initial_context = DatasetContext(
             dataset_id=dataset_id,
             task_instance=self,
-            event_job_type="dataset_generation", 
-            event_entity_type="Dataset",         
+            event_job_type="dataset_generation",
+            event_entity_type="Dataset",
             event_entity_id=dataset_id,
         )
 
         # --- Execute Pipeline ---
         logger.info(f"Task {task_id}: === Executing Dataset Generation Pipeline ===")
-        final_context = await runner.run(initial_context) 
+        final_context = await runner.run(initial_context)
         logger.info(f"Task {task_id}: === Dataset Generation Pipeline Finished ===")
 
         # --- Finalize Task (Success) ---
@@ -151,6 +150,7 @@ async def _generate_dataset_task_async(self: EventPublishingTask, dataset_id: in
         # Clean up resources if necessary (though session scope handles DB)
         logger.debug(f"Task {task_id}: Finalizing dataset generation task.")
         # dependency_provider might have resources to release if it managed them directly
+
 
 @shared_task(
     bind=True, name="tasks.generate_dataset", acks_late=True, base=EventPublishingTask

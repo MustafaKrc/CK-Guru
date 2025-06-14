@@ -2,7 +2,7 @@
 
 export interface FeatureSelectionParamDefinition {
   name: string;
-  type: 'integer' | 'float' | 'string' | 'boolean' | 'enum';
+  type: "integer" | "float" | "string" | "boolean" | "enum";
   description: string;
   default?: any;
   options?: any[];

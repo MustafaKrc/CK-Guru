@@ -3,23 +3,20 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional, Type, Union
 
-from sqlalchemy import update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from shared.core.config import settings
 
 # Import models and Enums
-from shared.db.models import (  # Add Dataset
+from shared.db.models import (
     Dataset,
-    HyperparameterSearchJob,
+    HyperparameterSearchJob,  # Add Dataset
     InferenceJob,
     TrainingJob,
 )
 from shared.db.models.dataset import DatasetStatusEnum
-from shared.schemas.enums import (  # Add DatasetStatusEnum
-    JobStatusEnum,
-)
+from shared.schemas.enums import JobStatusEnum  # Add DatasetStatusEnum
 from shared.services.interfaces import IJobStatusUpdater, JobModel
 
 logger = logging.getLogger(__name__)

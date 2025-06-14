@@ -1,11 +1,12 @@
 # worker/dataset/services/steps/load_configuration_step.py
-import logging
 import asyncio
+import logging
 
 from services.context import DatasetContext
 
 # Import interfaces and concrete repositories/services
-from services.interfaces import  IRepositoryFactory
+from services.interfaces import IRepositoryFactory
+
 # Import directly from the base file rather than from the package
 from services.steps.base_dataset_step import BaseDatasetStep
 from shared.exceptions import NotFoundError  # For cleaner error handling
@@ -49,7 +50,9 @@ class LoadConfigurationStep(BaseDatasetStep):
 
         try:
             # --- Load Dataset Definition ---
-            context.dataset_db = await asyncio.to_thread(dataset_repo.get_by_id, context.dataset_id) 
+            context.dataset_db = await asyncio.to_thread(
+                dataset_repo.get_by_id, context.dataset_id
+            )
             if not context.dataset_db:
                 raise NotFoundError(
                     f"Dataset definition {context.dataset_id} not found."
@@ -67,7 +70,7 @@ class LoadConfigurationStep(BaseDatasetStep):
                 raise ValueError(msg)  # Let pipeline runner handle this
 
             # --- Load Repository ---
-            context.repository_db = await asyncio.to_thread( 
+            context.repository_db = await asyncio.to_thread(
                 repository_repo.get_by_id, context.dataset_db.repository_id
             )
             if not context.repository_db:
@@ -78,9 +81,10 @@ class LoadConfigurationStep(BaseDatasetStep):
             # --- Load Bot Patterns ---
             # Use BotPatternRepository method
             context.bot_patterns_db = list(
-                await asyncio.to_thread( 
+                await asyncio.to_thread(
                     bot_pattern_repo.get_patterns,
-                    repository_id=context.repository_db.id, include_global=True
+                    repository_id=context.repository_db.id,
+                    include_global=True,
                 )
             )
             step_logger.info(
@@ -116,7 +120,10 @@ class LoadConfigurationStep(BaseDatasetStep):
             # --- Update DB Status to GENERATING ---
             updated = await asyncio.to_thread(
                 job_status_updater.update_dataset_start,
-                dataset_id=context.dataset_id, task_id=str(context.task_instance.request.id) # Ensure task_id is string
+                dataset_id=context.dataset_id,
+                task_id=str(
+                    context.task_instance.request.id
+                ),  # Ensure task_id is string
             )
             if not updated:
                 # If status update fails, we cannot proceed reliably
@@ -130,9 +137,11 @@ class LoadConfigurationStep(BaseDatasetStep):
 
         except NotFoundError as e:
             step_logger.error(f"Configuration loading failed: {e}")
-            await asyncio.to_thread( 
+            await asyncio.to_thread(
                 job_status_updater.update_dataset_completion,
-                context.dataset_id, DatasetStatusEnum.FAILED, f"Configuration error: {e}",
+                context.dataset_id,
+                DatasetStatusEnum.FAILED,
+                f"Configuration error: {e}",
             )
             raise  # Re-raise critical error
         except ValueError as e:  # Catch config validation errors or GENERATING conflict
@@ -141,7 +150,9 @@ class LoadConfigurationStep(BaseDatasetStep):
             if context.dataset_db:
                 await asyncio.to_thread(
                     job_status_updater.update_dataset_completion,
-                    context.dataset_id, DatasetStatusEnum.FAILED, f"Configuration error: {e}",
+                    context.dataset_id,
+                    DatasetStatusEnum.FAILED,
+                    f"Configuration error: {e}",
                 )
             raise  # Re-raise critical error
         except Exception as e:
@@ -151,8 +162,10 @@ class LoadConfigurationStep(BaseDatasetStep):
             # Try to update status if dataset was loaded
             if context.dataset_db:
                 await asyncio.to_thread(
-                     job_status_updater.update_dataset_completion,
-                    context.dataset_id, DatasetStatusEnum.FAILED, f"Unexpected error: {e}",
+                    job_status_updater.update_dataset_completion,
+                    context.dataset_id,
+                    DatasetStatusEnum.FAILED,
+                    f"Unexpected error: {e}",
                 )
             raise RuntimeError("Unexpected error during configuration load") from e
 

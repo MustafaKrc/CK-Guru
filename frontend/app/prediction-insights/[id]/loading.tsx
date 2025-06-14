@@ -1,7 +1,7 @@
-import { Skeleton } from "@/components/ui/skeleton"
-import { MainLayout } from "@/components/main-layout"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Skeleton } from "@/components/ui/skeleton";
+import { MainLayout } from "@/components/main-layout";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function PredictionInsightsLoading() {
   return (
@@ -37,7 +37,13 @@ export default function PredictionInsightsLoading() {
 
         <Tabs defaultValue="overview" className="space-y-4">
           <TabsList className="grid grid-cols-2 md:grid-cols-5 gap-2">
-            {["Overview", "Feature Importance", "SHAP Values", "What Could Change", "Decision Path"].map((tab) => (
+            {[
+              "Overview",
+              "Feature Importance",
+              "SHAP Values",
+              "What Could Change",
+              "Decision Path",
+            ].map((tab) => (
               <TabsTrigger key={tab} value={tab.toLowerCase().replace(" ", "-")}>
                 {tab}
               </TabsTrigger>
@@ -71,5 +77,5 @@ export default function PredictionInsightsLoading() {
         </Tabs>
       </div>
     </MainLayout>
-  )
+  );
 }

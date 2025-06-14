@@ -18,8 +18,15 @@ class BotPattern(Base):
     repository_id: Mapped[int | None] = mapped_column(
         ForeignKey("repositories.id", ondelete="CASCADE"), nullable=True, index=True
     )
-    pattern: Mapped[str] = mapped_column(String, nullable=False, comment="The regular expression pattern.")
-    is_exclusion: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, comment="If true, matches are explicitly NOT bots.")
+    pattern: Mapped[str] = mapped_column(
+        String, nullable=False, comment="The regular expression pattern."
+    )
+    is_exclusion: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="If true, matches are explicitly NOT bots.",
+    )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     repository: Mapped[Optional["Repository"]] = relationship(

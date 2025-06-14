@@ -12,9 +12,6 @@ from shared.db.models import (  # Import models directly for query construction
     CKMetric,
     CommitGuruMetric,
 )
-from shared.repositories import (  # Import Repositories if needed, but query uses models
-    BotPatternRepository,
-)
 
 # Import BaseRepository for context manager access
 from shared.repositories.base_repository import BaseRepository

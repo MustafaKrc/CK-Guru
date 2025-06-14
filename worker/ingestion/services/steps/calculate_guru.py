@@ -1,6 +1,6 @@
 # worker/ingestion/services/steps/calculate_guru.py
-import logging
 import asyncio
+import logging
 from typing import List
 
 from pydantic import ValidationError

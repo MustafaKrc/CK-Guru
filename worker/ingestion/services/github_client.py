@@ -107,7 +107,6 @@ class GitHubClient(IRepositoryApiClient):
                 if internal_response.rate_limit_remaining == 0
                 else RepoApiResponseStatus.ERROR
             ),  # Check rate limit specifically
-            404: RepoApiResponseStatus.NOT_FOUND,  # Resource not found
             429: RepoApiResponseStatus.RATE_LIMITED,
             408: RepoApiResponseStatus.ERROR,  # Timeout
             503: RepoApiResponseStatus.ERROR,  # Connection

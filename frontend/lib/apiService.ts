@@ -8,9 +8,9 @@ import {
   DatasetTaskResponse,
   RuleDefinition, // Assuming this is defined in a new file or dataset.ts
   PaginatedDatasetRead, // For getDatasets (used in other parts, good to have)
-  MLModelRead, 
+  MLModelRead,
   PaginatedMLModelRead,
-  TrainingJobCreatePayload, 
+  TrainingJobCreatePayload,
   TrainingJobSubmitResponse,
   TrainingJobRead,
   DatasetRead,
@@ -19,7 +19,7 @@ import {
   DashboardSummaryStats,
   PaginatedTrainingJobRead,
   PaginatedHPSearchJobRead,
-  PaginatedCommitList, 
+  PaginatedCommitList,
   CommitPageResponse,
   TaskResponse,
   TaskStatusResponse,
@@ -35,7 +35,7 @@ import {
   XAITriggerResponse,
 } from "@/types/api";
 
-const API_BASE_URL =  `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/api/v1`;
+const API_BASE_URL = `${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"}/api/v1`;
 
 export interface ValidationErrorDetail {
   loc: (string | number)[];
@@ -61,14 +61,14 @@ export class ApiError extends Error {
 }
 
 export interface GetModelsParams {
-    skip?: number;
-    limit?: number;
-    nameFilter?: string; // Changed from model_name to match backend alias
-    model_type?: string;
-    dataset_id?: number;
-    repository_id?: number;
-    sortBy?: string;
-    sortDir?: 'asc' | 'desc';
+  skip?: number;
+  limit?: number;
+  nameFilter?: string; // Changed from model_name to match backend alias
+  model_type?: string;
+  dataset_id?: number;
+  repository_id?: number;
+  sortBy?: string;
+  sortDir?: "asc" | "desc";
 }
 
 export interface GetTrainingJobsParams {
@@ -79,10 +79,10 @@ export interface GetTrainingJobsParams {
   status?: JobStatusEnum | string;
   nameFilter?: string;
   sortBy?: string;
-  sortDir?: 'asc' | 'desc';
+  sortDir?: "asc" | "desc";
 }
 
-export interface GetHpSearchJobsParams extends GetTrainingJobsParams {} 
+export interface GetHpSearchJobsParams extends GetTrainingJobsParams {}
 
 export interface GetInferenceJobsParams {
   skip?: number;
@@ -92,16 +92,16 @@ export interface GetInferenceJobsParams {
   status?: JobStatusEnum | string;
   nameFilter?: string;
   sortBy?: string;
-  sortDir?: 'asc' | 'desc';
+  sortDir?: "asc" | "desc";
 }
 
 async function downloadFile(endpoint: string, options: RequestInit = {}): Promise<Blob> {
-  const url = `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
-  
+  const url = `${API_BASE_URL}${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`;
+
   const config: RequestInit = {
     ...options,
     headers: {
-      Accept: 'application/octet-stream, text/csv, */*', // Accept binary or csv data
+      Accept: "application/octet-stream, text/csv, */*", // Accept binary or csv data
       ...options.headers,
     },
   };
@@ -118,10 +118,11 @@ async function downloadFile(endpoint: string, options: RequestInit = {}): Promis
         // Response might not be JSON, use status text
         errorData.message = response.statusText || errorData.message;
       }
-      const userMessage = typeof errorData.detail === 'string' ? errorData.detail : "File not found or server error.";
+      const userMessage =
+        typeof errorData.detail === "string" ? errorData.detail : "File not found or server error.";
       throw new ApiError(userMessage, response.status, errorData);
     }
-    
+
     // Return the response body as a Blob
     return response.blob();
   } catch (error) {
@@ -130,21 +131,21 @@ async function downloadFile(endpoint: string, options: RequestInit = {}): Promis
     }
     console.error("Network or unexpected error in file download:", { url, error });
     throw new ApiError(
-      "A network error occurred during download. Please check your connection.", 
-      0, 
+      "A network error occurred during download. Please check your connection.",
+      0,
       { message: (error as Error).message }
     );
   }
 }
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
-  
+  const url = `${API_BASE_URL}${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`;
+
   const config: RequestInit = {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
+      "Content-Type": "application/json",
+      Accept: "application/json",
       ...options.headers,
     },
   };
@@ -162,21 +163,21 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       } catch (e) {
         errorData.message = response.statusText || errorData.message;
       }
-      
+
       let userMessage = "An API error occurred.";
-      if (typeof errorData.detail === 'string') {
+      if (typeof errorData.detail === "string") {
         userMessage = errorData.detail;
       } else if (Array.isArray(errorData.detail) && errorData.detail.length > 0) {
         const firstError = errorData.detail[0];
         if (
-          typeof firstError === 'object' &&
+          typeof firstError === "object" &&
           firstError !== null &&
-          'msg' in firstError &&
-          'loc' in firstError &&
+          "msg" in firstError &&
+          "loc" in firstError &&
           Array.isArray(firstError.loc) // Ensure 'loc' is an array
         ) {
-          userMessage = `Validation Error: ${firstError.loc.join(' -> ')} - ${firstError.msg}`;
-        } else if (typeof firstError === 'string') {
+          userMessage = `Validation Error: ${firstError.loc.join(" -> ")} - ${firstError.msg}`;
+        } else if (typeof firstError === "string") {
           userMessage = firstError;
         }
       } else if (errorData.message) {
@@ -197,26 +198,36 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       throw error;
     }
     console.error("Network or unexpected error in API request:", { url, error });
-    throw new ApiError(
-      "A network error occurred. Please check your connection and try again.", 
-      0, 
-      { message: (error as Error).message }
-    );
+    throw new ApiError("A network error occurred. Please check your connection and try again.", 0, {
+      message: (error as Error).message,
+    });
   }
 }
 
 export const apiService = {
   get: async <T>(endpoint: string, options?: RequestInit): Promise<T> => {
-    return request<T>(endpoint, { ...options, method: 'GET' });
+    return request<T>(endpoint, { ...options, method: "GET" });
   },
-  post: async <TResponse, TRequestData = any>(endpoint: string, data?: TRequestData, options?: RequestInit): Promise<TResponse> => {
-    return request<TResponse>(endpoint, { ...options, method: 'POST', body: data ? JSON.stringify(data) : undefined });
+  post: async <TResponse, TRequestData = any>(
+    endpoint: string,
+    data?: TRequestData,
+    options?: RequestInit
+  ): Promise<TResponse> => {
+    return request<TResponse>(endpoint, {
+      ...options,
+      method: "POST",
+      body: data ? JSON.stringify(data) : undefined,
+    });
   },
-  put: async <TResponse, TRequestData = any>(endpoint: string, data: TRequestData, options?: RequestInit): Promise<TResponse> => {
-    return request<TResponse>(endpoint, { ...options, method: 'PUT', body: JSON.stringify(data) });
+  put: async <TResponse, TRequestData = any>(
+    endpoint: string,
+    data: TRequestData,
+    options?: RequestInit
+  ): Promise<TResponse> => {
+    return request<TResponse>(endpoint, { ...options, method: "PUT", body: JSON.stringify(data) });
   },
   delete: async <TResponse>(endpoint: string, options?: RequestInit): Promise<TResponse> => {
-    return request<TResponse>(endpoint, { ...options, method: 'DELETE' });
+    return request<TResponse>(endpoint, { ...options, method: "DELETE" });
   },
 
   downloadFile: downloadFile,
@@ -226,34 +237,55 @@ export const apiService = {
     return apiService.get<TaskStatusResponse>(`/tasks/${taskId}`);
   },
 
-  revokeTask: async (taskId: string, terminate: boolean = true, signal: string = 'TERM'): Promise<{ message: string }> => {
+  revokeTask: async (
+    taskId: string,
+    terminate: boolean = true,
+    signal: string = "TERM"
+  ): Promise<{ message: string }> => {
     const queryParams = new URLSearchParams({ terminate: String(terminate), signal }).toString();
     return apiService.post<{ message: string }>(`/tasks/${taskId}/revoke?${queryParams}`);
   },
 
   // --- Bot Patterns ---
-  getGlobalBotPatterns: async (params?: { skip?: number; limit?: number }): Promise<PaginatedBotPatternRead> => {
+  getGlobalBotPatterns: async (params?: {
+    skip?: number;
+    limit?: number;
+  }): Promise<PaginatedBotPatternRead> => {
     const queryParams = new URLSearchParams(params as any).toString();
     return apiService.get<PaginatedBotPatternRead>(`/bot-patterns?${queryParams}`);
   },
 
-  getRepoBotPatterns: async (repoId: number, params?: { skip?: number; limit?: number, include_global?: boolean }): Promise<PaginatedBotPatternRead> => {
+  getRepoBotPatterns: async (
+    repoId: number,
+    params?: { skip?: number; limit?: number; include_global?: boolean }
+  ): Promise<PaginatedBotPatternRead> => {
     const queryParams = new URLSearchParams(params as any).toString();
-    return apiService.get<PaginatedBotPatternRead>(`/repositories/${repoId}/bot-patterns?${queryParams}`);
+    return apiService.get<PaginatedBotPatternRead>(
+      `/repositories/${repoId}/bot-patterns?${queryParams}`
+    );
   },
-  
+
   createBotPattern: async (payload: BotPatternCreatePayload): Promise<BotPatternRead> => {
     if (payload.repository_id) {
       // Repository-specific
-      return apiService.post<BotPatternRead, BotPatternCreatePayload>(`/repositories/${payload.repository_id}/bot-patterns`, payload);
+      return apiService.post<BotPatternRead, BotPatternCreatePayload>(
+        `/repositories/${payload.repository_id}/bot-patterns`,
+        payload
+      );
     } else {
       // Global
-      return apiService.post<BotPatternRead, BotPatternCreatePayload>('/bot-patterns', payload);
+      return apiService.post<BotPatternRead, BotPatternCreatePayload>("/bot-patterns", payload);
     }
   },
 
-  updateBotPattern: async (patternId: number, payload: BotPatternUpdatePayload): Promise<BotPatternRead> => {
-    return apiService.put<BotPatternRead, BotPatternUpdatePayload>(`/bot-patterns/${patternId}`, payload);
+  updateBotPattern: async (
+    patternId: number,
+    payload: BotPatternUpdatePayload
+  ): Promise<BotPatternRead> => {
+    return apiService.put<BotPatternRead, BotPatternUpdatePayload>(
+      `/bot-patterns/${patternId}`,
+      payload
+    );
   },
 
   deleteBotPattern: async (patternId: number): Promise<void> => {
@@ -262,45 +294,68 @@ export const apiService = {
 
   // --- Dashboard ---
   getDashboardSummaryStats: async (): Promise<DashboardSummaryStats> => {
-    return apiService.get<DashboardSummaryStats>('/dashboard/stats');
+    return apiService.get<DashboardSummaryStats>("/dashboard/stats");
   },
 
   // --- Repositories ---
-  getRepositories: async (params?: { skip?: number; limit?: number, sortBy?: string, sortDir?: 'asc' | 'desc', nameFilter?: string  }): Promise<PaginatedRepositoryRead> => {
+  getRepositories: async (params?: {
+    skip?: number;
+    limit?: number;
+    sortBy?: string;
+    sortDir?: "asc" | "desc";
+    nameFilter?: string;
+  }): Promise<PaginatedRepositoryRead> => {
     const queryParams = new URLSearchParams();
-    if (params?.skip !== undefined) queryParams.append('skip', String(params.skip));
-    if (params?.limit !== undefined) queryParams.append('limit', String(params.limit));
-    if (params?.nameFilter) queryParams.append('q', params.nameFilter);
-    if (params?.sortBy) queryParams.append('sort_by', params.sortBy);
-    if (params?.sortDir) queryParams.append('sort_order', params.sortDir);
+    if (params?.skip !== undefined) queryParams.append("skip", String(params.skip));
+    if (params?.limit !== undefined) queryParams.append("limit", String(params.limit));
+    if (params?.nameFilter) queryParams.append("q", params.nameFilter);
+    if (params?.sortBy) queryParams.append("sort_by", params.sortBy);
+    if (params?.sortDir) queryParams.append("sort_order", params.sortDir);
     return apiService.get<PaginatedRepositoryRead>(`/repositories?${queryParams.toString()}`);
   },
-  
+
   // --- Datasets ---
   getAvailableCleaningRules: async (): Promise<RuleDefinition[]> => {
-    return apiService.get<RuleDefinition[]>('/datasets/available-cleaning-rules');
+    return apiService.get<RuleDefinition[]>("/datasets/available-cleaning-rules");
   },
   getAvailableFeatureSelectionAlgorithms: async (): Promise<FeatureSelectionDefinition[]> => {
-    return apiService.get<FeatureSelectionDefinition[]>('/datasets/available-feature-selection-algorithms');
+    return apiService.get<FeatureSelectionDefinition[]>(
+      "/datasets/available-feature-selection-algorithms"
+    );
   },
-  createDataset: async (repoId: string | number, payload: DatasetCreatePayload): Promise<DatasetTaskResponse> => {
-    return apiService.post<DatasetTaskResponse, DatasetCreatePayload>(`/repositories/${repoId}/datasets`, payload);
+  createDataset: async (
+    repoId: string | number,
+    payload: DatasetCreatePayload
+  ): Promise<DatasetTaskResponse> => {
+    return apiService.post<DatasetTaskResponse, DatasetCreatePayload>(
+      `/repositories/${repoId}/datasets`,
+      payload
+    );
   },
-  getDatasets: async (params?: { skip?: number; limit?: number; status?: string; repository_id?: string | number, nameFilter?: string, sortBy?: string, sortDir?: 'asc'|'desc' }): Promise<PaginatedDatasetRead> => {
+  getDatasets: async (params?: {
+    skip?: number;
+    limit?: number;
+    status?: string;
+    repository_id?: string | number;
+    nameFilter?: string;
+    sortBy?: string;
+    sortDir?: "asc" | "desc";
+  }): Promise<PaginatedDatasetRead> => {
     const queryParams = new URLSearchParams();
-    if (params?.skip !== undefined) queryParams.append('skip', String(params.skip));
-    if (params?.limit !== undefined) queryParams.append('limit', String(params.limit));
-    if (params?.status) queryParams.append('status', params.status);
-    if (params?.repository_id !== undefined) queryParams.append('repository_id', String(params.repository_id)); 
-    if (params?.nameFilter) queryParams.append('name_filter', params.nameFilter);
-    if (params?.sortBy) queryParams.append('sort_by', params.sortBy);
-    if (params?.sortDir) queryParams.append('sort_order', params.sortDir);
+    if (params?.skip !== undefined) queryParams.append("skip", String(params.skip));
+    if (params?.limit !== undefined) queryParams.append("limit", String(params.limit));
+    if (params?.status) queryParams.append("status", params.status);
+    if (params?.repository_id !== undefined)
+      queryParams.append("repository_id", String(params.repository_id));
+    if (params?.nameFilter) queryParams.append("name_filter", params.nameFilter);
+    if (params?.sortBy) queryParams.append("sort_by", params.sortBy);
+    if (params?.sortDir) queryParams.append("sort_order", params.sortDir);
     return apiService.get<PaginatedDatasetRead>(`/datasets?${queryParams.toString()}`);
   },
   // --- ML Models ---
 
   getAvailableModelTypes: async (): Promise<AvailableModelType[]> => {
-    return request<AvailableModelType[]>('/ml/model-types');
+    return request<AvailableModelType[]>("/ml/model-types");
   },
   getModels: async (params?: GetModelsParams): Promise<PaginatedMLModelRead> => {
     const queryParams = new URLSearchParams(params as any);
@@ -313,8 +368,13 @@ export const apiService = {
   },
 
   // --- Training Jobs ---
-  submitTrainingJob: async (payload: TrainingJobCreatePayload): Promise<TrainingJobSubmitResponse> => {
-    return apiService.post<TrainingJobSubmitResponse, TrainingJobCreatePayload>('/ml/train', payload);
+  submitTrainingJob: async (
+    payload: TrainingJobCreatePayload
+  ): Promise<TrainingJobSubmitResponse> => {
+    return apiService.post<TrainingJobSubmitResponse, TrainingJobCreatePayload>(
+      "/ml/train",
+      payload
+    );
   },
 
   getTrainingJobDetails: async (jobId: string | number): Promise<TrainingJobRead> => {
@@ -332,32 +392,39 @@ export const apiService = {
   },
 
   getInferenceJobs: async (params?: GetInferenceJobsParams): Promise<PaginatedInferenceJobRead> => {
-    const queryParams = new URLSearchParams(params as any); 
+    const queryParams = new URLSearchParams(params as any);
     return apiService.get<PaginatedInferenceJobRead>(`/ml/infer?${queryParams.toString()}`);
   },
 
-  getCommits: async (repoId: number | string, params?: { skip?: number; limit?: number }): Promise<PaginatedCommitList> => {
+  getCommits: async (
+    repoId: number | string,
+    params?: { skip?: number; limit?: number }
+  ): Promise<PaginatedCommitList> => {
     const queryParams = new URLSearchParams();
-    if (params?.skip !== undefined) queryParams.append('skip', String(params.skip));
-    if (params?.limit !== undefined) queryParams.append('limit', String(params.limit));
-    return apiService.get<PaginatedCommitList>(`/repositories/${repoId}/commits?${queryParams.toString()}`);
+    if (params?.skip !== undefined) queryParams.append("skip", String(params.skip));
+    if (params?.limit !== undefined) queryParams.append("limit", String(params.limit));
+    return apiService.get<PaginatedCommitList>(
+      `/repositories/${repoId}/commits?${queryParams.toString()}`
+    );
   },
 
-  getCommitDetails: async (repoId: number | string, commitHash: string): Promise<CommitPageResponse> => {
+  getCommitDetails: async (
+    repoId: number | string,
+    commitHash: string
+  ): Promise<CommitPageResponse> => {
     return apiService.get<CommitPageResponse>(`/repositories/${repoId}/commits/${commitHash}`);
   },
 
-  triggerCommitIngestion: async (repoId: number | string, commitHash: string): Promise<TaskResponse> => {
+  triggerCommitIngestion: async (
+    repoId: number | string,
+    commitHash: string
+  ): Promise<TaskResponse> => {
     return apiService.post<TaskResponse>(`/repositories/${repoId}/commits/${commitHash}/ingest`);
   },
-  
 };
 
 // Utility to show toast notifications for API errors
-export const handleApiError = (
-  error: any,
-  customTitle: string = "Operation Failed"
-) => {
+export const handleApiError = (error: any, customTitle: string = "Operation Failed") => {
   let description = "An unexpected error occurred. Please try again.";
   if (error instanceof ApiError) {
     description = error.message;
@@ -378,10 +445,17 @@ export const getInferenceJobDetails = async (jobId: string | number): Promise<In
   return apiService.get<InferenceJobRead>(`/ml/infer/${jobId}`);
 };
 
-export const getXAIResultsForJob = async (inferenceJobId: string | number): Promise<XAIResultRead[]> => {
+export const getXAIResultsForJob = async (
+  inferenceJobId: string | number
+): Promise<XAIResultRead[]> => {
   return apiService.get<XAIResultRead[]>(`/xai/inference-jobs/${inferenceJobId}/xai-results`);
 };
 
-export const triggerXAIProcessing = async (inferenceJobId: string | number): Promise<XAITriggerResponse> => {
-  return apiService.post<XAITriggerResponse>(`/xai/inference-jobs/${inferenceJobId}/xai-results/trigger`, {});
+export const triggerXAIProcessing = async (
+  inferenceJobId: string | number
+): Promise<XAITriggerResponse> => {
+  return apiService.post<XAITriggerResponse>(
+    `/xai/inference-jobs/${inferenceJobId}/xai-results/trigger`,
+    {}
+  );
 };

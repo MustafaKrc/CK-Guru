@@ -1,23 +1,25 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { MainLayout } from "@/components/main-layout"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ProfileSettings } from "@/components/profile/profile-settings"
-import { RepositorySettings } from "@/components/profile/repository-settings"
-import { IntegrationSettings } from "@/components/profile/integration-settings"
-import { SecuritySettings } from "@/components/profile/security-settings"
-import { NotificationSettings } from "@/components/profile/notification-settings"
+import { useState } from "react";
+import { MainLayout } from "@/components/main-layout";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ProfileSettings } from "@/components/profile/profile-settings";
+import { RepositorySettings } from "@/components/profile/repository-settings";
+import { IntegrationSettings } from "@/components/profile/integration-settings";
+import { SecuritySettings } from "@/components/profile/security-settings";
+import { NotificationSettings } from "@/components/profile/notification-settings";
 
 export default function ProfilePage() {
-  const [activeTab, setActiveTab] = useState("profile")
+  const [activeTab, setActiveTab] = useState("profile");
 
   return (
     <MainLayout>
       <div className="container mx-auto py-6 space-y-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Profile Settings</h1>
-          <p className="text-muted-foreground">Manage your account settings, repositories, and integrations</p>
+          <p className="text-muted-foreground">
+            Manage your account settings, repositories, and integrations
+          </p>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
@@ -51,5 +53,5 @@ export default function ProfilePage() {
         </Tabs>
       </div>
     </MainLayout>
-  )
+  );
 }

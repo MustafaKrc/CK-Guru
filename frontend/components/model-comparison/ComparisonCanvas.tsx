@@ -6,8 +6,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { BarChart3 } from "lucide-react";
 
 import { MetricsComparisonTable } from "./MetricsComparisonTable";
-import { PerformanceBarChart } from './PerformanceBarChart';
-import { PerformanceRadarChart } from './PerformanceRadarChart';
+import { PerformanceBarChart } from "./PerformanceBarChart";
+import { PerformanceRadarChart } from "./PerformanceRadarChart";
 
 interface ComparisonCanvasProps {
   selectedModels: MLModelRead[];
@@ -34,11 +34,11 @@ export const ComparisonCanvas: React.FC<ComparisonCanvasProps> = ({ selectedMode
 
   return (
     <ScrollArea className="h-full overflow-auto">
-        <div className="p-4 space-x-6 min-w-max">
-            <MetricsComparisonTable selectedModels={selectedModels} />
-            <PerformanceBarChart selectedModels={selectedModels} />
-            <PerformanceRadarChart selectedModels={selectedModels} />
-        </div>
+      <div className="p-4 space-x-6 min-w-max">
+        <MetricsComparisonTable selectedModels={selectedModels} />
+        <PerformanceBarChart selectedModels={selectedModels} />
+        <PerformanceRadarChart selectedModels={selectedModels} />
+      </div>
     </ScrollArea>
   );
 };

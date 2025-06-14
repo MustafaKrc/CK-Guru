@@ -1,6 +1,6 @@
 # worker/ingestion/services/steps/persist_ck.py
-import logging
 import asyncio
+import logging
 from typing import Any, Dict, List  # Add List, Any
 
 from shared.repositories import CKMetricRepository
@@ -105,7 +105,9 @@ class PersistCKMetricsStep(IngestionStep):
                 f"Attempting bulk UPSERT for {len(all_instances_to_upsert)} CK records...",
             )
             try:
-                processed_count = await asyncio.to_thread(ck_repo.bulk_upsert, all_instances_to_upsert)
+                processed_count = await asyncio.to_thread(
+                    ck_repo.bulk_upsert, all_instances_to_upsert
+                )
                 inserted_count = processed_count  # UPSERT count is treated as processed
             except Exception as e:
                 self._log_error(

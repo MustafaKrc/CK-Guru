@@ -5,9 +5,9 @@ from typing import Any, Optional  # Keep Any for model
 
 import pandas as pd
 
-from shared.schemas.xai import (  # Import the Pydantic model for results
+from shared.schemas.xai import (
     DecisionPathResultData,
-)
+)  # Import the Pydantic model for results
 
 from .base_xai_strategy import BaseXAIStrategy
 

@@ -45,10 +45,7 @@ const formatMetricValue = (value: any): string => {
 export const MetricsComparisonTable: React.FC<MetricsComparisonTableProps> = ({
   selectedModels,
 }) => {
-  const findBestValue = (
-    metricKey: string,
-    higherIsBetter: boolean
-  ) => {
+  const findBestValue = (metricKey: string, higherIsBetter: boolean) => {
     const values = selectedModels
       .map((m) => m.performance_metrics?.[metricKey])
       .filter((v): v is number => typeof v === "number");
@@ -81,15 +78,22 @@ export const MetricsComparisonTable: React.FC<MetricsComparisonTableProps> = ({
                 const bestValue = findBestValue(metric.key, metric.higherIsBetter);
                 return (
                   <TableRow key={metric.key}>
-                    <TableCell className="font-medium sticky left-0 bg-card z-10">{metric.label}</TableCell>
+                    <TableCell className="font-medium sticky left-0 bg-card z-10">
+                      {metric.label}
+                    </TableCell>
                     {selectedModels.map((model) => {
                       const value = model.performance_metrics?.[metric.key];
                       const isBest = value !== undefined && value !== null && value === bestValue;
                       return (
-                        <TableCell key={`${model.id}-${metric.key}`} className="text-center font-mono text-xs">
+                        <TableCell
+                          key={`${model.id}-${metric.key}`}
+                          className="text-center font-mono text-xs"
+                        >
                           <Badge
                             variant={isBest ? "default" : "secondary"}
-                            className={cn(isBest && "bg-green-600/80 text-white dark:bg-green-500/80")}
+                            className={cn(
+                              isBest && "bg-green-600/80 text-white dark:bg-green-500/80"
+                            )}
                           >
                             {formatMetricValue(value)}
                           </Badge>

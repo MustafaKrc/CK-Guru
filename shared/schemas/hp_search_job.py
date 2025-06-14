@@ -12,6 +12,7 @@ from pydantic import (
 )
 
 from shared.core.config import settings
+from shared.schemas.dataset import DatasetRead
 from shared.schemas.enums import (
     JobStatusEnum,
     ModelTypeEnum,
@@ -20,7 +21,6 @@ from shared.schemas.enums import (
     SamplerTypeEnum,
 )
 from shared.schemas.ml_model import MLModelRead
-from shared.schemas.dataset import DatasetRead
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
@@ -231,6 +231,7 @@ class HPSearchJobSubmitResponse(BaseModel):
     job_id: int
     celery_task_id: str
     message: str = "Hyperparameter search job submitted successfully."
+
 
 class PaginatedHPSearchJobRead(BaseModel):
     items: List[HPSearchJobRead]

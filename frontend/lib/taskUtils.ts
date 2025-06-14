@@ -1,5 +1,5 @@
 // frontend/lib/taskUtils.ts
-import { TaskStatusUpdatePayload } from '@/store/taskStore'; // Adjust path as needed
+import { TaskStatusUpdatePayload } from "@/store/taskStore"; // Adjust path as needed
 
 /**
  * Finds the latest relevant task status for a given entity.
@@ -21,29 +21,27 @@ export const getLatestTaskForEntity = (
     return undefined;
   }
 
-  const relevantTasks = Object.values(taskStatuses).filter(
-    (task) => {
-      // Entity type check:
-      // 1. task.entity_type must exist (not null/undefined).
-      // 2. If it exists, it must match the provided entityType (case-insensitive).
-      const entityTypeMatch =
-        task.entity_type && // Ensures task.entity_type is not null or undefined
-        task.entity_type.toLowerCase() === entityType.toLowerCase();
+  const relevantTasks = Object.values(taskStatuses).filter((task) => {
+    // Entity type check:
+    // 1. task.entity_type must exist (not null/undefined).
+    // 2. If it exists, it must match the provided entityType (case-insensitive).
+    const entityTypeMatch =
+      task.entity_type && // Ensures task.entity_type is not null or undefined
+      task.entity_type.toLowerCase() === entityType.toLowerCase();
 
-      // Entity ID check:
-      // Convert both to string for consistent comparison.
-      // This handles cases where task.entity_id might be a number and entityId a string, or vice-versa.
-      // String(null) becomes "null", String(undefined) becomes "undefined".
-      const entityIdMatch = String(task.entity_id) === String(entityId);
+    // Entity ID check:
+    // Convert both to string for consistent comparison.
+    // This handles cases where task.entity_id might be a number and entityId a string, or vice-versa.
+    // String(null) becomes "null", String(undefined) becomes "undefined".
+    const entityIdMatch = String(task.entity_id) === String(entityId);
 
-      // Job type check:
-      // If jobType is provided, task.job_type must match.
-      // If jobType is not provided, this part of the condition is true.
-      const jobTypeMatch = jobType ? task.job_type === jobType : true;
+    // Job type check:
+    // If jobType is provided, task.job_type must match.
+    // If jobType is not provided, this part of the condition is true.
+    const jobTypeMatch = jobType ? task.job_type === jobType : true;
 
-      return entityTypeMatch && entityIdMatch && jobTypeMatch;
-    }
-  );
+    return entityTypeMatch && entityIdMatch && jobTypeMatch;
+  });
 
   if (relevantTasks.length === 0) return undefined;
 
@@ -52,14 +50,14 @@ export const getLatestTaskForEntity = (
   return relevantTasks.sort((a, b) => {
     const dateA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
     const dateB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-    
+
     // If timestamps are different, sort by them
     if (dateB !== dateA) return dateB - dateA;
-    
+
     // Timestamps are identical (or both invalid/missing), fallback to task_id parsing.
     // Ensure radix is specified for parseInt and handle potential NaN results.
-    const idPartBStr = b.task_id.split('-').pop() || "0";
-    const idPartAStr = a.task_id.split('-').pop() || "0";
+    const idPartBStr = b.task_id.split("-").pop() || "0";
+    const idPartAStr = a.task_id.split("-").pop() || "0";
 
     const idPartB = parseInt(idPartBStr, 10);
     const idPartA = parseInt(idPartAStr, 10);
@@ -69,7 +67,7 @@ export const getLatestTaskForEntity = (
     // A more sophisticated fallback might be needed if task_ids are not numeric.
     const valB = isNaN(idPartB) ? 0 : idPartB;
     const valA = isNaN(idPartA) ? 0 : idPartA;
-    
+
     return valB - valA;
   })[0];
 };

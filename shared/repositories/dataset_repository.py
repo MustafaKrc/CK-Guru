@@ -5,9 +5,7 @@ from typing import Any, Dict, Optional, Sequence
 from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 
-from shared.db.models import (  # Import Repository if needed for relations
-    Dataset,
-)
+from shared.db.models import Dataset  # Import Repository if needed for relations
 from shared.schemas.dataset import DatasetCreate, DatasetUpdate
 from shared.schemas.enums import DatasetStatusEnum
 
@@ -214,7 +212,7 @@ class DatasetRepository(BaseRepository[Dataset]):
         """Get a dataset by ID."""
         with self._session_scope() as session:
             return session.get(Dataset, dataset_id)
-        
+
     def update_config(self, dataset_id: int, new_config: Dict[str, Any]) -> bool:
         """Updates the config JSON for a specific dataset."""
         with self._session_scope() as session:
@@ -227,11 +225,16 @@ class DatasetRepository(BaseRepository[Dataset]):
                 result = session.execute(stmt)
                 session.commit()
                 if result.rowcount == 0:
-                    logger.warning(f"Attempted to update config for non-existent dataset ID {dataset_id}")
+                    logger.warning(
+                        f"Attempted to update config for non-existent dataset ID {dataset_id}"
+                    )
                     return False
                 logger.info(f"Successfully updated config for dataset ID {dataset_id}")
                 return True
             except SQLAlchemyError as e:
-                logger.error(f"DB error updating config for dataset {dataset_id}: {e}", exc_info=True)
+                logger.error(
+                    f"DB error updating config for dataset {dataset_id}: {e}",
+                    exc_info=True,
+                )
                 session.rollback()
                 raise

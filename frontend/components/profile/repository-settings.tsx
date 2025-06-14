@@ -1,13 +1,20 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -16,7 +23,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,9 +31,18 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { GitBranch, Plus, MoreHorizontal, RefreshCw, Eye, Edit, Trash2, GitFork } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
+} from "@/components/ui/dropdown-menu";
+import {
+  GitBranch,
+  Plus,
+  MoreHorizontal,
+  RefreshCw,
+  Eye,
+  Edit,
+  Trash2,
+  GitFork,
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 // Mock data for user repositories
 const mockUserRepositories = [
@@ -60,16 +76,16 @@ const mockUserRepositories = [
     lastIngested: null,
     isPrivate: false,
   },
-]
+];
 
 export function RepositorySettings() {
-  const [repositories, setRepositories] = useState(mockUserRepositories)
-  const [newRepoUrl, setNewRepoUrl] = useState("")
-  const [addDialogOpen, setAddDialogOpen] = useState(false)
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [selectedRepo, setSelectedRepo] = useState<string | null>(null)
-  const router = useRouter()
-  const { toast } = useToast()
+  const [repositories, setRepositories] = useState(mockUserRepositories);
+  const [newRepoUrl, setNewRepoUrl] = useState("");
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedRepo, setSelectedRepo] = useState<string | null>(null);
+  const router = useRouter();
+  const { toast } = useToast();
 
   const handleAddRepository = () => {
     // Validate URL
@@ -78,8 +94,8 @@ export function RepositorySettings() {
         title: "Error",
         description: "Please enter a valid Git URL",
         variant: "destructive",
-      })
-      return
+      });
+      return;
     }
 
     // In a real app, this would be an API call
@@ -87,7 +103,7 @@ export function RepositorySettings() {
       ? "GitHub"
       : newRepoUrl.includes("gitlab.com")
         ? "GitLab"
-        : "Other"
+        : "Other";
     const newRepo = {
       id: `user-${repositories.length + 1}`,
       name: newRepoUrl.split("/").pop()?.replace(".git", "") || "new-repo",
@@ -97,88 +113,102 @@ export function RepositorySettings() {
       status: "Not Ingested",
       lastIngested: null,
       isPrivate: true,
-    }
+    };
 
-    setRepositories([...repositories, newRepo])
-    setNewRepoUrl("")
-    setAddDialogOpen(false)
+    setRepositories([...repositories, newRepo]);
+    setNewRepoUrl("");
+    setAddDialogOpen(false);
 
     toast({
       title: "Repository added",
       description: "The repository has been added successfully",
-    })
-  }
+    });
+  };
 
   const handleDeleteRepository = () => {
-    if (!selectedRepo) return
+    if (!selectedRepo) return;
 
     // In a real app, this would be an API call
-    setRepositories(repositories.filter((repo) => repo.id !== selectedRepo))
-    setDeleteDialogOpen(false)
+    setRepositories(repositories.filter((repo) => repo.id !== selectedRepo));
+    setDeleteDialogOpen(false);
 
     toast({
       title: "Repository deleted",
       description: "The repository has been deleted successfully",
-    })
-  }
+    });
+  };
 
   const handleIngestRepository = (repoId: string) => {
     // In a real app, this would be an API call
-    setRepositories(repositories.map((repo) => (repo.id === repoId ? { ...repo, status: "Ingesting" } : repo)))
+    setRepositories(
+      repositories.map((repo) => (repo.id === repoId ? { ...repo, status: "Ingesting" } : repo))
+    );
 
     toast({
       title: "Ingestion started",
       description: "Repository ingestion has been initiated",
-    })
-  }
+    });
+  };
 
   const getStatusBadge = (status: string) => {
-    switch (status.toUpperCase().replace("JOBSTATUSENUM", "").replace("TASKSTATUSENUM", "").replace(".", "")) {
+    switch (
+      status
+        .toUpperCase()
+        .replace("JOBSTATUSENUM", "")
+        .replace("TASKSTATUSENUM", "")
+        .replace(".", "")
+    ) {
       case "Ingested":
-        return <Badge className="status-badge-ready">Ingested</Badge>
+        return <Badge className="status-badge-ready">Ingested</Badge>;
       case "Ingesting":
         return (
           <Badge variant="outline" className="status-badge-running flex items-center gap-1">
             <RefreshCw className="h-3 w-3 animate-spin" />
             Ingesting
           </Badge>
-        )
+        );
       case "Failed":
         return (
           <Badge variant="destructive" className="status-badge-failed">
             Failed
           </Badge>
-        )
+        );
       default:
-        return <Badge variant="secondary">Not Ingested</Badge>
+        return <Badge variant="secondary">Not Ingested</Badge>;
     }
-  }
+  };
 
   const getProviderBadge = (provider: string, isPrivate: boolean) => {
     switch (provider) {
       case "GitHub":
         return (
-          <Badge variant="outline" className="bg-[#24292e]/10 text-[#24292e] dark:bg-[#24292e]/20 dark:text-white">
+          <Badge
+            variant="outline"
+            className="bg-[#24292e]/10 text-[#24292e] dark:bg-[#24292e]/20 dark:text-white"
+          >
             <GitBranch className="mr-1 h-3 w-3" />
             GitHub {isPrivate && "(Private)"}
           </Badge>
-        )
+        );
       case "GitLab":
         return (
-          <Badge variant="outline" className="bg-[#fc6d26]/10 text-[#fc6d26] dark:bg-[#fc6d26]/20 dark:text-[#fc6d26]">
+          <Badge
+            variant="outline"
+            className="bg-[#fc6d26]/10 text-[#fc6d26] dark:bg-[#fc6d26]/20 dark:text-[#fc6d26]"
+          >
             <GitFork className="mr-1 h-3 w-3" />
             GitLab {isPrivate && "(Private)"}
           </Badge>
-        )
+        );
       default:
-        return <Badge variant="outline">Other</Badge>
+        return <Badge variant="outline">Other</Badge>;
     }
-  }
+  };
 
   const formatDate = (dateString: string | null) => {
-    if (!dateString) return "N/A"
-    return new Date(dateString).toLocaleDateString()
-  }
+    if (!dateString) return "N/A";
+    return new Date(dateString).toLocaleDateString();
+  };
 
   return (
     <div className="space-y-6">
@@ -198,7 +228,9 @@ export function RepositorySettings() {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Add Repository</DialogTitle>
-                <DialogDescription>Enter the Git URL of the repository you want to add.</DialogDescription>
+                <DialogDescription>
+                  Enter the Git URL of the repository you want to add.
+                </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
@@ -210,8 +242,8 @@ export function RepositorySettings() {
                     onChange={(e) => setNewRepoUrl(e.target.value)}
                   />
                   <p className="text-sm text-muted-foreground">
-                    Make sure you have added the appropriate integration in the Integrations tab for private
-                    repositories.
+                    Make sure you have added the appropriate integration in the Integrations tab for
+                    private repositories.
                   </p>
                 </div>
               </div>
@@ -267,7 +299,9 @@ export function RepositorySettings() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuItem onClick={() => router.push(`/repositories/${repo.id}`)}>
+                            <DropdownMenuItem
+                              onClick={() => router.push(`/repositories/${repo.id}`)}
+                            >
                               <Eye className="mr-2 h-4 w-4" />
                               View Details
                             </DropdownMenuItem>
@@ -286,8 +320,8 @@ export function RepositorySettings() {
                             <DropdownMenuItem
                               className="text-destructive focus:text-destructive"
                               onClick={() => {
-                                setSelectedRepo(repo.id)
-                                setDeleteDialogOpen(true)
+                                setSelectedRepo(repo.id);
+                                setDeleteDialogOpen(true);
                               }}
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
@@ -324,5 +358,5 @@ export function RepositorySettings() {
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }

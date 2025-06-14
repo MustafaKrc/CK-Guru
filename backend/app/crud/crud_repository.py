@@ -3,12 +3,12 @@ import logging
 from typing import Optional, Sequence, Tuple
 from urllib.parse import urlparse
 
-from sqlalchemy import func, select, desc, asc
-from sqlalchemy.orm import selectinload, aliased
+from sqlalchemy import asc, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from shared.core.config import settings
-from shared.db.models import Repository, Dataset, BotPattern, GitHubIssue
+from shared.db.models import BotPattern, Dataset, GitHubIssue, Repository
 from shared.schemas.repository import RepositoryCreate, RepositoryUpdate
 
 logger = logging.getLogger(__name__)
@@ -67,20 +67,17 @@ async def get_repository(db: AsyncSession, repo_id: int) -> Optional[Repository]
         .where(github_issue_alias.repository_id == Repository.id)
         .label("github_issues_count")
     )
-    
-    stmt = (
-        select(
-            Repository,
-            dataset_count_subquery,
-            bot_pattern_count_subquery,
-            github_issue_count_subquery,
-        )
-        .filter(Repository.id == repo_id)
-    )
+
+    stmt = select(
+        Repository,
+        dataset_count_subquery,
+        bot_pattern_count_subquery,
+        github_issue_count_subquery,
+    ).filter(Repository.id == repo_id)
 
     result = await db.execute(stmt)
     repo_data = result.first()
-    
+
     if repo_data:
         repo, datasets_count, bot_patterns_count, github_issues_count = repo_data
         # Manually attach counts to the ORM object for the Pydantic schema
@@ -88,8 +85,9 @@ async def get_repository(db: AsyncSession, repo_id: int) -> Optional[Repository]
         repo.bot_patterns_count = bot_patterns_count
         repo.github_issues_count = github_issues_count
         return repo
-        
+
     return None
+
 
 async def get_repository_by_git_url(
     db: AsyncSession, git_url: str
@@ -113,7 +111,7 @@ async def get_repositories(
     sort_order: str = "desc",
 ) -> Tuple[Sequence[Repository], int]:
     """Get multiple repositories with filtering, sorting, and pagination."""
-    
+
     # Aliases for subqueries
     dataset_alias = aliased(Dataset)
     bot_pattern_alias = aliased(BotPattern)
@@ -155,7 +153,9 @@ async def get_repositories(
     if sort_by:
         sort_column = getattr(Repository, sort_by, None)
         if sort_column is not None:
-            stmt = stmt.order_by(desc(sort_column) if sort_order == "desc" else asc(sort_column))
+            stmt = stmt.order_by(
+                desc(sort_column) if sort_order == "desc" else asc(sort_column)
+            )
     else:
         stmt = stmt.order_by(Repository.created_at.desc())
 
@@ -166,9 +166,9 @@ async def get_repositories(
 
     # Apply pagination
     stmt = stmt.offset(skip).limit(limit)
-    
+
     result_items = await db.execute(stmt)
-    
+
     items = []
     for row in result_items:
         repo, datasets_count, bot_patterns_count, github_issues_count = row
@@ -177,7 +177,7 @@ async def get_repositories(
         repo.bot_patterns_count = bot_patterns_count
         repo.github_issues_count = github_issues_count
         items.append(repo)
-        
+
     return items, total
 
 

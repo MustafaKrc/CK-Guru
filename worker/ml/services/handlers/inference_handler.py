@@ -1,7 +1,7 @@
 # worker/ml/services/handlers/inference_handler.py
+import asyncio
 import logging
 from typing import Any, Dict, List, Optional, Tuple
-import asyncio
 
 import numpy as np
 import pandas as pd

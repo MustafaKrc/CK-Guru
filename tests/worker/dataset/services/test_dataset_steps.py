@@ -14,11 +14,11 @@ from shared.db.models.bot_pattern import PatternTypeEnum
 
 # Import functions and classes to test
 from worker.dataset.services.dataset_steps import (
-    CK_METRIC_COLUMNS,  # Import for checking columns
+    CK_METRIC_COLUMNS,
     calculate_delta_metrics,
     get_bot_filter_condition,
     get_parent_ck_metrics,
-)
+)  # Import for checking columns
 
 # --- Mock Setup ---
 

@@ -15,9 +15,9 @@ from sse_starlette.sse import EventSourceResponse
 from app.core.celery_app import backend_celery_app as celery_app
 
 # Import the TaskStatusService
-from app.services.task_status_service import (  # Using Option 1 (Global Instance)
+from app.services.task_status_service import (
     task_status_service,
-)
+)  # Using Option 1 (Global Instance)
 from shared import schemas
 from shared.core.config import settings
 from shared.utils.redis_utils import get_redis_client

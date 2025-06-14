@@ -1,7 +1,6 @@
 # worker/dataset/services/steps/apply_bot_patterns_step.py
 import logging
 import re
-import pandas as pd
 
 from services.context import DatasetContext
 from services.interfaces import IDatasetGeneratorStep
@@ -10,10 +9,12 @@ from shared.utils.pipeline_logging import StepLogger
 
 logger = logging.getLogger(__name__)
 
+
 class ApplyBotPatternsStep(IDatasetGeneratorStep):
     """
     Applies bot filtering to the dataset based on global and repository-specific regex patterns.
     """
+
     name = "Apply Bot Patterns"
 
     def execute(
@@ -40,30 +41,32 @@ class ApplyBotPatternsStep(IDatasetGeneratorStep):
             return context
 
         step_logger.info(f"Applying {len(patterns)} bot patterns...")
-        
+
         inclusions = [re.compile(p.pattern) for p in patterns if not p.is_exclusion]
         exclusions = [re.compile(p.pattern) for p in patterns if p.is_exclusion]
-        
-        step_logger.debug(f"Inclusion patterns: {len(inclusions)}, Exclusion patterns: {len(exclusions)}")
-        
+
+        step_logger.debug(
+            f"Inclusion patterns: {len(inclusions)}, Exclusion patterns: {len(exclusions)}"
+        )
+
         def is_bot(author_name: str) -> bool:
             if not isinstance(author_name, str):
                 return False
-            
+
             # If any exclusion pattern matches, it's NOT a bot.
             if any(exc.search(author_name) for exc in exclusions):
                 return False
-            
+
             # If any inclusion pattern matches (and no exclusion did), it IS a bot.
             if any(inc.search(author_name) for inc in inclusions):
                 return True
-            
+
             return False
 
         original_rows = len(context.processed_dataframe)
-        
+
         # Apply the filter logic
-        bot_mask = context.processed_dataframe['author_name'].apply(is_bot)
+        bot_mask = context.processed_dataframe["author_name"].apply(is_bot)
         context.processed_dataframe = context.processed_dataframe[~bot_mask]
 
         rows_removed = original_rows - len(context.processed_dataframe)

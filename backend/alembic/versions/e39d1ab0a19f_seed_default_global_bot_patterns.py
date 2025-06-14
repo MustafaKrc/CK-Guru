@@ -33,8 +33,7 @@ bot_patterns_table = sa.table(
 
 # List of default global bot patterns to seed
 # Use uppercase enum values that match the database enum definition
-default_patterns = [
-]
+default_patterns = []
 
 
 def upgrade() -> None:

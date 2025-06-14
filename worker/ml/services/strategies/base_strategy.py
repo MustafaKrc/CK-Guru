@@ -2,13 +2,19 @@
 import logging
 from abc import ABC, abstractmethod
 from inspect import Parameter, signature
-from typing import Any, Dict, NamedTuple, Optional, Set, Tuple, Type
+from typing import Any, Dict, NamedTuple, Set, Type
 
 import numpy as np
 import pandas as pd
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, log_loss, roc_auc_score
+from sklearn.metrics import (
+    accuracy_score,
+    f1_score,
+    log_loss,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
 from sklearn.utils.multiclass import type_of_target
-
 
 from services.interfaces import IArtifactService
 from shared.schemas.enums import ModelTypeEnum
@@ -112,8 +118,12 @@ class BaseModelStrategy(ABC):
                 f"Model type {type(self.model).__name__} does not have a 'predict' method."
             )
             return {
-                "accuracy": 0.0, "f1_weighted": 0.0, "precision_weighted": 0.0, "recall_weighted": 0.0,
-                "roc_auc": 0.0, "log_loss": str(float('inf')),
+                "accuracy": 0.0,
+                "f1_weighted": 0.0,
+                "precision_weighted": 0.0,
+                "recall_weighted": 0.0,
+                "roc_auc": 0.0,
+                "log_loss": str(float("inf")),
             }
 
         logger.info(
@@ -126,57 +136,106 @@ class BaseModelStrategy(ABC):
             y_pred_eval = pd.Series(y_pred).astype(int)
 
             metrics["accuracy"] = round(accuracy_score(y_test_eval, y_pred_eval), 4)
-            metrics["f1_weighted"] = round(f1_score(y_test_eval, y_pred_eval, average="weighted", zero_division=0), 4)
-            metrics["precision_weighted"] = round(precision_score(y_test_eval, y_pred_eval, average="weighted", zero_division=0), 4)
-            metrics["recall_weighted"] = round(recall_score(y_test_eval, y_pred_eval, average="weighted", zero_division=0), 4)
+            metrics["f1_weighted"] = round(
+                f1_score(y_test_eval, y_pred_eval, average="weighted", zero_division=0),
+                4,
+            )
+            metrics["precision_weighted"] = round(
+                precision_score(
+                    y_test_eval, y_pred_eval, average="weighted", zero_division=0
+                ),
+                4,
+            )
+            metrics["recall_weighted"] = round(
+                recall_score(
+                    y_test_eval, y_pred_eval, average="weighted", zero_division=0
+                ),
+                4,
+            )
 
             if hasattr(self.model, "predict_proba"):
                 try:
                     y_pred_proba = self.model.predict_proba(X_test)
                     target_type = type_of_target(y_test_eval)
-                    
-                    if target_type == "binary":
-                        metrics["roc_auc"] = round(roc_auc_score(y_test_eval, y_pred_proba[:, 1]), 4)
-                    elif target_type == "multiclass":
-                        if hasattr(self.model, 'classes_'):
-                            metrics["roc_auc"] = round(roc_auc_score(y_test_eval, y_pred_proba, multi_class="ovr", average="weighted", labels=self.model.classes_), 4)
-                        else:
-                            metrics["roc_auc"] = round(roc_auc_score(y_test_eval, y_pred_proba, multi_class="ovr", average="weighted"), 4)
-                    else:
-                        logger.warning(f"ROC AUC not calculated for target type: {target_type}")
-                        metrics["roc_auc"] = 0.0
-                    
-                    # Ensure labels match for log_loss if model has classes_ attribute
-                    log_loss_labels = getattr(self.model, 'classes_', None)
-                    if log_loss_labels is not None and not np.array_equal(np.sort(y_test_eval.unique()), np.sort(log_loss_labels)):
-                        logger.warning("Mismatch between y_test unique labels and model.classes_ for log_loss. This might lead to errors or incorrect log_loss values.")
-                         # You might choose to not calculate log_loss or handle this case differently
-                        metrics["log_loss"] = str(float('inf'))
-                    else:
-                        metrics["log_loss"] = round(log_loss(y_test_eval, y_pred_proba, labels=log_loss_labels), 4)
 
-                except ValueError as ve: # Catch specific ValueError from metrics
-                    logger.warning(f"Could not calculate probability-based metrics (ROC AUC, Log Loss) due to ValueError: {ve}. This can happen with single class in y_true or mismatched labels.")
+                    if target_type == "binary":
+                        metrics["roc_auc"] = round(
+                            roc_auc_score(y_test_eval, y_pred_proba[:, 1]), 4
+                        )
+                    elif target_type == "multiclass":
+                        if hasattr(self.model, "classes_"):
+                            metrics["roc_auc"] = round(
+                                roc_auc_score(
+                                    y_test_eval,
+                                    y_pred_proba,
+                                    multi_class="ovr",
+                                    average="weighted",
+                                    labels=self.model.classes_,
+                                ),
+                                4,
+                            )
+                        else:
+                            metrics["roc_auc"] = round(
+                                roc_auc_score(
+                                    y_test_eval,
+                                    y_pred_proba,
+                                    multi_class="ovr",
+                                    average="weighted",
+                                ),
+                                4,
+                            )
+                    else:
+                        logger.warning(
+                            f"ROC AUC not calculated for target type: {target_type}"
+                        )
+                        metrics["roc_auc"] = 0.0
+
+                    # Ensure labels match for log_loss if model has classes_ attribute
+                    log_loss_labels = getattr(self.model, "classes_", None)
+                    if log_loss_labels is not None and not np.array_equal(
+                        np.sort(y_test_eval.unique()), np.sort(log_loss_labels)
+                    ):
+                        logger.warning(
+                            "Mismatch between y_test unique labels and model.classes_ for log_loss. This might lead to errors or incorrect log_loss values."
+                        )
+                        # You might choose to not calculate log_loss or handle this case differently
+                        metrics["log_loss"] = str(float("inf"))
+                    else:
+                        metrics["log_loss"] = round(
+                            log_loss(y_test_eval, y_pred_proba, labels=log_loss_labels),
+                            4,
+                        )
+
+                except ValueError as ve:  # Catch specific ValueError from metrics
+                    logger.warning(
+                        f"Could not calculate probability-based metrics (ROC AUC, Log Loss) due to ValueError: {ve}. This can happen with single class in y_true or mismatched labels."
+                    )
                     metrics["roc_auc"] = 0.0
-                    metrics["log_loss"] = str(float('inf'))
+                    metrics["log_loss"] = str(float("inf"))
                 except Exception as proba_metrics_err:
-                    logger.warning(f"Could not calculate probability-based metrics (ROC AUC, Log Loss): {proba_metrics_err}")
+                    logger.warning(
+                        f"Could not calculate probability-based metrics (ROC AUC, Log Loss): {proba_metrics_err}"
+                    )
                     metrics["roc_auc"] = 0.0
-                    metrics["log_loss"] = str(float('inf'))
+                    metrics["log_loss"] = str(float("inf"))
             else:
                 logger.warning(
                     f"Model {self.model.__class__.__name__} does not have predict_proba. ROC AUC and Log Loss cannot be calculated."
                 )
                 metrics["roc_auc"] = 0.0
-                metrics["log_loss"] = str(float('inf'))
+                metrics["log_loss"] = str(float("inf"))
 
             logger.info(f"Evaluation Metrics: {metrics}")
             return metrics
         except Exception as e:
             logger.error(f"Error during model evaluation: {e}", exc_info=True)
             return {
-                "accuracy": 0.0, "f1_weighted": 0.0, "precision_weighted": 0.0, "recall_weighted": 0.0,
-                "roc_auc": 0.0, "log_loss": str(float('inf')),
+                "accuracy": 0.0,
+                "f1_weighted": 0.0,
+                "precision_weighted": 0.0,
+                "recall_weighted": 0.0,
+                "roc_auc": 0.0,
+                "log_loss": str(float("inf")),
             }
 
     def get_hyperparameter_space(self) -> Set[str]:

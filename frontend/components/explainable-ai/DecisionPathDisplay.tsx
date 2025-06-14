@@ -5,22 +5,13 @@
 // * True-labelled edges branch RIGHT
 // * Single-child edges still branch according to their label
 // -----------------------------------------------------------------------------
-import React, { useEffect, useMemo, useState } from 'react';
-import type {
-  DecisionPathResultData,
-  DecisionPathEdge as ApiEdge,
-} from '@/types/api';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { InfoCircledIcon, Share1Icon } from '@radix-ui/react-icons';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
+import React, { useEffect, useMemo, useState } from "react";
+import type { DecisionPathResultData, DecisionPathEdge as ApiEdge } from "@/types/api";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { InfoCircledIcon, Share1Icon } from "@radix-ui/react-icons";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import {
   ReactFlow,
   MiniMap,
@@ -34,26 +25,26 @@ import {
   useNodesState,
   useEdgesState,
   BackgroundVariant,
-} from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { useTheme } from 'next-themes';
-import { cn } from '@/lib/utils';
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { useTheme } from "next-themes";
+import { cn } from "@/lib/utils";
 
 // -----------------------------------------------------------------------------
 // Styling constants
 // -----------------------------------------------------------------------------
 const BASE_NODE_STYLE: React.CSSProperties = {
   borderRadius: 6,
-  padding: '6px 10px',
+  padding: "6px 10px",
   fontSize: 11,
   width: 180,
   minHeight: 45,
-  textAlign: 'center',
+  textAlign: "center",
 };
 
 const EDGE_DEFAULTS = {
-  type: 'smoothstep',
+  type: "smoothstep",
   markerEnd: {
     type: MarkerType.ArrowClosed,
     width: 15,
@@ -86,8 +77,8 @@ export const DecisionPathDisplay: React.FC<Props> = ({ data }) => {
     allPaths.forEach((p, idx) => {
       const id = p.class_name || p.file || `instance_${idx}`;
       if (!map.has(id)) {
-        let label = p.class_name || p.file?.split('/')?.pop() || `Instance ${idx + 1}`;
-        if (p.class_name && p.file) label = `${p.class_name} (${p.file.split('/').pop()})`;
+        let label = p.class_name || p.file?.split("/")?.pop() || `Instance ${idx + 1}`;
+        if (p.class_name && p.file) label = `${p.class_name} (${p.file.split("/").pop()})`;
         map.set(id, { id, label });
       }
     });
@@ -101,7 +92,9 @@ export const DecisionPathDisplay: React.FC<Props> = ({ data }) => {
 
   const visible = useMemo(
     () =>
-      allPaths.filter((p, idx) => selectedIds.includes(p.class_name || p.file || `instance_${idx}`)),
+      allPaths.filter((p, idx) =>
+        selectedIds.includes(p.class_name || p.file || `instance_${idx}`)
+      ),
     [allPaths, selectedIds]
   );
 
@@ -111,21 +104,21 @@ export const DecisionPathDisplay: React.FC<Props> = ({ data }) => {
   useEffect(() => {
     // CSS var colours
     const COL = {
-      primary: 'hsl(var(--primary))',
-      primaryFg: 'hsl(var(--primary-foreground))',
-      card: 'hsl(var(--card))',
-      cardFg: 'hsl(var(--card-foreground))',
-      border: 'hsl(var(--border))',
-      mutedFg: 'hsl(var(--muted-foreground))',
-      titleBg: 'hsl(var(--muted))',
-      titleFg: 'hsl(var(--muted-foreground))',
+      primary: "hsl(var(--primary))",
+      primaryFg: "hsl(var(--primary-foreground))",
+      card: "hsl(var(--card))",
+      cardFg: "hsl(var(--card-foreground))",
+      border: "hsl(var(--border))",
+      mutedFg: "hsl(var(--muted-foreground))",
+      titleBg: "hsl(var(--muted))",
+      titleFg: "hsl(var(--muted-foreground))",
     } as const;
 
     // Layout constants (reduced spacing)
     const NODE_W = BASE_NODE_STYLE.width as number;
-    const LEVEL_Y = 120;        
-    const BRANCH_X = NODE_W/2 
-    const TREE_GAP = 320;      
+    const LEVEL_Y = 120;
+    const BRANCH_X = NODE_W / 2;
+    const TREE_GAP = 320;
 
     const newNodes: Node[] = [];
     const newEdges: Edge[] = [];
@@ -139,9 +132,9 @@ export const DecisionPathDisplay: React.FC<Props> = ({ data }) => {
     // First pass: count label occurrences
     visible.forEach((path, treeIdx) => {
       const instId = path.class_name || path.file || `instance_${treeIdx}`;
-      let baseLabel = path.class_name || path.file?.split('/')?.pop() || `Instance ${treeIdx + 1}`;
+      let baseLabel = path.class_name || path.file?.split("/")?.pop() || `Instance ${treeIdx + 1}`;
       if (path.class_name && path.file) baseLabel = `${path.class_name}`;
-      
+
       labelCounts.set(baseLabel, (labelCounts.get(baseLabel) || 0) + 1);
     });
 
@@ -164,12 +157,12 @@ export const DecisionPathDisplay: React.FC<Props> = ({ data }) => {
       if (!root) return;
 
       const instId = path.class_name || path.file || `instance_${treeIdx}`;
-      const prefix = `${instId.replace(/[^a-zA-Z0-9]/g, '_')}_${treeIdx}`;
+      const prefix = `${instId.replace(/[^a-zA-Z0-9]/g, "_")}_${treeIdx}`;
 
       // Generate display label with tree numbering if needed
-      let baseLabel = path.class_name || path.file?.split('/')?.pop() || `Instance ${treeIdx + 1}`;
+      let baseLabel = path.class_name || path.file?.split("/")?.pop() || `Instance ${treeIdx + 1}`;
       if (path.class_name && path.file) baseLabel = `${path.class_name}`;
-      
+
       let displayLabel = baseLabel;
       if (labelCounts.get(baseLabel)! > 1) {
         const currentCount = (labelCounters.get(baseLabel) || 0) + 1;
@@ -199,7 +192,10 @@ export const DecisionPathDisplay: React.FC<Props> = ({ data }) => {
         // Build node label JSX
         const label = (
           <div className="text-[10px] leading-tight p-1 max-w-[170px] break-words">
-            <div className="font-semibold truncate" title={apiNode.condition || `Leaf (ID: ${apiNode.id})`}>
+            <div
+              className="font-semibold truncate"
+              title={apiNode.condition || `Leaf (ID: ${apiNode.id})`}
+            >
               {apiNode.condition || `Leaf (ID: ${apiNode.id})`}
             </div>
             {apiNode.samples !== undefined && (
@@ -227,7 +223,7 @@ export const DecisionPathDisplay: React.FC<Props> = ({ data }) => {
           id: `${prefix}-n-${nodeId}`,
           data: { label },
           position: { x, y },
-          type: isLeaf ? 'output' : 'default',
+          type: isLeaf ? "output" : "default",
           style: {
             ...BASE_NODE_STYLE,
             border: `1px solid ${COL.border}`,
@@ -246,7 +242,9 @@ export const DecisionPathDisplay: React.FC<Props> = ({ data }) => {
         // deterministic ordering: false-like first (left)
         const ordered = [...children].sort((a, b) => {
           const falseish = (e: ApiEdge) =>
-            e.label?.toLowerCase().includes('false') || e.label?.includes('<=') || e.label?.includes('<');
+            e.label?.toLowerCase().includes("false") ||
+            e.label?.includes("<=") ||
+            e.label?.includes("<");
           return falseish(a) === falseish(b) ? 0 : falseish(a) ? -1 : 1;
         });
 
@@ -254,7 +252,10 @@ export const DecisionPathDisplay: React.FC<Props> = ({ data }) => {
 
         if (ordered.length === 1) {
           const e = ordered[0];
-          const falseish = e.label?.toLowerCase().includes('false') || e.label?.includes('<=') || e.label?.includes('<');
+          const falseish =
+            e.label?.toLowerCase().includes("false") ||
+            e.label?.includes("<=") ||
+            e.label?.includes("<");
           const childX = falseish ? x - BRANCH_X : x + BRANCH_X;
           place(e.target, childX, childY);
           locEdges.push(makeEdge(prefix, nodeId, e));
@@ -270,11 +271,7 @@ export const DecisionPathDisplay: React.FC<Props> = ({ data }) => {
         }
       };
 
-      const makeEdge = (
-        pre: string,
-        srcId: string,
-        apiEdge: ApiEdge,
-      ): Edge => ({
+      const makeEdge = (pre: string, srcId: string, apiEdge: ApiEdge): Edge => ({
         id: `e-${pre}-${srcId}-${apiEdge.target}`,
         source: `${pre}-n-${srcId}`,
         target: `${pre}-n-${apiEdge.target}`,
@@ -296,20 +293,20 @@ export const DecisionPathDisplay: React.FC<Props> = ({ data }) => {
       locNodes.push({
         id: `${prefix}-title`,
         data: { label: displayLabel },
-        position: { x: treeCenterX - (titleWidth / 2), y: 0 }, // centered based on tree span
+        position: { x: treeCenterX - titleWidth / 2, y: 0 }, // centered based on tree span
         draggable: false,
         selectable: false,
         style: {
           ...BASE_NODE_STYLE,
-          fontWeight: 'bold',
+          fontWeight: "bold",
           fontSize: 13,
           background: COL.titleBg,
           color: COL.titleFg,
           border: `1px dashed ${COL.border}`,
           width: titleWidth,
           minWidth: NODE_W + 20,
-          padding: '8px 12px',
-          textAlign: 'center',
+          padding: "8px 12px",
+          textAlign: "center",
         },
         sourcePosition: Position.Bottom,
         targetPosition: Position.Top,
@@ -351,7 +348,8 @@ export const DecisionPathDisplay: React.FC<Props> = ({ data }) => {
           Decision Paths
         </CardTitle>
         <CardDescription className="text-muted-foreground">
-          False-labelled edges branch left; True-labelled edges branch right. Single-child branches follow the same rule.
+          False-labelled edges branch left; True-labelled edges branch right. Single-child branches
+          follow the same rule.
         </CardDescription>
       </CardHeader>
 
@@ -374,9 +372,7 @@ export const DecisionPathDisplay: React.FC<Props> = ({ data }) => {
                       checked={selectedIds.includes(s.id)}
                       onCheckedChange={() =>
                         setSelectedIds((prev) =>
-                          prev.includes(s.id)
-                            ? prev.filter((x) => x !== s.id)
-                            : [...prev, s.id],
+                          prev.includes(s.id) ? prev.filter((x) => x !== s.id) : [...prev, s.id]
                         )
                       }
                     />
@@ -397,7 +393,7 @@ export const DecisionPathDisplay: React.FC<Props> = ({ data }) => {
         {/* Graph canvas */}
         {visible.length > 0 ? (
           <div
-            style={{ height: '75vh', width: '100%' }}
+            style={{ height: "75vh", width: "100%" }}
             className="border border-border rounded-md bg-muted/10 dark:bg-muted/5 relative"
           >
             <ReactFlowProvider>
@@ -416,9 +412,7 @@ export const DecisionPathDisplay: React.FC<Props> = ({ data }) => {
               >
                 <MiniMap
                   nodeStrokeWidth={2}
-                  nodeColor={(n: Node) =>
-                    (n.style?.background as string) || 'hsl(var(--border))'
-                  }
+                  nodeColor={(n: Node) => (n.style?.background as string) || "hsl(var(--border))"}
                   zoomable
                   pannable
                   className="!bg-background border border-border"
@@ -426,17 +420,17 @@ export const DecisionPathDisplay: React.FC<Props> = ({ data }) => {
                 <Controls
                   showInteractive={false}
                   className={cn(
-                    '[&_button]:bg-background [&_button]:fill-foreground [&_button]:border-border hover:[&_button]:bg-accent',
-                    'dark:[&_button]:bg-muted dark:[&_button]:fill-muted-foreground dark:[&_button]:border-border dark:hover:[&_button]:bg-accent',
+                    "[&_button]:bg-background [&_button]:fill-foreground [&_button]:border-border hover:[&_button]:bg-accent",
+                    "dark:[&_button]:bg-muted dark:[&_button]:fill-muted-foreground dark:[&_button]:border-border dark:hover:[&_button]:bg-accent"
                   )}
                 />
                 <Background
                   gap={32}
                   size={2}
                   color={
-                    resolvedTheme === 'dark'
-                      ? 'hsl(var(--border) / 0.05)'
-                      : 'hsl(var(--border) / 0.1)'
+                    resolvedTheme === "dark"
+                      ? "hsl(var(--border) / 0.05)"
+                      : "hsl(var(--border) / 0.1)"
                   }
                   variant={BackgroundVariant.Dots}
                 />

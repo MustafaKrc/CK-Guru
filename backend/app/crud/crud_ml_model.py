@@ -36,13 +36,15 @@ async def get_ml_models(
     model_name: Optional[str] = None,
     model_type: Optional[str] = None,
     dataset_id: Optional[int] = None,
-    sort_by: Optional[str] = 'created_at',
-    sort_dir: Optional[str] = 'desc',
+    sort_by: Optional[str] = "created_at",
+    sort_dir: Optional[str] = "desc",
 ) -> Tuple[Sequence[MLModel], int]:
     """Get multiple ML models with optional filtering and pagination."""
-    
+
     stmt_items = select(MLModel).options(
-        selectinload(MLModel.dataset).selectinload(Dataset.repository), # Eager load for list view
+        selectinload(MLModel.dataset).selectinload(
+            Dataset.repository
+        ),  # Eager load for list view
         selectinload(MLModel.training_job),
         selectinload(MLModel.hp_search_job),
     )
@@ -66,21 +68,21 @@ async def get_ml_models(
 
     # Define a mapping of allowed sort keys to model columns
     sort_mapping = {
-        'name': MLModel.name,
-        'version': MLModel.version,
-        'model_type': MLModel.model_type,
-        'created_at': MLModel.created_at,
-        'dataset': Dataset.name,
+        "name": MLModel.name,
+        "version": MLModel.version,
+        "model_type": MLModel.model_type,
+        "created_at": MLModel.created_at,
+        "dataset": Dataset.name,
     }
 
     # If sorting by dataset name, join the Dataset table
-    if sort_by == 'dataset':
+    if sort_by == "dataset":
         stmt_items = stmt_items.join(Dataset, MLModel.dataset_id == Dataset.id)
         sort_column = Dataset.name
     else:
-        sort_column = sort_mapping.get(sort_by, MLModel.created_at) # Default sort
+        sort_column = sort_mapping.get(sort_by, MLModel.created_at)  # Default sort
 
-    if sort_dir == 'desc':
+    if sort_dir == "desc":
         stmt_items = stmt_items.order_by(desc(sort_column))
     else:
         stmt_items = stmt_items.order_by(asc(sort_column))

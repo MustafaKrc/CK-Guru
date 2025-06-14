@@ -1,10 +1,9 @@
 # backend/app/crud/crud_commit_details.py
 import logging
-from typing import List, Optional, Sequence, Tuple
+from datetime import datetime, timezone
+from typing import List, Optional, Tuple
 
 from dateutil import parser as date_parser
-from datetime import datetime, timezone
-
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -75,11 +74,11 @@ async def set_ingestion_task(
     db_obj = await get_by_id(db, detail_id)
     if not db_obj:
         return None
-    
+
     db_obj.celery_ingestion_task_id = task_id
     db_obj.ingestion_status = CommitIngestionStatusEnum.PENDING
     db_obj.status_message = "Ingestion task has been queued."
-    
+
     db.add(db_obj)
     await db.commit()
     await db.refresh(db_obj)
@@ -96,13 +95,15 @@ async def list_commits_paginated(
     from shared.db.models.commit_guru_metric import CommitGuruMetric
 
     # Query for the total count first
-    count_stmt = select(func.count(CommitGuruMetric.id)).filter_by(repository_id=repo_id)
+    count_stmt = select(func.count(CommitGuruMetric.id)).filter_by(
+        repository_id=repo_id
+    )
     total_result = await db.execute(count_stmt)
     total = total_result.scalar_one_or_none() or 0
 
     if total == 0:
         return [], 0
-    
+
     # Query for the paginated items
     # LEFT JOIN with commit_details to get the ingestion status
     stmt = (
@@ -117,14 +118,14 @@ async def list_commits_paginated(
             CommitDetails,
             (CommitGuruMetric.repository_id == CommitDetails.repository_id)
             & (CommitGuruMetric.commit_hash == CommitDetails.commit_hash),
-            isouter=True, # LEFT JOIN
+            isouter=True,  # LEFT JOIN
         )
         .filter(CommitGuruMetric.repository_id == repo_id)
         .order_by(CommitGuruMetric.author_date_unix_timestamp.desc())
         .offset(skip)
         .limit(limit)
     )
-    
+
     results = await db.execute(stmt)
     items = []
     for row in results.mappings().all():
@@ -134,18 +135,23 @@ async def list_commits_paginated(
             try:
                 author_date = date_parser.parse(author_date)
             except (ValueError, TypeError) as e:
-                logger.warning(f"Failed to parse author_date '{row.author_date}' for commit {row.commit_hash}: {e}")
+                logger.warning(
+                    f"Failed to parse author_date '{row.author_date}' for commit {row.commit_hash}: {e}"
+                )
                 # Use a default date if parsing fails
                 author_date = datetime.fromtimestamp(0, tz=timezone.utc)
-        
+
         items.append(
             CommitListItem(
                 commit_hash=row.commit_hash,
                 author_name=row.author_name,
                 author_date=author_date,
-                message_short=row.commit_message.split('\n', 1)[0] if row.commit_message else "",
-                ingestion_status=row.ingestion_status or CommitIngestionStatusEnum.NOT_INGESTED
+                message_short=(
+                    row.commit_message.split("\n", 1)[0] if row.commit_message else ""
+                ),
+                ingestion_status=row.ingestion_status
+                or CommitIngestionStatusEnum.NOT_INGESTED,
             )
         )
-    
+
     return items, total

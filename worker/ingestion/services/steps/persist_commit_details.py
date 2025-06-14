@@ -18,15 +18,29 @@ class PersistCommitDetailsStep(IngestionStep):
         if not context.commit_details_payloads:
             self._log_info(context, "No new commit details to persist.")
             return context
-        
-        self._log_info(context, f"Persisting details for {len(context.commit_details_payloads)} commit(s).")
-        
+
+        self._log_info(
+            context,
+            f"Persisting details for {len(context.commit_details_payloads)} commit(s).",
+        )
+
         for commit_hash, payload in context.commit_details_payloads.items():
             try:
-                await asyncio.to_thread(commit_details_repo.upsert_from_payload, payload)
-                self._log_info(context, f"Successfully persisted details for commit {commit_hash[:7]}")
+                await asyncio.to_thread(
+                    commit_details_repo.upsert_from_payload, payload
+                )
+                self._log_info(
+                    context,
+                    f"Successfully persisted details for commit {commit_hash[:7]}",
+                )
             except Exception as e:
-                self._log_error(context, f"Failed to persist details for commit {commit_hash}: {e}", exc_info=True)
-                context.warnings.append(f"Failed to persist details for {commit_hash[:7]}")
-        
+                self._log_error(
+                    context,
+                    f"Failed to persist details for commit {commit_hash}: {e}",
+                    exc_info=True,
+                )
+                context.warnings.append(
+                    f"Failed to persist details for {commit_hash[:7]}"
+                )
+
         return context

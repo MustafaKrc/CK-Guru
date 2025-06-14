@@ -1,16 +1,27 @@
 # shared/schemas/bot_pattern.py
-from typing import Optional, List
-from pydantic import BaseModel, Field, ConfigDict
+from typing import List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class BotPatternBase(BaseModel):
-    pattern: str = Field(..., description="The regex pattern to match against author names.")
-    is_exclusion: bool = Field(False, description="If true, this pattern defines an exception and matching authors will be kept.")
-    description: Optional[str] = Field(None, description="A description of what this pattern does.")
+    pattern: str = Field(
+        ..., description="The regex pattern to match against author names."
+    )
+    is_exclusion: bool = Field(
+        False,
+        description="If true, this pattern defines an exception and matching authors will be kept.",
+    )
+    description: Optional[str] = Field(
+        None, description="A description of what this pattern does."
+    )
 
 
 class BotPatternCreate(BotPatternBase):
-    repository_id: Optional[int] = Field(None, description="The repository ID for a specific pattern. Leave null for a global pattern.")
+    repository_id: Optional[int] = Field(
+        None,
+        description="The repository ID for a specific pattern. Leave null for a global pattern.",
+    )
 
 
 class BotPatternUpdate(BaseModel):

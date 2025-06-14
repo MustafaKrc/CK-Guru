@@ -1,16 +1,16 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
-import { Loader2 } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 export function NotificationSettings() {
-  const { toast } = useToast()
-  const [isLoading, setIsLoading] = useState(false)
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
   const [notifications, setNotifications] = useState({
     email: {
       repositoryUpdates: true,
@@ -25,7 +25,7 @@ export function NotificationSettings() {
       inferenceResults: true,
       securityAlerts: true,
     },
-  })
+  });
 
   const handleSwitchChange = (category: "email" | "inApp", name: string, checked: boolean) => {
     setNotifications((prev) => ({
@@ -34,30 +34,30 @@ export function NotificationSettings() {
         ...prev[category],
         [name]: checked,
       },
-    }))
-  }
+    }));
+  };
 
   const handleSaveNotifications = async () => {
-    setIsLoading(true)
+    setIsLoading(true);
 
     try {
       // In a real app, this would be an API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       toast({
         title: "Notification settings saved",
         description: "Your notification preferences have been updated",
-      })
+      });
     } catch (error) {
       toast({
         title: "Error",
         description: "Failed to save notification settings",
         variant: "destructive",
-      })
+      });
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   return (
     <div className="space-y-6">
@@ -78,7 +78,9 @@ export function NotificationSettings() {
               <Switch
                 id="email-repo-updates"
                 checked={notifications.email.repositoryUpdates}
-                onCheckedChange={(checked) => handleSwitchChange("email", "repositoryUpdates", checked)}
+                onCheckedChange={(checked) =>
+                  handleSwitchChange("email", "repositoryUpdates", checked)
+                }
               />
             </div>
 
@@ -92,38 +94,50 @@ export function NotificationSettings() {
               <Switch
                 id="email-model-training"
                 checked={notifications.email.modelTrainingComplete}
-                onCheckedChange={(checked) => handleSwitchChange("email", "modelTrainingComplete", checked)}
+                onCheckedChange={(checked) =>
+                  handleSwitchChange("email", "modelTrainingComplete", checked)
+                }
               />
             </div>
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label htmlFor="email-inference">Inference Results</Label>
-                <p className="text-sm text-muted-foreground">Receive notifications when inference jobs are completed</p>
+                <p className="text-sm text-muted-foreground">
+                  Receive notifications when inference jobs are completed
+                </p>
               </div>
               <Switch
                 id="email-inference"
                 checked={notifications.email.inferenceResults}
-                onCheckedChange={(checked) => handleSwitchChange("email", "inferenceResults", checked)}
+                onCheckedChange={(checked) =>
+                  handleSwitchChange("email", "inferenceResults", checked)
+                }
               />
             </div>
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label htmlFor="email-security">Security Alerts</Label>
-                <p className="text-sm text-muted-foreground">Receive notifications about security-related events</p>
+                <p className="text-sm text-muted-foreground">
+                  Receive notifications about security-related events
+                </p>
               </div>
               <Switch
                 id="email-security"
                 checked={notifications.email.securityAlerts}
-                onCheckedChange={(checked) => handleSwitchChange("email", "securityAlerts", checked)}
+                onCheckedChange={(checked) =>
+                  handleSwitchChange("email", "securityAlerts", checked)
+                }
               />
             </div>
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label htmlFor="email-digest">Weekly Digest</Label>
-                <p className="text-sm text-muted-foreground">Receive a weekly summary of activity and insights</p>
+                <p className="text-sm text-muted-foreground">
+                  Receive a weekly summary of activity and insights
+                </p>
               </div>
               <Switch
                 id="email-digest"
@@ -152,7 +166,9 @@ export function NotificationSettings() {
               <Switch
                 id="inapp-repo-updates"
                 checked={notifications.inApp.repositoryUpdates}
-                onCheckedChange={(checked) => handleSwitchChange("inApp", "repositoryUpdates", checked)}
+                onCheckedChange={(checked) =>
+                  handleSwitchChange("inApp", "repositoryUpdates", checked)
+                }
               />
             </div>
 
@@ -166,31 +182,41 @@ export function NotificationSettings() {
               <Switch
                 id="inapp-model-training"
                 checked={notifications.inApp.modelTrainingComplete}
-                onCheckedChange={(checked) => handleSwitchChange("inApp", "modelTrainingComplete", checked)}
+                onCheckedChange={(checked) =>
+                  handleSwitchChange("inApp", "modelTrainingComplete", checked)
+                }
               />
             </div>
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label htmlFor="inapp-inference">Inference Results</Label>
-                <p className="text-sm text-muted-foreground">Show notifications when inference jobs are completed</p>
+                <p className="text-sm text-muted-foreground">
+                  Show notifications when inference jobs are completed
+                </p>
               </div>
               <Switch
                 id="inapp-inference"
                 checked={notifications.inApp.inferenceResults}
-                onCheckedChange={(checked) => handleSwitchChange("inApp", "inferenceResults", checked)}
+                onCheckedChange={(checked) =>
+                  handleSwitchChange("inApp", "inferenceResults", checked)
+                }
               />
             </div>
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label htmlFor="inapp-security">Security Alerts</Label>
-                <p className="text-sm text-muted-foreground">Show notifications about security-related events</p>
+                <p className="text-sm text-muted-foreground">
+                  Show notifications about security-related events
+                </p>
               </div>
               <Switch
                 id="inapp-security"
                 checked={notifications.inApp.securityAlerts}
-                onCheckedChange={(checked) => handleSwitchChange("inApp", "securityAlerts", checked)}
+                onCheckedChange={(checked) =>
+                  handleSwitchChange("inApp", "securityAlerts", checked)
+                }
               />
             </div>
           </div>
@@ -210,5 +236,5 @@ export function NotificationSettings() {
         </Button>
       </div>
     </div>
-  )
+  );
 }

@@ -29,22 +29,29 @@ export const ModelSelectionPanel: React.FC<ModelSelectionPanelProps> = ({
   const debouncedSearch = useDebounce(searchQuery, 300);
 
   const filteredModels = useMemo(() => {
-    return allModels.filter(model => 
-      model.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-      model.model_type.toLowerCase().includes(debouncedSearch.toLowerCase())
+    return allModels.filter(
+      (model) =>
+        model.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        model.model_type.toLowerCase().includes(debouncedSearch.toLowerCase())
     );
   }, [allModels, debouncedSearch]);
 
   const renderContent = () => {
     if (isLoading) {
-      return <div className="space-y-3 p-2">{Array.from({length: 10}).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}</div>;
+      return (
+        <div className="space-y-3 p-2">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <Skeleton key={i} className="h-8 w-full" />
+          ))}
+        </div>
+      );
     }
     if (filteredModels.length === 0) {
       return <p className="text-center text-sm text-muted-foreground p-4">No models found.</p>;
     }
     return (
       <div className="space-y-2 p-2">
-        {filteredModels.map(model => (
+        {filteredModels.map((model) => (
           <div
             key={model.id}
             className="flex items-center space-x-3 p-2 rounded-md hover:bg-accent has-[:checked]:bg-accent/50"
@@ -58,8 +65,12 @@ export const ModelSelectionPanel: React.FC<ModelSelectionPanelProps> = ({
               htmlFor={`select-comp-${model.id}`}
               className="text-sm font-normal cursor-pointer flex-grow space-y-0.5"
             >
-              <div className="font-medium truncate" title={model.name}>{model.name}</div>
-              <div className="text-xs text-muted-foreground">v{model.version} • {model.model_type}</div>
+              <div className="font-medium truncate" title={model.name}>
+                {model.name}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                v{model.version} • {model.model_type}
+              </div>
             </Label>
           </div>
         ))}
@@ -72,19 +83,19 @@ export const ModelSelectionPanel: React.FC<ModelSelectionPanelProps> = ({
       <CardHeader>
         <CardTitle>Select Models</CardTitle>
         <CardDescription>
-          Choose up to {MAX_SELECTED_MODELS} models to compare. 
-          <Badge variant="secondary" className="ml-2">{selectedIds.length} / {MAX_SELECTED_MODELS} selected</Badge>
+          Choose up to {MAX_SELECTED_MODELS} models to compare.
+          <Badge variant="secondary" className="ml-2">
+            {selectedIds.length} / {MAX_SELECTED_MODELS} selected
+          </Badge>
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-grow flex flex-col gap-4 overflow-hidden p-4 pt-0">
         <Input
           placeholder="Search by name or type..."
           value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
+          onChange={(e) => setSearchQuery(e.target.value)}
         />
-        <ScrollArea className="flex-grow rounded-md border">
-          {renderContent()}
-        </ScrollArea>
+        <ScrollArea className="flex-grow rounded-md border">{renderContent()}</ScrollArea>
       </CardContent>
     </Card>
   );

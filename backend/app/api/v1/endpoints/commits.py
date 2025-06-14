@@ -12,7 +12,6 @@ from shared.schemas.commit import CommitPageResponse, PaginatedCommitList
 from shared.schemas.enums import CommitIngestionStatusEnum
 from shared.schemas.task import TaskResponse
 
-
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
 
@@ -58,7 +57,7 @@ async def get_commit_details_endpoint(
     """
     Retrieves all available data for a specific commit, including its ingestion status,
     detailed metadata, diffs, and any associated inference jobs.
-    
+
     - If data is not yet ingested, it returns a `NOT_INGESTED` status.
     - If ingestion is in progress, it returns a `202 Accepted` status code
       along with the `task_id`.

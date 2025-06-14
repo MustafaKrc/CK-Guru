@@ -1,47 +1,57 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import Link from "next/link"
-import Image from "next/image"
-import { useAuth } from "@/components/auth/auth-provider"
-import { Button } from "@/components/ui/button"
-import { GitBranch, BarChart3, Database, GitMerge, ArrowRight, Moon, Sun, Minimize, Maximize } from "lucide-react"
-import { useTheme } from "@/components/theme-provider"
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import Image from "next/image";
+import { useAuth } from "@/components/auth/auth-provider";
+import { Button } from "@/components/ui/button";
+import {
+  GitBranch,
+  BarChart3,
+  Database,
+  GitMerge,
+  ArrowRight,
+  Moon,
+  Sun,
+  Minimize,
+  Maximize,
+} from "lucide-react";
+import { useTheme } from "@/components/theme-provider";
 
 export default function LandingPage() {
-  const { isAuthenticated } = useAuth()
-  const { theme, setTheme } = useTheme()
-  const [isCompact, setIsCompact] = useState(false)
-  const [mounted, setMounted] = useState(false) // Add mounted state
+  const { isAuthenticated } = useAuth();
+  const { theme, setTheme } = useTheme();
+  const [isCompact, setIsCompact] = useState(false);
+  const [mounted, setMounted] = useState(false); // Add mounted state
 
   // Initialize compact view from localStorage and set mounted
   useEffect(() => {
-    const storedCompactView = localStorage.getItem("ck-guru-compact-view")
+    const storedCompactView = localStorage.getItem("ck-guru-compact-view");
     if (storedCompactView === "true") {
-      document.body.classList.add("compact-view")
-      setIsCompact(true)
+      document.body.classList.add("compact-view");
+      setIsCompact(true);
     }
-    setMounted(true) // Set mounted to true after initial client render
-  }, [])
+    setMounted(true); // Set mounted to true after initial client render
+  }, []);
 
   // Removed the redirect to dashboard for authenticated users
 
   const toggleTheme = () => {
-    setTheme(theme === "dark" ? "light" : "dark")
-  }
+    setTheme(theme === "dark" ? "light" : "dark");
+  };
 
   const toggleCompactView = () => {
-    const newCompactView = !isCompact
-    setIsCompact(newCompactView)
+    const newCompactView = !isCompact;
+    setIsCompact(newCompactView);
 
     if (newCompactView) {
-      document.body.classList.add("compact-view")
-      localStorage.setItem("ck-guru-compact-view", "true")
+      document.body.classList.add("compact-view");
+      localStorage.setItem("ck-guru-compact-view", "true");
     } else {
-      document.body.classList.remove("compact-view")
-      localStorage.setItem("ck-guru-compact-view", "false")
+      document.body.classList.remove("compact-view");
+      localStorage.setItem("ck-guru-compact-view", "false");
     }
-  }
+  };
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -51,13 +61,18 @@ export default function LandingPage() {
           <span>CK-Guru</span>
         </Link>
         <nav className="hidden md:flex flex-1 items-center gap-6 text-sm">
-          <Link href="#features" className="text-muted-foreground hover:text-foreground transition-colors">
+          <Link
+            href="#features"
+            className="text-muted-foreground hover:text-foreground transition-colors"
+          >
             Features
           </Link>
-          <Link href="#how-it-works" className="text-muted-foreground hover:text-foreground transition-colors">
+          <Link
+            href="#how-it-works"
+            className="text-muted-foreground hover:text-foreground transition-colors"
+          >
             How It Works
           </Link>
-
         </nav>
         <div className="ml-auto flex items-center gap-2">
           {mounted && ( // Conditionally render theme toggle
@@ -121,8 +136,8 @@ export default function LandingPage() {
                   Predict Software Defects <span className="text-primary">Before They Happen</span>
                 </h1>
                 <p className="text-xl text-muted-foreground">
-                  CK-Guru uses machine learning to analyze your code and predict potential bugs, helping you build more
-                  reliable software.
+                  CK-Guru uses machine learning to analyze your code and predict potential bugs,
+                  helping you build more reliable software.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4">
                   {isAuthenticated ? (
@@ -176,7 +191,8 @@ export default function LandingPage() {
                 </div>
                 <h3 className="text-xl font-semibold mb-2">Repository Analysis</h3>
                 <p className="text-muted-foreground">
-                  Connect your Git repositories and analyze code metrics to identify potential issues
+                  Connect your Git repositories and analyze code metrics to identify potential
+                  issues
                 </p>
               </div>
 
@@ -186,7 +202,8 @@ export default function LandingPage() {
                 </div>
                 <h3 className="text-xl font-semibold mb-2">Custom Datasets</h3>
                 <p className="text-muted-foreground">
-                  Create and manage custom datasets with flexible cleaning rules and feature selection
+                  Create and manage custom datasets with flexible cleaning rules and feature
+                  selection
                 </p>
               </div>
 
@@ -196,7 +213,8 @@ export default function LandingPage() {
                 </div>
                 <h3 className="text-xl font-semibold mb-2">ML Model Training</h3>
                 <p className="text-muted-foreground">
-                  Train and compare multiple machine learning models to find the best predictor for your codebase
+                  Train and compare multiple machine learning models to find the best predictor for
+                  your codebase
                 </p>
               </div>
 
@@ -206,7 +224,8 @@ export default function LandingPage() {
                 </div>
                 <h3 className="text-xl font-semibold mb-2">Real-time Inference</h3>
                 <p className="text-muted-foreground">
-                  Run inference on pull requests and commits to catch potential bugs before they're merged
+                  Run inference on pull requests and commits to catch potential bugs before they're
+                  merged
                 </p>
               </div>
             </div>
@@ -219,7 +238,8 @@ export default function LandingPage() {
             <div className="text-center mb-16">
               <h2 className="text-3xl font-bold mb-4">How It Works</h2>
               <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-                CK-Guru uses a simple four-step process to help you predict and prevent software defects
+                CK-Guru uses a simple four-step process to help you predict and prevent software
+                defects
               </p>
             </div>
 
@@ -229,7 +249,9 @@ export default function LandingPage() {
                   <span className="text-xl font-bold text-primary">1</span>
                 </div>
                 <h3 className="text-xl font-semibold mb-2">Connect Repository</h3>
-                <p className="text-muted-foreground">Link your Git repository to CK-Guru for analysis</p>
+                <p className="text-muted-foreground">
+                  Link your Git repository to CK-Guru for analysis
+                </p>
               </div>
 
               <div className="text-center">
@@ -237,7 +259,9 @@ export default function LandingPage() {
                   <span className="text-xl font-bold text-primary">2</span>
                 </div>
                 <h3 className="text-xl font-semibold mb-2">Generate Dataset</h3>
-                <p className="text-muted-foreground">Extract code metrics and create a training dataset</p>
+                <p className="text-muted-foreground">
+                  Extract code metrics and create a training dataset
+                </p>
               </div>
 
               <div className="text-center">
@@ -245,7 +269,9 @@ export default function LandingPage() {
                   <span className="text-xl font-bold text-primary">3</span>
                 </div>
                 <h3 className="text-xl font-semibold mb-2">Train Models</h3>
-                <p className="text-muted-foreground">Train ML models to predict defects in your codebase</p>
+                <p className="text-muted-foreground">
+                  Train ML models to predict defects in your codebase
+                </p>
               </div>
 
               <div className="text-center">
@@ -253,7 +279,9 @@ export default function LandingPage() {
                   <span className="text-xl font-bold text-primary">4</span>
                 </div>
                 <h3 className="text-xl font-semibold mb-2">Predict Defects</h3>
-                <p className="text-muted-foreground">Run inference on new code to identify potential issues</p>
+                <p className="text-muted-foreground">
+                  Run inference on new code to identify potential issues
+                </p>
               </div>
             </div>
           </div>
@@ -362,12 +390,18 @@ export default function LandingPage() {
                   </Link>
                 </li>
                 <li>
-                  <Link href="#how-it-works" className="text-muted-foreground hover:text-foreground">
+                  <Link
+                    href="#how-it-works"
+                    className="text-muted-foreground hover:text-foreground"
+                  >
                     How It Works
                   </Link>
                 </li>
                 <li>
-                  <Link href="/public-repositories" className="text-muted-foreground hover:text-foreground">
+                  <Link
+                    href="/public-repositories"
+                    className="text-muted-foreground hover:text-foreground"
+                  >
                     Public Repositories
                   </Link>
                 </li>
@@ -420,5 +454,5 @@ export default function LandingPage() {
         </div>
       </footer>
     </div>
-  )
+  );
 }

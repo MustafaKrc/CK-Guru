@@ -1,7 +1,7 @@
-import type React from "react"
-import Image from "next/image"
-import Link from "next/link"
-import { GitBranch } from "lucide-react"
+import type React from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { GitBranch } from "lucide-react";
 
 export function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -30,7 +30,9 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
         </div>
         <div className="absolute inset-0 flex flex-col items-center justify-center p-12 text-white">
           <div className="max-w-2xl text-center">
-            <h1 className="text-4xl font-bold drop-shadow-md">Just-In-Time Software Defect Prediction</h1>
+            <h1 className="text-4xl font-bold drop-shadow-md">
+              Just-In-Time Software Defect Prediction
+            </h1>
             <p className="mt-4 text-xl drop-shadow-md">
               Identify potential bugs before they happen with machine learning-powered code analysis
             </p>
@@ -38,5 +40,5 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
         </div>
       </div>
     </div>
-  )
+  );
 }

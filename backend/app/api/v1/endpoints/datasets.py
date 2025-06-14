@@ -22,15 +22,16 @@ from shared.db.models.feature_selection_definition import FeatureSelectionDefini
 from shared.db_session import get_async_db_session
 from shared.schemas import PaginatedDatasetRead  # Ensure this is imported
 from shared.schemas import RuleDefinition as BackendRuleDefinitionSchema
-from shared.schemas.enums import (
-    DatasetStatusEnum as DatasetStatusEnumSchema,
-)
-from shared.schemas.feature_selection import FeatureSelectionDefinitionRead  # For query param type hint
+from shared.schemas.enums import DatasetStatusEnum as DatasetStatusEnumSchema
+from shared.schemas.feature_selection import (
+    FeatureSelectionDefinitionRead,
+)  # For query param type hint
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
 
 router = APIRouter()
+
 
 # --- Endpoint to list available feature selection rules ---
 @router.get(
@@ -52,14 +53,17 @@ async def get_available_feature_selection_algorithms(
 
     result = await db.execute(stmt)
     db_algorithms = result.scalars().all()
-    
+
     # Using model_validate (from_orm is deprecated in Pydantic v2)
     response_algorithms = [
         FeatureSelectionDefinitionRead.model_validate(algo) for algo in db_algorithms
     ]
 
-    logger.info(f"Returning {len(response_algorithms)} available feature selection algorithms.")
+    logger.info(
+        f"Returning {len(response_algorithms)} available feature selection algorithms."
+    )
     return response_algorithms
+
 
 # --- Endpoint to list available rules ---
 @router.get(
@@ -102,11 +106,19 @@ async def list_all_datasets_endpoint(
     db: AsyncSession = Depends(get_async_db_session),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
-    status: Optional[DatasetStatusEnumSchema] = Query(None, description="Filter by dataset status (e.g., ready)"),
+    status: Optional[DatasetStatusEnumSchema] = Query(
+        None, description="Filter by dataset status (e.g., ready)"
+    ),
     repository_id: Optional[int] = Query(None, description="Filter by repository ID."),
-    name_filter: Optional[str] = Query(None, alias="name_filter", description="Filter datasets by name (case-insensitive)."),
-    sort_by: Optional[str] = Query('created_at', alias="sort_by", description="Column to sort by."),
-    sort_dir: Optional[str] = Query('desc', alias="sort_order", pattern="^(asc|desc)$")
+    name_filter: Optional[str] = Query(
+        None,
+        alias="name_filter",
+        description="Filter datasets by name (case-insensitive).",
+    ),
+    sort_by: Optional[str] = Query(
+        "created_at", alias="sort_by", description="Column to sort by."
+    ),
+    sort_dir: Optional[str] = Query("desc", alias="sort_order", pattern="^(asc|desc)$"),
 ):
     """
     Retrieve all datasets with server-side sorting and filtering.
@@ -119,7 +131,7 @@ async def list_all_datasets_endpoint(
         repository_id=repository_id,
         name_filter=name_filter,
         sort_by=sort_by,
-        sort_dir=sort_dir
+        sort_dir=sort_dir,
     )
     return PaginatedDatasetRead(items=items, total=total, skip=skip, limit=limit)
 
@@ -326,10 +338,10 @@ async def delete_dataset_endpoint(
                 exc_info=True,
             )
     else:
-        logger.debug( # Changed to debug as it's common for background data to not exist
+        logger.debug(  # Changed to debug as it's common for background data to not exist
             f"Dataset {dataset_id} had no valid background storage path '{background_uri_to_delete}', skipping object deletion task."
         )
-        
+
     return None  # Return No Content (HTTP 204)
 
 
@@ -387,12 +399,14 @@ async def view_dataset_content(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Dataset is not ready. Current status: {db_dataset.status.value}",
         )
-    
+
     # Check if skip is beyond available rows
     if db_dataset.num_rows is not None and skip >= db_dataset.num_rows:
-        logger.info(f"Skip ({skip}) is beyond dataset size ({db_dataset.num_rows}), returning empty result")
+        logger.info(
+            f"Skip ({skip}) is beyond dataset size ({db_dataset.num_rows}), returning empty result"
+        )
         return []
-    
+
     object_storage_uri = db_dataset.storage_path
     if not object_storage_uri or not object_storage_uri.startswith("s3://"):
         logger.error(
@@ -405,7 +419,7 @@ async def view_dataset_content(
 
     storage_options = settings.s3_storage_options
     rows_collected = []
-    
+
     try:
         # Use fsspec filesystem object with pyarrow
         fs = s3fs.S3FileSystem(**storage_options)
@@ -414,14 +428,19 @@ async def view_dataset_content(
         with fs.open(s3_path, "rb") as f:
             parquet_file = pq.ParquetFile(f)
             total_rows_in_file = parquet_file.metadata.num_rows
-            
+
             # Log discrepancy if any
-            if db_dataset.num_rows is not None and db_dataset.num_rows != total_rows_in_file:
+            if (
+                db_dataset.num_rows is not None
+                and db_dataset.num_rows != total_rows_in_file
+            ):
                 logger.warning(
                     f"Dataset {dataset_id} num_rows in DB ({db_dataset.num_rows}) doesn't match file ({total_rows_in_file})"
                 )
-            
-            logger.info(f"Reading dataset {dataset_id}: DB reports {db_dataset.num_rows} rows, file has {total_rows_in_file} rows")
+
+            logger.info(
+                f"Reading dataset {dataset_id}: DB reports {db_dataset.num_rows} rows, file has {total_rows_in_file} rows"
+            )
 
             total_rows_seen = 0
             for batch in parquet_file.iter_batches(batch_size=65536):

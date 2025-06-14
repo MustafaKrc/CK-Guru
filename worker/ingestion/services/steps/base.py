@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import git
-from celery import Task
 
 from shared.celery_config.base_task import EventPublishingTask
 from shared.core.config import settings
@@ -21,7 +20,9 @@ class IngestionContext:
 
     # Input Parameters
     repository_id: int
-    git_url: Optional[str] # optional as it might not be needed if repo_object is present
+    git_url: Optional[
+        str
+    ]  # optional as it might not be needed if repo_object is present
     repo_local_path: Path
 
     # Task Management
@@ -57,8 +58,12 @@ class IngestionContext:
         None  # Changed from Dict to List[Dict]
     )
 
-    commit_details_payloads: Dict[str, Dict] # To hold extracted details. keyed by commit_hash
-    commits_to_process: List[str] # A definitive list of hashes this pipeline run should process.
+    commit_details_payloads: Dict[
+        str, Dict
+    ]  # To hold extracted details. keyed by commit_hash
+    commits_to_process: List[
+        str
+    ]  # A definitive list of hashes this pipeline run should process.
 
     # Event Context
     event_job_type: Optional[str]
@@ -107,7 +112,7 @@ class IngestionContext:
         self.parent_metrics_processed = False
 
         # ADDED
-        self.parent_commit_hash = None # Will be resolved by a step
+        self.parent_commit_hash = None  # Will be resolved by a step
         self.commit_details_payloads = {}
         self.commits_to_process = []
 
@@ -128,7 +133,9 @@ class IngestionStep(ABC):
         pass
 
     @abstractmethod
-    async def execute(self, context: IngestionContext, **kwargs: Any) -> IngestionContext:
+    async def execute(
+        self, context: IngestionContext, **kwargs: Any
+    ) -> IngestionContext:
         """
         Executes the logic for this step.
 
@@ -172,16 +179,23 @@ class IngestionStep(ABC):
         return "N/A"
 
     def _log_info(self, context: IngestionContext, message: str):
-        logger.info(f"Task {self._get_task_id_str(context)} - Step [{self.name}]: {message}")
+        logger.info(
+            f"Task {self._get_task_id_str(context)} - Step [{self.name}]: {message}"
+        )
 
     def _log_warning(self, context: IngestionContext, message: str):
-        logger.warning(f"Task {self._get_task_id_str(context)} - Step [{self.name}]: {message}")
+        logger.warning(
+            f"Task {self._get_task_id_str(context)} - Step [{self.name}]: {message}"
+        )
         context.warnings.append(f"[{self.name}] {message}")
 
     def _log_error(self, context: IngestionContext, message: str, exc_info=True):
         logger.error(
-            f"Task {self._get_task_id_str(context)} - Step [{self.name}]: {message}", exc_info=exc_info
+            f"Task {self._get_task_id_str(context)} - Step [{self.name}]: {message}",
+            exc_info=exc_info,
         )
 
     def _log_debug(self, context: IngestionContext, message: str):
-        logger.debug(f"Task {self._get_task_id_str(context)} - Step [{self.name}]: {message}")
+        logger.debug(
+            f"Task {self._get_task_id_str(context)} - Step [{self.name}]: {message}"
+        )

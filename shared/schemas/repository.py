@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, List
+from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
@@ -48,6 +48,7 @@ class RepositoryInDB(RepositoryInDBBase):
     # Add any additional fields that are stored in DB but not returned to client
     # For most repositories, this might be the same as RepositoryInDBBase
     pass
+
 
 class PaginatedRepositoryRead(BaseModel):
     items: List[RepositoryRead]

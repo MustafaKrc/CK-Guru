@@ -2,16 +2,15 @@
 import logging
 from typing import Dict, List, Type
 
-from shared.feature_selection import (
-    FeatureSelectionDefinition,
-    FeatureSelectionStrategy,
-)
-
 # Import all concrete strategies
 from services.feature_selection.strategies import (
     CbfsFeatureSelection,
     ModelBasedFeatureSelection,
     MrmrFeatureSelection,
+)
+from shared.feature_selection import (
+    FeatureSelectionDefinition,
+    FeatureSelectionStrategy,
 )
 
 logger = logging.getLogger(__name__)
@@ -32,7 +31,9 @@ class FeatureSelectionStrategyFactory:
         self.register_strategy(CbfsFeatureSelection)
         self.register_strategy(MrmrFeatureSelection)
         self.register_strategy(ModelBasedFeatureSelection)
-        logger.info(f"Registered feature selection strategies: {list(self._strategies.keys())}")
+        logger.info(
+            f"Registered feature selection strategies: {list(self._strategies.keys())}"
+        )
 
     def register_strategy(self, strategy_class: Type[FeatureSelectionStrategy]):
         """Registers a new strategy class using its defined algorithm_name."""

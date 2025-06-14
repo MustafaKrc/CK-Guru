@@ -2,10 +2,10 @@
 import logging
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from sqlalchemy import asc, desc, func, select, cast
-from sqlalchemy.types import Integer as SAInteger
+from sqlalchemy import asc, cast, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.types import Integer as SAInteger
 
 from shared.db.models.dataset import Dataset
 from shared.db.models.inference_job import InferenceJob
@@ -207,9 +207,7 @@ async def get_inference_jobs_by_repository(
 
     stmt_items = (
         select(InferenceJob)
-        .options(
-            selectinload(InferenceJob.ml_model).selectinload(MLModel.dataset)
-        )
+        .options(selectinload(InferenceJob.ml_model).selectinload(MLModel.dataset))
         .where(InferenceJob.ml_model_id.in_(ml_model_ids_stmt))
         .order_by(InferenceJob.created_at.desc())
         .offset(skip)

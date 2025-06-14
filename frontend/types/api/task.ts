@@ -5,12 +5,12 @@
  */
 export enum TaskStatusEnum {
   PENDING = "PENDING",
-  RECEIVED = "RECEIVED",  // Task received by a worker
-  STARTED = "STARTED",  // Task started execution
-  SUCCESS = "SUCCESS",  // Task completed successfully
-  FAILURE = "FAILURE",  // Task failed
-  RETRY = "RETRY",  // Task is being retried
-  REVOKED = "REVOKED",  // Task was revoked.
+  RECEIVED = "RECEIVED", // Task received by a worker
+  STARTED = "STARTED", // Task started execution
+  SUCCESS = "SUCCESS", // Task completed successfully
+  FAILURE = "FAILURE", // Task failed
+  RETRY = "RETRY", // Task is being retried
+  REVOKED = "REVOKED", // Task was revoked.
 }
 
 /**

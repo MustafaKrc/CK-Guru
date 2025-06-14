@@ -15,7 +15,7 @@ export interface Repository {
   github_issues_count: number;
   // These are not in the current RepositoryRead schema from backend
   // They are GAPs to be addressed later if needed for the list view.
-  commits_count?: number; 
+  commits_count?: number;
   models_count?: number;
 }
 

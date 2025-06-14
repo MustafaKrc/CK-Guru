@@ -1,7 +1,7 @@
 # worker/ml/services/handlers/xai_explanation_handler.py
+import asyncio
 import logging
 from typing import Any, Dict, List, Optional, Tuple  # Added Tuple
-import asyncio
 
 import pandas as pd
 from celery import Task
@@ -321,7 +321,9 @@ class XAIExplanationHandler:
         explanation_result_data_json: Optional[Dict[str, Any]] = None
 
         try:
-            xai_record = await asyncio.to_thread(self.xai_repo.get_xai_result_sync, self.xai_result_id)
+            xai_record = await asyncio.to_thread(
+                self.xai_repo.get_xai_result_sync, self.xai_result_id
+            )
             if not xai_record:
                 raise Ignore(f"XAIResult record {self.xai_result_id} not found in DB.")
             if (
@@ -349,15 +351,17 @@ class XAIExplanationHandler:
                 is_start=True,
             )
 
-            inference_job = await asyncio.to_thread(self.inference_job_repo.get_by_id,
-                xai_record.inference_job_id
+            inference_job = await asyncio.to_thread(
+                self.inference_job_repo.get_by_id, xai_record.inference_job_id
             )
             if not inference_job:
                 raise ValueError(
                     f"Parent InferenceJob ID {xai_record.inference_job_id} not found."
                 )
 
-            ml_model_db_record = await asyncio.to_thread(self.model_repo.get_by_id, inference_job.ml_model_id)
+            ml_model_db_record = await asyncio.to_thread(
+                self.model_repo.get_by_id, inference_job.ml_model_id
+            )
             if not ml_model_db_record or not ml_model_db_record.s3_artifact_path:
                 raise ValueError(
                     f"MLModel {inference_job.ml_model_id} or its S3 artifact path not found."
@@ -380,8 +384,8 @@ class XAIExplanationHandler:
                 )
 
             # Load features first to help determine feature names if model doesn't store them
-            raw_features_df = await asyncio.to_thread(self.feature_repo.get_features_for_commit,
-                repo_id, commit_hash
+            raw_features_df = await asyncio.to_thread(
+                self.feature_repo.get_features_for_commit, repo_id, commit_hash
             )
             if raw_features_df is None or raw_features_df.empty:
                 raise ValueError(
@@ -405,7 +409,9 @@ class XAIExplanationHandler:
 
             await asyncio.to_thread(
                 self.xai_repo.update_xai_result_sync,
-                self.xai_result_id, XAIStatusEnum.RUNNING, "Generating explanation..."
+                self.xai_result_id,
+                XAIStatusEnum.RUNNING,
+                "Generating explanation...",
             )
 
             xai_strategy: BaseXAIStrategy = XAIStrategyFactory.create(

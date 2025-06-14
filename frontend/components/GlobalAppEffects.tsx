@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect } from 'react';
-import { useTaskStore } from '@/store/taskStore'; // Adjust path as needed
+import { useEffect } from "react";
+import { useTaskStore } from "@/store/taskStore"; // Adjust path as needed
 // import { useAuth } from '@/components/auth/auth-provider'; // If connection depends on auth status
 
 export function GlobalAppEffects() {
@@ -33,7 +33,7 @@ export function GlobalAppEffects() {
       // For now, let's not disconnect on unmount of this specific component,
       // but rather rely on explicit disconnect calls (e.g., on logout).
       // console.log("GlobalAppEffects: Cleaning up on unmount (optional SSE disconnect).");
-      // disconnectSSE(); 
+      // disconnectSSE();
     };
   }, [connectSSE, disconnectSSE /*, isAuthenticated */]); // Add isAuthenticated if used
 

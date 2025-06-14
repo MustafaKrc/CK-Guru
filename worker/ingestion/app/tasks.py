@@ -1,11 +1,10 @@
 # worker/ingestion/app/tasks.py
+import asyncio  # For async tasks
+import logging  # Use standard logging
 from pathlib import Path
-import asyncio # For async tasks
 
 from celery import shared_task
-from celery.exceptions import Ignore, Reject, Terminated
-import logging # Use standard logging
-
+from celery.exceptions import Reject, Terminated
 from services.dependencies import DependencyProvider, StepRegistry
 from services.pipeline import PipelineRunner
 
@@ -16,22 +15,24 @@ from services.strategies import (
     SingleCommitFeatureExtractionStrategy,
 )
 
+from shared.celery_config.base_task import EventPublishingTask  # Import new base task
 from shared.core.config import settings
 from shared.db.models import InferenceJob
 from shared.db_session import SyncSessionLocal
-from shared.exceptions import InternalError, build_failure_meta
 from shared.schemas.enums import JobStatusEnum
 
 from .main import celery_app
-from shared.celery_config.base_task import EventPublishingTask # Import new base task
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL.upper())
 
-async def _ingest_features_for_inference_async(
-    self: EventPublishingTask, inference_job_id: int, repo_id: int, commit_hash_input: str
-):
 
+async def _ingest_features_for_inference_async(
+    self: EventPublishingTask,
+    inference_job_id: int,
+    repo_id: int,
+    commit_hash_input: str,
+):
     """
     Celery task to orchestrate feature extraction for a single commit inference
     using the PipelineRunner and SingleCommitFeatureExtractionStrategy.
@@ -93,8 +94,8 @@ async def _ingest_features_for_inference_async(
             entity_id=inference_job_id,
             entity_type="InferenceJob",
         )
-        
-        prediction_task_name = "tasks.inference_predict" # From ml_worker
+
+        prediction_task_name = "tasks.inference_predict"  # From ml_worker
         prediction_task_args = [inference_job_id]
         # Celery's send_task is synchronous for dispatching, result is AsyncResult
         prediction_task_dispatch = celery_app.send_task(
@@ -102,7 +103,9 @@ async def _ingest_features_for_inference_async(
         )
 
         if not prediction_task_dispatch or not prediction_task_dispatch.id:
-            error_msg = "Feature extraction succeeded, but failed to dispatch prediction task."
+            error_msg = (
+                "Feature extraction succeeded, but failed to dispatch prediction task."
+            )
             logger.critical(f"Task {task_id}: {error_msg}")
             await self.update_task_state(
                 state=JobStatusEnum.FAILED.value,
@@ -111,7 +114,7 @@ async def _ingest_features_for_inference_async(
             )
             # Update InferenceJob DB record to FAILED as well
             job_status_updater.update_job_completion(
-                 inference_job_id, InferenceJob, JobStatusEnum.FAILED, error_msg
+                inference_job_id, InferenceJob, JobStatusEnum.FAILED, error_msg
             )
             return {"status": JobStatusEnum.FAILED.value, "error": error_msg}
 
@@ -120,11 +123,14 @@ async def _ingest_features_for_inference_async(
             state=JobStatusEnum.SUCCESS.value,
             status_message=success_message,
             progress=100,
-            result_summary={"prediction_task_id": prediction_task_dispatch.id}
+            result_summary={"prediction_task_id": prediction_task_dispatch.id},
         )
         logger.info(f"Task {task_id}: {success_message}")
         # DB record for InferenceJob will be updated by the ML worker upon prediction completion.
-        return {"status": JobStatusEnum.SUCCESS.value, "prediction_task_id": prediction_task_dispatch.id}
+        return {
+            "status": JobStatusEnum.SUCCESS.value,
+            "prediction_task_id": prediction_task_dispatch.id,
+        }
 
     except Terminated:
         status_message = "Task terminated during feature extraction."
@@ -133,9 +139,11 @@ async def _ingest_features_for_inference_async(
             inference_job_id, InferenceJob, JobStatusEnum.FAILED, status_message
         )
         # EventPublishingTask.on_failure or a custom revoke handler would publish REVOKED/FAILED event for Celery Task
-        raise 
-    except Reject as e: # Specific Celery exception
-        logger.info(f"Task {task_id}: Rejecting task for InferenceJob {inference_job_id}: {e.reason}")
+        raise
+    except Reject as e:  # Specific Celery exception
+        logger.info(
+            f"Task {task_id}: Rejecting task for InferenceJob {inference_job_id}: {e.reason}"
+        )
         # State should have been set before Reject was raised by update_job_start or pipeline
         raise
     except Exception as e:
@@ -154,7 +162,7 @@ async def _ingest_features_for_inference_async(
         await self.update_task_state(
             state=JobStatusEnum.FAILED.value,
             status_message=error_msg_detail,
-            error_details=str(e)
+            error_details=str(e),
         )
         raise Reject(f"{error_msg_detail}: {e}", requeue=False) from e
 
@@ -187,7 +195,9 @@ async def _ingest_repository_async(
         error_msg = f"Failed to create storage directory: {e}"
         logger.critical(f"Task {task_id}: {error_msg}", exc_info=True)
         await self.update_task_state(
-            state=JobStatusEnum.FAILED.value, status_message=error_msg, error_details=str(e)
+            state=JobStatusEnum.FAILED.value,
+            status_message=error_msg,
+            error_details=str(e),
         )
         raise Reject(error_msg, requeue=False) from e
 
@@ -205,7 +215,7 @@ async def _ingest_repository_async(
     # --- Strategy and Dependency Setup ---
     strategy = FullHistoryIngestionStrategy()
     # If steps become async and need async DB, SyncSessionLocal needs to become async
-    dependency_provider = DependencyProvider(session_factory=SyncSessionLocal) 
+    dependency_provider = DependencyProvider(session_factory=SyncSessionLocal)
     step_registry = StepRegistry()
     runner = PipelineRunner(strategy, step_registry, dependency_provider)
 
@@ -218,12 +228,14 @@ async def _ingest_repository_async(
         # --- Finalize Task (Success) ---
         final_status_message = "Completed successfully"
         if final_context.warnings:
-            final_status_message = f"Completed with warnings: {'; '.join(final_context.warnings)}"
+            final_status_message = (
+                f"Completed with warnings: {'; '.join(final_context.warnings)}"
+            )
             logger.warning(
                 f"Task {task_id}: Full ingestion completed with warnings: {final_context.warnings}"
             )
-        
-        result_payload = { # This is for Celery result backend, not SSE directly
+
+        result_payload = {  # This is for Celery result backend, not SSE directly
             "status_message": final_status_message,
             "repository_id": final_context.repository_id,
             "commit_guru_metrics_inserted": final_context.inserted_guru_metrics_count,
@@ -234,10 +246,10 @@ async def _ingest_repository_async(
             state=JobStatusEnum.SUCCESS.value,
             status_message=final_status_message,
             progress=100,
-            result_summary=result_payload, # Pass structured summary
+            result_summary=result_payload,  # Pass structured summary
         )
         logger.info(f"Task {task_id}: Final State: SUCCESS. {final_status_message}")
-        return result_payload # Return for Celery result backend
+        return result_payload  # Return for Celery result backend
 
     except Terminated:
         failed_step_name = getattr(runner.current_step_instance, "name", "Unknown")
@@ -246,13 +258,15 @@ async def _ingest_repository_async(
         # Publish REVOKED event; Celery handles its internal state.
         # EventPublishingTask does not automatically publish on_failure for Terminated
         await self.update_task_state(
-            state="REVOKED", # Celery's state for terminated
+            state="REVOKED",  # Celery's state for terminated
             status_message=error_msg,
             error_details=f"Terminated during step: {failed_step_name}",
         )
         raise
-    except Reject as e: # Specific Celery exception
-        logger.info(f"Task {task_id}: Rejecting task for repo {repository_id}: {e.reason}")
+    except Reject as e:  # Specific Celery exception
+        logger.info(
+            f"Task {task_id}: Rejecting task for repo {repository_id}: {e.reason}"
+        )
         # State should have been set by the code path that raised Reject
         raise
     except Exception as e:
@@ -279,7 +293,10 @@ async def _ingest_repository_async(
     base=EventPublishingTask,
 )
 def ingest_features_for_inference_task(
-    self: EventPublishingTask, inference_job_id: int, repo_id: int, commit_hash_input: str
+    self: EventPublishingTask,
+    inference_job_id: int,
+    repo_id: int,
+    commit_hash_input: str,
 ):
     """
     Synchronous wrapper so the prefork worker gets a *real* return

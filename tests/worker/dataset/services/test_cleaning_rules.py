@@ -6,7 +6,7 @@ import pytest
 
 # Import rule classes
 from worker.dataset.services.cleaning_rules import (
-    DEFAULT_X_COLUMNS,  # Import if needed for cluster test setup
+    DEFAULT_X_COLUMNS,
     DEFAULT_Y_COLUMN,
     Rule0DropDuplicates,
     Rule2RemoveRecentCleanLastChange,
@@ -23,7 +23,7 @@ from worker.dataset.services.cleaning_rules import (
     Rule13RemoveMinimalChange,
     Rule14FilterLargeCommits,
     RuleClusterLargeCommits,
-)
+)  # Import if needed for cluster test setup
 
 
 # Mock logger for all tests in this module
