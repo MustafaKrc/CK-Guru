@@ -127,7 +127,7 @@ export const LimeDisplay: React.FC<LimeDisplayProps> = ({ data }) => {
                         const labelX = isPositive ? (x + width - 5) : (x - 3);
                         const labelY = y + height / 2;
                         const textAnchor = isPositive ? "end" : "end";
-                        const fill = isPositive ? 'hsl(var(--destructive-foreground))' : 'hsl(var(--primary-foreground))'; // Match bar color
+                        const fill = "#fff"; // Always white
                         if (Math.abs(width) < 25 && Math.abs(value) > 0.001) return null; // Avoid tiny labels on tiny bars
 
                         return (

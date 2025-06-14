@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 import { apiService, handleApiError } from '@/lib/apiService';
-import { CommitPageResponse } from '@/types/api/commit';
+import { CommitPageResponse, Repository } from '@/types/api';
 import { CommitIngestionStatusEnum, JobStatusEnum } from '@/types/api/enums';
 import { useTaskStore } from '@/store/taskStore';
 import { getLatestTaskForEntity } from '@/lib/taskUtils';
@@ -16,14 +16,16 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, GitCommit, User, Calendar, FileText, Check, Plus, AlertCircle, RefreshCw, Loader2, Play, Eye } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { ArrowLeft, GitCommit, User, Calendar, FileText, Check, Plus, AlertCircle, RefreshCw, Loader2, Play, Eye, Lightbulb, MessageSquare } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { FileDiffViewer } from '@/components/commits/FileDiffViewer';
 import { Label } from '@/components/ui/label';
 
-const formatDate = (isoString: string) => {
+const formatDate = (isoString?: string | null) => {
+  if (!isoString) return "N/A";
   return new Date(isoString).toLocaleString();
 };
 
@@ -35,24 +37,31 @@ function CommitDetailPage() {
   const commitHash = params.hash;
 
   const [commitData, setCommitData] = useState<CommitPageResponse | null>(null);
+  const [repository, setRepository] = useState<Repository | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
   const { taskStatuses } = useTaskStore();
   const liveTaskStatus = getLatestTaskForEntity(taskStatuses, "CommitDetails", commitData?.details?.id || 0, "feature_extraction");
 
-  const fetchCommitData = useCallback(async (showLoadingToast = false) => {
+  const fetchData = useCallback(async (showLoadingToast = false) => {
     if (!repoId || !commitHash) return;
     if(showLoadingToast) toast({ title: "Refreshing commit data...", description: "Please wait..." });
     
     setIsLoading(true);
     setError(null);
     try {
-      const response = await apiService.getCommitDetails(repoId, commitHash);
-      setCommitData(response);
+      const [commitResponse, repoResponse] = await Promise.all([
+        apiService.getCommitDetails(repoId, commitHash),
+        apiService.get<Repository>(`/repositories/${repoId}`)
+      ]);
+      
+      setCommitData(commitResponse);
+      setRepository(repoResponse);
+
       if(showLoadingToast) toast({ title: "Success", description: "Data refreshed!" });
     } catch (err) {
-      handleApiError(err, "Failed to load commit data");
+      handleApiError(err, "Failed to load page data");
       setError(err instanceof Error ? err.message : "Could not load data.");
     } finally {
       setIsLoading(false);
@@ -60,32 +69,30 @@ function CommitDetailPage() {
   }, [repoId, commitHash, toast]);
 
   useEffect(() => {
-    fetchCommitData();
-  }, [fetchCommitData]);
+    fetchData();
+  }, [fetchData]);
   
   useEffect(() => {
-    // If the live task status shows success or failure, and the local data is still pending/running, refetch.
     const staticStatus = commitData?.ingestion_status;
     const liveStatus = liveTaskStatus?.status?.toUpperCase();
 
     if (liveStatus && (liveStatus === 'SUCCESS' || liveStatus === 'FAILED')) {
       if(staticStatus !== CommitIngestionStatusEnum.COMPLETE && staticStatus !== CommitIngestionStatusEnum.FAILED) {
         toast({ title: "Info", description: "Ingestion process finished. Refreshing details..." });
-        setTimeout(() => fetchCommitData(true), 1000);
+        setTimeout(() => fetchData(true), 1000);
       }
     }
-  }, [liveTaskStatus, commitData, fetchCommitData]);
+  }, [liveTaskStatus, commitData, fetchData]);
 
   const handleIngestClick = async () => {
-    setIsLoading(true); // Reuse isLoading for this action
+    setIsLoading(true);
     try {
       const taskResponse = await apiService.triggerCommitIngestion(repoId, commitHash);
       toast({
         title: "Ingestion Started",
         description: `Task ${taskResponse.task_id} has been queued to ingest commit details.`,
       });
-      // Immediately refetch to get the PENDING status from the backend
-      fetchCommitData();
+      fetchData();
     } catch (err) {
       handleApiError(err, "Failed to start ingestion");
       setIsLoading(false);
@@ -139,7 +146,7 @@ function CommitDetailPage() {
         return renderCompleteView();
       
       default:
-        return <Skeleton className="h-64 w-full" />;
+        return <div className="space-y-6"><Skeleton className="h-48 w-full" /><Skeleton className="h-64 w-full" /></div>;
     }
   };
   
@@ -147,81 +154,97 @@ function CommitDetailPage() {
     const details = commitData?.details;
     if (!details) return <Alert variant="destructive">Data marked complete, but details are missing.</Alert>;
     
+    const inferenceJobs = commitData?.inference_jobs || [];
+    const hasInferenceJobs = inferenceJobs.length > 0;
+    
     return (
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-1 space-y-6">
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <CardHeader><CardTitle>Commit Info</CardTitle></CardHeader>
-            <CardContent className="space-y-3 text-sm">
+            <CardContent className="space-y-4 text-sm">
                 <div className="flex items-center gap-2"><User className="h-4 w-4 text-muted-foreground"/><p>{details.author_name} &lt;{details.author_email}&gt;</p></div>
                 <div className="flex items-center gap-2"><Calendar className="h-4 w-4 text-muted-foreground"/><p>{formatDate(details.author_date)}</p></div>
-                <div className="pt-2">
+                
+                <div>
                     <Label className="text-xs uppercase text-muted-foreground">Parents</Label>
                     <div className="font-mono text-xs space-y-1 mt-1">
-                        {details.parents.map(p => <p key={p}><Link className="text-primary hover:underline" href={`/repositories/${repoId}/commits/${p}`}>{p}</Link></p>)}
+                        {details.parents.map(p => <p key={p} className="truncate"><Link className="text-primary hover:underline" href={`/repositories/${repoId}/commits/${p}`}>{p}</Link></p>)}
                     </div>
+                </div>
+
+                <div className="pt-2">
+                    <Label className="text-xs uppercase text-muted-foreground flex items-center"><MessageSquare className="h-3.5 w-3.5 mr-1"/>Commit Message</Label>
+                    <ScrollArea className="h-32 rounded-md border bg-muted p-3 mt-1">
+                        <pre className="whitespace-pre-wrap font-sans text-xs">
+                            {details.message}
+                        </pre>
+                    </ScrollArea>
                 </div>
             </CardContent>
           </Card>
-          
-           <Card>
-            <CardHeader><CardTitle>Associated Inferences</CardTitle></CardHeader>
+
+          <Card>
+            <CardHeader><CardTitle className="flex items-center"><Lightbulb className="mr-2 h-4 w-4 text-primary" />Prediction Insights</CardTitle></CardHeader>
             <CardContent>
-              {commitData?.inference_jobs && commitData.inference_jobs.length > 0 ? (
-                <ul className="space-y-2">
-                  {commitData.inference_jobs.map(job => (
-                    <li key={job.id} className="text-sm flex justify-between items-center">
-                      <Link href={`/prediction-insights/${job.id}`} className="text-primary hover:underline">Job #{job.id}</Link>
-                      {job.status === JobStatusEnum.SUCCESS ? <Badge>Success</Badge> : <Badge variant="secondary">{job.status}</Badge>}
-                    </li>
-                  ))}
-                </ul>
-              ) : <p className="text-sm text-muted-foreground">No inference jobs run for this commit yet.</p>}
+                {hasInferenceJobs ? (
+                    <div className="space-y-3">
+                        <p className="text-sm text-muted-foreground">This commit has been analyzed. Showing the last {Math.min(5, inferenceJobs.length)} jobs.</p>
+                        <ul className="space-y-2">
+                            {inferenceJobs.slice(0, 5).map(job => (
+                                <li key={job.id} className="text-xs flex justify-between items-center border-b pb-1 last:border-0">
+                                    <Link href={`/prediction-insights/${job.id}`} className="text-primary hover:underline">Job #{job.id}</Link>
+                                    <Badge variant={job.prediction_result?.commit_prediction === 1 ? 'destructive' : 'secondary'}>{job.prediction_result?.commit_prediction === 1 ? 'Defect' : 'Clean'}</Badge>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                ) : (
+                    <p className="text-sm text-muted-foreground">No inference jobs have been run for this commit yet.</p>
+                )}
             </CardContent>
             <CardFooter>
-                 <Button className="w-full" asChild><Link href={`/jobs/inference?repoId=${repoId}&commitHash=${commitHash}`}><Play className="mr-2 h-4 w-4"/>Run New Inference</Link></Button>
+                {hasInferenceJobs ? (
+                    <Button className="w-full" asChild>
+                        {/* We don't have a pre-filtered insights page yet, so link to main page */}
+                        <Link href={`/prediction-insights`}><Eye className="mr-2 h-4 w-4"/>View All Insights</Link>
+                    </Button>
+                ) : (
+                    <Button className="w-full" asChild>
+                        <Link href={`/jobs/inference?repositoryId=${repoId}&commitHash=${commitHash}`}><Play className="mr-2 h-4 w-4"/>Run Inference</Link>
+                    </Button>
+                )}
             </CardFooter>
           </Card>
         </div>
-        
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
-                <CardTitle>Commit Message</CardTitle>
-            </CardHeader>
-            <CardContent>
-                <pre className="text-sm bg-muted p-4 rounded-md whitespace-pre-wrap font-sans">{details.message}</pre>
-            </CardContent>
-          </Card>
 
-          <Card className="mt-6">
-            <CardHeader>
-              <CardTitle>File Changes ({details.stats_files_changed})</CardTitle>
-              <CardDescription className="flex gap-4">
-                <span className="text-green-600">++ {details.stats_insertions} additions</span>
-                <span className="text-red-600">-- {details.stats_deletions} deletions</span>
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Accordion type="single" collapsible className="w-full">
-                {details.file_diffs.map(diff => (
-                  <AccordionItem key={diff.id} value={`file-${diff.id}`}>
-                    <AccordionTrigger>
-                        <div className="flex items-center gap-2">
-                            <FileText className="h-4 w-4"/>
-                            <span className="font-mono text-sm">{diff.file_path}</span>
-                            <Badge variant="secondary">{diff.change_type}</Badge>
-                        </div>
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <FileDiffViewer diffText={diff.diff_text} />
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
-            </CardContent>
-          </Card>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>File Changes ({details.stats_files_changed})</CardTitle>
+            <CardDescription className="flex gap-4">
+              <span className="text-green-600">++ {details.stats_insertions} additions</span>
+              <span className="text-red-600">-- {details.stats_deletions} deletions</span>
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Accordion type="single" collapsible className="w-full">
+              {details.file_diffs.map(diff => (
+                <AccordionItem key={diff.id} value={`file-${diff.id}`}>
+                  <AccordionTrigger>
+                      <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4"/>
+                          <span className="font-mono text-sm">{diff.file_path}</span>
+                          <Badge variant="secondary">{diff.change_type}</Badge>
+                      </div>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <FileDiffViewer diffText={diff.diff_text} />
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          </CardContent>
+        </Card>
       </div>
     );
   };
@@ -230,9 +253,15 @@ function CommitDetailPage() {
     <MainLayout>
       <PageContainer
         title={`Commit: ${commitHash.substring(0, 12)}...`}
-        //description={repo ? `In repository: ${repo.name}` : `In repository ID: ${repoId}`}
-        description={`In repository ID: ${repoId}`}
-        actions={<Button variant="outline" onClick={() => router.back()}><ArrowLeft className="mr-2 h-4 w-4"/>Back</Button>}
+        description={
+          repository ? (
+            <Link href={`/repositories/${repository.id}`} className="text-sm text-primary hover:underline">
+              In repository: {repository.name}
+            </Link>
+          ) : (
+            <span className="text-sm text-muted-foreground">In repository ID: {repoId}</span>
+          )
+        }
       >
         {renderStatus()}
       </PageContainer>

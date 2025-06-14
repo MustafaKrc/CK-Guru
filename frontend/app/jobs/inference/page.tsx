@@ -3,12 +3,13 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { MainLayout } from "@/components/main-layout";
 import { Button } from "@/components/ui/button";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
-} from "@/components/ui/select";
+  SearchableSelect,
+  SearchableSelectOption,
+} from "@/components/ui/searchable-select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,9 +28,11 @@ import { InferenceJobRead, PaginatedInferenceJobRead, ManualInferenceRequestPayl
 import { useTaskStore } from "@/store/taskStore";
 import { getLatestTaskForEntity } from "@/lib/taskUtils";
 import { JobStatusEnum } from "@/types/api/enums";
+
 export default function ManualInferencePage() {
   const router = useRouter();
   const { toast } = useToast();
+  const searchParams = useSearchParams();
 
   const [selectedRepoId, setSelectedRepoId] = useState<string>("");
   const [selectedModelId, setSelectedModelId] = useState<string>("");
@@ -64,6 +67,10 @@ export default function ManualInferencePage() {
     setIsLoadingModels(true);
     setModels([]); // Clear previous models
     setSelectedModelId(""); // Reset model selection
+    if (!repoId) {
+      setIsLoadingModels(false);
+      return;
+    }
     try {
       const paginatedModels = await apiService.get<PaginatedMLModelRead>(`/repositories/${repoId}/models?limit=200`);
       setModels(paginatedModels.items || []);
@@ -89,7 +96,17 @@ export default function ManualInferencePage() {
   useEffect(() => {
     fetchRepositories();
     fetchRecentInferenceJobs();
-  }, [fetchRepositories, fetchRecentInferenceJobs]);
+
+    const queryRepoId = searchParams.get("repositoryId");
+    const queryCommitHash = searchParams.get("commitHash");
+
+    if (queryRepoId) {
+      setSelectedRepoId(queryRepoId);
+    }
+    if (queryCommitHash) {
+      setCommitHash(queryCommitHash);
+    }
+  }, [fetchRepositories, fetchRecentInferenceJobs, searchParams]);
 
   useEffect(() => {
     if (selectedRepoId) {
@@ -110,8 +127,8 @@ export default function ManualInferencePage() {
 
     setIsSubmitting(true);
     const payload: ManualInferenceRequestPayload = {
-      repo_id: parseInt(selectedRepoId),
-      ml_model_id: parseInt(selectedModelId),
+      repo_id: parseInt(selectedRepoId), // Ensure selectedRepoId is parsed to int
+      ml_model_id: parseInt(selectedModelId), // Ensure selectedModelId is parsed to int
       target_commit_hash: commitHash.trim(),
     };
 
@@ -176,6 +193,16 @@ export default function ManualInferencePage() {
     return <Badge variant={badgeVariant} className="whitespace-nowrap text-xs px-1.5 py-0.5" title={displayMessage || String(displayStatus)}>{icon}{text}</Badge>;
   };
 
+  const repositoryOptions: SearchableSelectOption[] = useMemo(() => 
+    repositories.map(repo => ({ value: repo.id.toString(), label: repo.name })),
+    [repositories]
+  );
+
+  const modelOptions: SearchableSelectOption[] = useMemo(() =>
+    models.map(model => ({ value: model.id.toString(), label: `${model.name} (v${model.version})` })),
+    [models]
+  );
+
   return (
     <MainLayout>
       <PageContainer
@@ -193,24 +220,30 @@ export default function ManualInferencePage() {
                 <div className="space-y-2">
                   <Label htmlFor="repository_id">Repository *</Label>
                   {isLoadingRepositories ? <Skeleton className="h-10 w-full" /> : (
-                    <Select value={selectedRepoId} onValueChange={setSelectedRepoId}>
-                      <SelectTrigger id="repository_id"><SelectValue placeholder="Select a repository..." /></SelectTrigger>
-                      <SelectContent>
-                        {repositories.map(repo => (<SelectItem key={repo.id} value={repo.id.toString()}>{repo.name}</SelectItem>))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      value={selectedRepoId}
+                      onValueChange={setSelectedRepoId}
+                      options={repositoryOptions}
+                      placeholder="Select a repository..."
+                      searchPlaceholder="Search repositories..."
+                      emptyMessage="No repositories found."
+                      disabled={isLoadingRepositories}
+                    />
                   )}
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="ml_model_id">Model *</Label>
                   {isLoadingModels ? <Skeleton className="h-10 w-full" /> : (
-                    <Select value={selectedModelId} onValueChange={setSelectedModelId} disabled={!selectedRepoId || models.length === 0}>
-                      <SelectTrigger id="ml_model_id"><SelectValue placeholder={!selectedRepoId ? "Select repository first" : (models.length === 0 ? "No models for repo" : "Select a model...")} /></SelectTrigger>
-                      <SelectContent>
-                        {models.map(model => (<SelectItem key={model.id} value={model.id.toString()}>{model.name} (v{model.version})</SelectItem>))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      value={selectedModelId}
+                      onValueChange={setSelectedModelId}
+                      options={modelOptions}
+                      placeholder={!selectedRepoId ? "Select repository first" : (models.length === 0 ? "No models for this repo" : "Select a model...")}
+                      searchPlaceholder="Search models..."
+                      emptyMessage="No models found."
+                      disabled={isLoadingModels || !selectedRepoId || models.length === 0}
+                    />
                   )}
                 </div>
 
@@ -245,7 +278,10 @@ export default function ManualInferencePage() {
                     ) : (
                       recentInferenceJobs.map(job => {
                         const repo = repositories.find(r => r.id === job.input_reference.repo_id);
-                        const model = models.find(m => m.id === job.ml_model_id);
+                        const model = models.find(m => m.id === job.ml_model_id) || 
+                                      (selectedRepoId === job.input_reference.repo_id.toString() ? 
+                                        models.find(m => m.id === job.ml_model_id) : 
+                                        null); // Attempt to find model in current list if repo matches
                         return (
                           <TableRow key={job.id}>
                             <TableCell className="font-mono text-xs">
@@ -255,7 +291,7 @@ export default function ManualInferencePage() {
                                 <span className="block text-muted-foreground">{repo?.name || `Repo ${job.input_reference.repo_id}`}</span>
                             </TableCell>
                             <TableCell className="text-xs truncate max-w-[150px]" title={model ? `${model.name} v${model.version}`: `ID: ${job.ml_model_id}`}>
-                                {model ? <Link href={`/models/${job.ml_model_id}`} className="hover:underline">{`${model.name.substring(0,20)}... v${model.version}`}</Link> : `ID: ${job.ml_model_id}`}
+                                {model ? <Link href={`/models/${job.ml_model_id}`} className="hover:underline">{`${model.name.substring(0,20)}... v${model.version}`}</Link> : `Model ID: ${job.ml_model_id}`}
                             </TableCell>
                             <TableCell>{renderTaskAwareStatusBadge(job)}</TableCell>
                             <TableCell className="text-xs">{formatDate(job.created_at)}</TableCell>

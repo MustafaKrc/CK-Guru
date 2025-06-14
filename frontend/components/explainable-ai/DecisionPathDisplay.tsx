@@ -203,12 +203,20 @@ export const DecisionPathDisplay: React.FC<Props> = ({ data }) => {
               {apiNode.condition || `Leaf (ID: ${apiNode.id})`}
             </div>
             {apiNode.samples !== undefined && (
-              <div style={{ color: COL.mutedFg }} className="text-[9px]">
+              <div
+                // Make text white for leaf nodes, mutedFg otherwise
+                style={{ color: isLeaf ? "#fff" : COL.mutedFg }}
+                className="text-[9px]"
+              >
                 Samples: {apiNode.samples}
               </div>
             )}
             {apiNode.value && (
-              <div style={{ color: COL.mutedFg }} className="text-[9px]">
+              <div
+                // Make text white for leaf nodes, mutedFg otherwise
+                style={{ color: isLeaf ? "#fff" : COL.mutedFg }}
+                className="text-[9px]"
+              >
                 Value: {JSON.stringify(apiNode.value)}
               </div>
             )}
@@ -224,7 +232,7 @@ export const DecisionPathDisplay: React.FC<Props> = ({ data }) => {
             ...BASE_NODE_STYLE,
             border: `1px solid ${COL.border}`,
             background: isLeaf ? COL.primary : COL.card,
-            color: isLeaf ? COL.primaryFg : COL.cardFg,
+            color: isLeaf ? "#fff" : COL.cardFg, // Always white for leaf nodes
           },
           sourcePosition: Position.Bottom,
           targetPosition: Position.Top,

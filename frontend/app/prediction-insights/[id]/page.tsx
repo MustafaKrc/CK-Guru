@@ -44,7 +44,7 @@ import { FeatureImportanceDisplay } from "@/components/explainable-ai/FeatureImp
 import { ShapDisplay } from "@/components/explainable-ai/ShapDisplay";
 import { LimeDisplay } from "@/components/explainable-ai/LimeDisplay";
 import { DecisionPathDisplay } from "@/components/explainable-ai/DecisionPathDisplay";
-import { CounterfactualsDisplay } from "@/components/explainable-ai/CounterfactualsDisplay";
+// import { CounterfactualsDisplay } from "@/components/explainable-ai/CounterfactualsDisplay";
 
 const PredictionInsightDetailPage = () => {
   const params = useParams();
@@ -162,8 +162,11 @@ const PredictionInsightDetailPage = () => {
   };
   
   const availableXaiTabs = useMemo(() => {
-    const order: XAITypeEnum[] = Object.values(XAITypeEnum); // Use defined order
+    const order: XAITypeEnum[] = Object.values(XAITypeEnum) // Use defined order
+      // .filter(type => type !== XAITypeEnum.COUNTERFACTUALS) // Optionally filter out completely
+    ;
     return order.filter(type => 
+        type !== XAITypeEnum.COUNTERFACTUALS && // Hide counterfactuals tab
         xaiResults?.some(r => r.xai_type === type)
     );
   }, [xaiResults]);
@@ -200,8 +203,8 @@ const PredictionInsightDetailPage = () => {
             return <ShapDisplay data={result.result_data as SHAPResultData} />;
           case XAITypeEnum.LIME:
             return <LimeDisplay data={result.result_data as LIMEResultData} />;
-          case XAITypeEnum.COUNTERFACTUALS:
-            return <CounterfactualsDisplay data={result.result_data as CounterfactualResultData} originalInstanceData={inferenceJobDetails?.prediction_result ? { features: inferenceJobDetails.input_reference.features || {}, predictionProbability: inferenceJobDetails.prediction_result.max_bug_probability } : null }/>;
+          // case XAITypeEnum.COUNTERFACTUALS:
+          //   return <CounterfactualsDisplay data={result.result_data as CounterfactualResultData} originalInstanceData={inferenceJobDetails?.prediction_result ? { features: inferenceJobDetails.input_reference.features || {}, predictionProbability: inferenceJobDetails.prediction_result.max_bug_probability } : null }/>;
           case XAITypeEnum.DECISION_PATH:
             return <DecisionPathDisplay data={result.result_data as DecisionPathResultData} />;
           default:
@@ -270,7 +273,13 @@ const PredictionInsightDetailPage = () => {
             </div>
             <div className="space-y-1 p-3 border rounded-md bg-muted/30">
                 <p className="text-xs text-muted-foreground">Commit Hash</p>
-                <p className="font-mono text-xs" title={String(inferenceJobDetails.input_reference?.commit_hash)}>{String(inferenceJobDetails.input_reference?.commit_hash).substring(0,12) || "N/A"}...</p>
+                {inferenceJobDetails.input_reference?.commit_hash && inferenceJobDetails.input_reference?.repo_id ? (
+                    <Link href={`/repositories/${inferenceJobDetails.input_reference.repo_id}/commits/${inferenceJobDetails.input_reference.commit_hash}`} className="text-primary hover:underline">
+                        <p className="font-mono text-xs" title={String(inferenceJobDetails.input_reference.commit_hash)}>{String(inferenceJobDetails.input_reference.commit_hash).substring(0,12) || "N/A"}...</p>
+                    </Link>
+                ) : (
+                    <p className="font-mono text-xs" title={String(inferenceJobDetails.input_reference?.commit_hash)}>{String(inferenceJobDetails.input_reference?.commit_hash).substring(0,12) || "N/A"}...</p>
+                )}
             </div>
              <div className="space-y-1 p-3 border rounded-md bg-muted/30">
                 <p className="text-xs text-muted-foreground">Max Bug Probability</p>
@@ -306,7 +315,7 @@ const PredictionInsightDetailPage = () => {
           </Tabs>
         ) : availableXaiTabs.length > 0 && activeTab ? (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1 bg-muted p-1 rounded-lg h-auto min-h-[60px]">
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-1 bg-muted p-1 rounded-lg h-auto min-h-[60px]">
               {availableXaiTabs.map((type) => {
                 const xaiResult = xaiResults.find(r => r.xai_type === type);
                 const isActive = activeTab === type;
@@ -390,9 +399,12 @@ const PredictionInsightDetailPage = () => {
                 <Link href={`/models/${inferenceJobDetails.ml_model_id}`} className="text-primary hover:underline ml-1">{inferenceJobDetails.ml_model_id}</Link>
               </span>
               <span>Status: {getJobStatusBadge(inferenceJobDetails.status)}</span>
-              {inferenceJobDetails.input_reference?.commit_hash && (
+              {inferenceJobDetails.input_reference?.commit_hash && inferenceJobDetails.input_reference?.repo_id && (
                 <span className="text-xs text-muted-foreground">
-                  Commit: {String(inferenceJobDetails.input_reference.commit_hash).substring(0, 12)}...
+                  Commit: 
+                  <Link href={`/repositories/${inferenceJobDetails.input_reference.repo_id}/commits/${inferenceJobDetails.input_reference.commit_hash}`} className="text-primary hover:underline ml-1">
+                    {String(inferenceJobDetails.input_reference.commit_hash).substring(0, 12)}...
+                  </Link>
                 </span>
               )}
             </span>

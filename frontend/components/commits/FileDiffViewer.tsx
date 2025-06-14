@@ -22,7 +22,7 @@ export const FileDiffViewer: React.FC<FileDiffViewerProps> = ({ diffText }) => {
   };
 
   return (
-    <ScrollArea className="max-h-[400px] font-mono text-xs border rounded-md bg-muted/30">
+    <ScrollArea className="font-mono text-xs border rounded-md bg-muted/30">
       <div className="p-2">
         {lines.map((line, index) => (
           <div key={index} className={cn('whitespace-pre-wrap break-words w-full', getLineClass(line))}>
