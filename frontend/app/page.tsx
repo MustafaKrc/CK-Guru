@@ -58,7 +58,7 @@ export default function LandingPage() {
       <header className="sticky top-0 z-50 flex h-16 items-center gap-4 border-b bg-background px-6 md:px-8">
         <Link href="/" className="flex items-center gap-2 text-lg font-semibold">
           <GitBranch className="h-6 w-6 text-primary" />
-          <span>CK-Guru</span>
+          <span>JIT-Guru</span>
         </Link>
         <nav className="hidden md:flex flex-1 items-center gap-6 text-sm">
           <Link
@@ -136,7 +136,7 @@ export default function LandingPage() {
                   Predict Software Defects <span className="text-primary">Before They Happen</span>
                 </h1>
                 <p className="text-xl text-muted-foreground">
-                  CK-Guru uses machine learning to analyze your code and predict potential bugs,
+                  JIT-Guru uses machine learning to analyze your code and predict potential bugs,
                   helping you build more reliable software.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4">
@@ -180,7 +180,7 @@ export default function LandingPage() {
             <div className="text-center mb-16">
               <h2 className="text-3xl font-bold mb-4">Key Features</h2>
               <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-                CK-Guru provides powerful tools to help you identify and prevent software defects
+                JIT-Guru provides powerful tools to help you identify and prevent software defects
               </p>
             </div>
 
@@ -238,7 +238,7 @@ export default function LandingPage() {
             <div className="text-center mb-16">
               <h2 className="text-3xl font-bold mb-4">How It Works</h2>
               <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-                CK-Guru uses a simple four-step process to help you predict and prevent software
+                JIT-Guru uses a simple four-step process to help you predict and prevent software
                 defects
               </p>
             </div>
@@ -250,7 +250,7 @@ export default function LandingPage() {
                 </div>
                 <h3 className="text-xl font-semibold mb-2">Connect Repository</h3>
                 <p className="text-muted-foreground">
-                  Link your Git repository to CK-Guru for analysis
+                  Link your Git repository to JIT-Guru for analysis
                 </p>
               </div>
 
@@ -354,7 +354,7 @@ export default function LandingPage() {
           <div className="container mx-auto px-4 text-center">
             <h2 className="text-3xl font-bold mb-4">Ready to improve your code quality?</h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-8">
-              Join thousands of developers who use CK-Guru to build more reliable software
+              Join thousands of developers who use JIT-Guru to build more reliable software
             </p>
             {isAuthenticated ? (
               <Button size="lg" asChild>
@@ -375,7 +375,7 @@ export default function LandingPage() {
             <div>
               <Link href="/" className="flex items-center gap-2 text-lg font-semibold mb-4">
                 <GitBranch className="h-6 w-6 text-primary" />
-                <span>CK-Guru</span>
+                <span>JIT-Guru</span>
               </Link>
               <p className="text-muted-foreground">
                 Just-In-Time Software Defect Prediction Platform powered by machine learning
@@ -449,7 +449,7 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="mt-12 pt-8 border-t text-center text-muted-foreground">
-            <p>&copy; {new Date().getFullYear()} CK-Guru. All rights reserved.</p>
+            <p>&copy; {new Date().getFullYear()} JIT-Guru. All rights reserved.</p>
           </div>
         </div>
       </footer>

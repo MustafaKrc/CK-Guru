@@ -17,7 +17,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "CK-Guru | Software Defect Prediction",
+  title: "JIT-Guru | Software Defect Prediction",
   description: "Just-In-Time Software Defect Prediction Platform",
   generator: "v0.dev",
 };

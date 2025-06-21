@@ -49,7 +49,7 @@ export function LoginForm() {
         <div className="flex items-center justify-center mb-4">
           <GitBranch className="h-10 w-10 text-primary" />
         </div>
-        <CardTitle className="text-2xl font-bold text-center">Sign in to CK-Guru</CardTitle>
+        <CardTitle className="text-2xl font-bold text-center">Sign in to JIT-Guru</CardTitle>
         <CardDescription className="text-center">
           Enter your credentials to access your account
         </CardDescription>

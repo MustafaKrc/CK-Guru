@@ -11,7 +11,7 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
           <div className="mb-8">
             <Link href="/" className="flex items-center text-xl font-bold">
               <GitBranch className="h-6 w-6 text-primary mr-2" />
-              <span>CK-Guru</span>
+              <span>JIT-Guru</span>
             </Link>
             <h2 className="mt-6 text-3xl font-extrabold text-gray-900">Welcome back</h2>
           </div>

@@ -68,7 +68,7 @@ export function RegisterForm() {
         </div>
         <CardTitle className="text-2xl font-bold text-center">Create an account</CardTitle>
         <CardDescription className="text-center">
-          Enter your information to create a CK-Guru account
+          Enter your information to create a JIT-Guru account
         </CardDescription>
       </CardHeader>
       <CardContent>

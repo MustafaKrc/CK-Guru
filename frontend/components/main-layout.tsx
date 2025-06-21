@@ -376,8 +376,8 @@ export function MainLayout({ children }: MainLayoutProps) {
       <aside className="hidden lg:flex flex-col w-64 border-r bg-background h-screen">
         <div className="p-4 border-b flex-shrink-0">
           <Link href="/" className="flex items-center gap-2 text-lg font-semibold">
-            <GitBranch className="h-6 w-6 text-primary" />
-            <span>CK-Guru</span>
+            <img src="/logo.svg" alt="Logo" className="h-8 w-8" />
+            <span>JIT-Guru</span>
           </Link>
         </div>
 
@@ -444,8 +444,8 @@ export function MainLayout({ children }: MainLayoutProps) {
                   className="flex items-center gap-2 text-lg font-semibold"
                   onClick={() => setIsSidebarOpen(false)}
                 >
-                  <GitBranch className="h-6 w-6 text-primary" />
-                  <span>CK-Guru</span>
+                  <img src="/logo.svg" alt="Logo" className="h-8 w-8" />
+                  <span>JIT-Guru</span>
                 </Link>
               </div>
 
@@ -456,8 +456,8 @@ export function MainLayout({ children }: MainLayoutProps) {
           </Sheet>
 
           <Link href="/" className="flex items-center gap-2 text-lg font-semibold lg:hidden">
-            <GitBranch className="h-6 w-6 text-primary" />
-            <span>CK-Guru</span>
+            <img src="/logo.svg" alt="Logo" className="h-8 w-8" />
+            <span>JIT-GURU</span>
           </Link>
 
           {/* Breadcrumbs in header */}
