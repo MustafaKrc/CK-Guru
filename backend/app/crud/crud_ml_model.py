@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional, Sequence, Tuple
 
 from sqlalchemy import asc, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload  # <--- IMPORT THIS
+from sqlalchemy.orm import selectinload 
 
 from shared.db.models.dataset import Dataset
 from shared.db.models.ml_model import MLModel
@@ -18,7 +18,7 @@ async def get_ml_model(db: AsyncSession, model_id: int) -> Optional[MLModel]:
     stmt = (
         select(MLModel)
         .options(
-            selectinload(MLModel.dataset),
+            selectinload(MLModel.dataset).selectinload(Dataset.repository),
             selectinload(MLModel.training_job),
             selectinload(MLModel.hp_search_job),
         )
