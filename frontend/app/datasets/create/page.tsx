@@ -49,6 +49,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PageLoader } from "@/components/ui/page-loader";
+import { Combobox } from "@/components/ui/combobox";
 
 import { apiService, handleApiError, ApiError } from "@/lib/apiService";
 import { Repository, PaginatedRepositoryRead } from "@/types/api/repository";
@@ -145,7 +146,7 @@ function CreateDatasetPageContent() {
       setAvailableRuleDefinitions(data || []);
       const initialConfiguredRules = (data || []).map((def) => ({
         ...def,
-        enabled: true,
+        enabled: false,
         userParams: def.parameters.reduce(
           (acc, param) => {
             acc[param.name] =
@@ -459,18 +460,19 @@ function CreateDatasetPageContent() {
                     </AlertDescription>
                   </Alert>
                 ) : (
-                  <Select value={repositoryId} onValueChange={setRepositoryId} required>
-                    <SelectTrigger id="repositoryId">
-                      <SelectValue placeholder="Select a repository..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableRepositories.map((repo) => (
-                        <SelectItem key={repo.id} value={repo.id.toString()}>
-                          {repo.name} (ID: {repo.id})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  // Use Combobox for repository selection
+                  <Combobox
+                    options={availableRepositories.map((repo) => ({
+                      value: repo.id.toString(),
+                      label: `${repo.name} (ID: ${repo.id})`,
+                    }))}
+                    value={repositoryId}
+                    onValueChange={setRepositoryId}
+                    placeholder="Select a repository..."
+                    searchPlaceholder="Search repositories..."
+                    emptyMessage="No repositories found."
+                    disabled={isLoadingRepos}
+                  />
                 )}
               </div>
               <div className="space-y-2">

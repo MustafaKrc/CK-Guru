@@ -138,8 +138,8 @@ DEFAULT_INFO_COLUMNS = [  # Example - adjust as needed
 
 
 @register_rule
-class Rule0DropDuplicates(CleaningRuleBase):
-    rule_name = "rule0_drop_duplicates"
+class DropDuplicates(CleaningRuleBase):
+    rule_name = "drop_duplicates"
     description = "Remove duplicate rows based on identifying metric columns (commit_hash, file, class_name)."
     parameters = []
     # Drop duplicates needs the full context to be truly effective.
@@ -182,9 +182,9 @@ class Rule0DropDuplicates(CleaningRuleBase):
 
 
 @register_rule
-class Rule2RemoveRecentCleanLastChange(CleaningRuleBase):
-    rule_name = "rule2_remove_recent_clean_last_change"
-    description = "[Global Rule] Exclude clean changes if they are the last for a class and occurred recently."
+class RemoveRecentCleanLastChange(CleaningRuleBase):
+    rule_name = "remove_recent_clean_last_change"
+    description = "Exclude clean changes if they are the last for a class and occurred recently."
     parameters = [
         RuleParamDefinition(
             name="gap_seconds",
@@ -244,8 +244,8 @@ class Rule2RemoveRecentCleanLastChange(CleaningRuleBase):
 
 
 @register_rule
-class Rule3RemoveEmptyClass(CleaningRuleBase):
-    rule_name = "rule3_remove_empty_class"
+class RemoveEmptyClass(CleaningRuleBase):
+    rule_name = "remove_empty_class"
     description = (
         "Exclude changes resulting in classes with no local methods or fields."
     )
@@ -274,8 +274,8 @@ class Rule3RemoveEmptyClass(CleaningRuleBase):
 
 
 @register_rule
-class Rule4RemoveTrivialGetSet(CleaningRuleBase):
-    rule_name = "rule4_remove_trivial_getset"
+class RemoveTrivialGetSet(CleaningRuleBase):
+    rule_name = "remove_trivial_getset"
     description = "Exclude changes involving only likely getter/setter methods (low WMC/RFC heuristic)."
     parameters = []
     is_batch_safe = True  # Looks at individual rows
@@ -305,8 +305,8 @@ class Rule4RemoveTrivialGetSet(CleaningRuleBase):
 
 
 @register_rule
-class Rule5RemoveNoAddedLines(CleaningRuleBase):
-    rule_name = "rule5_remove_no_added_lines"
+class RemoveNoAddedLines(CleaningRuleBase):
+    rule_name = "remove_no_added_lines"
     description = "Exclude changes where no lines were added (la <= 0)."
     parameters = []
     is_batch_safe = True  # Looks at individual rows
@@ -329,8 +329,8 @@ class Rule5RemoveNoAddedLines(CleaningRuleBase):
 
 
 @register_rule
-class Rule6RemoveCommentOnlyChange(CleaningRuleBase):
-    rule_name = "rule6_remove_comment_only_change"
+class RemoveCommentOnlyChange(CleaningRuleBase):
+    rule_name = "remove_comment_only_change"
     description = (
         "Exclude changes where likely only comments changed (all d_* metrics are 0)."
     )
@@ -357,8 +357,8 @@ class Rule6RemoveCommentOnlyChange(CleaningRuleBase):
 
 
 @register_rule
-class Rule7RemoveTrivialMethodChange(CleaningRuleBase):
-    rule_name = "rule7_remove_trivial_method_change"
+class RemoveTrivialMethodChange(CleaningRuleBase):
+    rule_name = "remove_trivial_method_change"
     description = (
         "Exclude changes with minimal line alterations but changes in method counts."
     )
@@ -396,8 +396,8 @@ class Rule7RemoveTrivialMethodChange(CleaningRuleBase):
 
 
 @register_rule
-class Rule8RemoveTypeExceptionFiles(CleaningRuleBase):
-    rule_name = "rule8_remove_type_exception_files"
+class RemoveTypeExceptionFiles(CleaningRuleBase):
+    rule_name = "remove_type_exception_files"
     description = (
         "Exclude changes to files named like '*Type.java' or '*Exception.java'."
     )
@@ -428,8 +428,8 @@ class Rule8RemoveTypeExceptionFiles(CleaningRuleBase):
 
 
 @register_rule
-class Rule9RemoveDeadCode(CleaningRuleBase):
-    rule_name = "rule9_remove_dead_code"
+class RemoveDeadCode(CleaningRuleBase):
+    rule_name = "remove_dead_code"
     description = "Exclude changes where the resulting class seems unused (CBO=0 and Fan-in=0 heuristic)."
     parameters = []
     is_batch_safe = True  # Looks at individual rows
@@ -454,8 +454,8 @@ class Rule9RemoveDeadCode(CleaningRuleBase):
 
 
 @register_rule
-class Rule10RemoveDataClass(CleaningRuleBase):
-    rule_name = "rule10_remove_data_class"
+class RemoveDataClass(CleaningRuleBase):
+    rule_name = "remove_data_class"
     description = "Exclude changes likely representing simple data classes (low WMC/RFC, non-zero fields)."
     parameters = []
     is_batch_safe = True  # Looks at individual rows
@@ -484,8 +484,8 @@ class Rule10RemoveDataClass(CleaningRuleBase):
 
 
 @register_rule
-class Rule11RemoveNoCodeChange(CleaningRuleBase):
-    rule_name = "rule11_remove_no_code_change"
+class RemoveNoCodeChange(CleaningRuleBase):
+    rule_name = "remove_no_code_change"
     description = (
         "Exclude changes where no lines were added or deleted (la == 0 and ld == 0)."
     )
@@ -512,8 +512,8 @@ class Rule11RemoveNoCodeChange(CleaningRuleBase):
 
 
 @register_rule
-class Rule12RemoveMarginalChange(CleaningRuleBase):
-    rule_name = "rule12_remove_marginal_change"
+class RemoveMarginalChange(CleaningRuleBase):
+    rule_name = "remove_marginal_change"
     description = "Exclude non-buggy changes if the sum of absolute delta metrics is too marginal (<= threshold)."
     parameters = [
         RuleParamDefinition(
@@ -550,8 +550,8 @@ class Rule12RemoveMarginalChange(CleaningRuleBase):
 
 
 @register_rule
-class Rule13RemoveMinimalChange(CleaningRuleBase):
-    rule_name = "rule13_remove_minimal_change"
+class RemoveMinimalChange(CleaningRuleBase):
+    rule_name = "remove_minimal_change"
     description = "Exclude non-buggy changes if the sum of absolute delta metrics is too minimal (< threshold)."
     parameters = [
         RuleParamDefinition(
@@ -588,9 +588,9 @@ class Rule13RemoveMinimalChange(CleaningRuleBase):
 
 
 @register_rule
-class Rule14FilterLargeCommits(CleaningRuleBase):
-    rule_name = "rule14_filter_large_commits"
-    description = "[Batch Rule] Exclude rows from non-buggy commits that changed more than N files (applied before clustering)."
+class FilterLargeCommits(CleaningRuleBase):
+    rule_name = "filter_large_commits"
+    description = "Exclude rows from non-buggy commits that changed more than N files (applied before clustering)."
     parameters = [
         RuleParamDefinition(
             name="max_files_changed",
@@ -624,9 +624,9 @@ class Rule14FilterLargeCommits(CleaningRuleBase):
 
 # --- Rule Cluster ---
 @register_rule
-class RuleClusterLargeCommits(CleaningRuleBase):
-    rule_name = "rule_cluster_large_commits"
-    description = "[Global Rule] Cluster rows within commits changing > N files, reducing rows via aggregation."
+class ClusterLargeCommits(CleaningRuleBase):
+    rule_name = "cluster_large_commits"
+    description = "Cluster rows within commits changing > N files, reducing rows via aggregation."
     parameters = [
         RuleParamDefinition(
             name="threshold",
