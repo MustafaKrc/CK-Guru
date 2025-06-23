@@ -479,11 +479,19 @@ function JobDetailPageContent() {
           {/* Column 2: Configuration Details */}
           <div className="md:col-span-2 space-y-6">
             <KeyValueDisplay
-              data={jobDetails.config as Record<string, any>}
+              data={
+                jobType === "hp_search"
+                  // Exclude hp_space from config for hp_search jobs
+                  ? Object.fromEntries(
+                      Object.entries((jobDetails as HPSearchJobRead).config).filter(
+                        ([key]) => key !== "hp_space"
+                      )
+                    )
+                  : (jobDetails.config as Record<string, any>)
+              }
               title="Job Configuration"
               icon={<Cog className="mr-2 h-4 w-4 text-primary" />}
-              className="min-h-[300px]" // Example: Give it a min-height or ensure parent allows growth
-              scrollAreaMaxHeight="max-h-[400px]" // Control max height of scrollable content
+              scrollAreaMaxHeight="max-h-[1200px]"
             />
 
             {jobType === "hp_search" && (jobDetails as HPSearchJobRead).config.hp_space && (
@@ -495,7 +503,7 @@ function JobDetailPageContent() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ScrollArea className="max-h-[400px]">
+                  <ScrollArea className="h-72">
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -554,19 +562,12 @@ function JobDetailPageContent() {
               )}
           </div>
         </div>
-
-        {/* Placeholder for Logs - if backend supports it */}
-        {/* <Card className="mt-6">
-          <CardHeader><CardTitle>Job Logs</CardTitle></CardHeader>
-          <CardContent><p className="text-muted-foreground">Logs for this job will appear here when available.</p></CardContent>
-        </Card> */}
       </PageContainer>
     </MainLayout>
   );
 }
 
 export default function JobDetailPage() {
-  // New wrapper component
   return (
     <Suspense fallback={<PageLoader message="Loading job details..." />}>
       <JobDetailPageContent />

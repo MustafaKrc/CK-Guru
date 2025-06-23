@@ -354,7 +354,7 @@ async def submit_hp_search_job(
     db_job = None  # Initialize db_job to None
 
     existing_jobs = await crud.crud_hp_search_job.get_hp_search_jobs(
-        db, study_name=study_name
+        db, name_filter=study_name
     )
 
     if existing_jobs and existing_jobs[0]:

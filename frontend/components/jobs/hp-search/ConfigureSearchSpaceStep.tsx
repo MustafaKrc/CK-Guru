@@ -232,7 +232,7 @@ export const ConfigureSearchSpaceStep: React.FC<{
         suggest_type: existingConfig?.suggest_type || getDefaultSuggestType(param.type),
         low: existingConfig?.low?.toString() ?? param.range?.min?.toString() ?? "",
         high: existingConfig?.high?.toString() ?? param.range?.max?.toString() ?? "",
-        step: existingConfig?.step?.toString() ?? param.range?.step?.toString() ?? "",
+        step: existingConfig?.step?.toString() ?? param.range?.step?.toString() ?? "1",
         log: existingConfig?.log ?? false,
         choices:
           existingConfig?.choices?.join(", ") ??
