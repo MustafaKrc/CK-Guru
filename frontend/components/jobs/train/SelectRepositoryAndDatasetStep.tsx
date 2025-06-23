@@ -2,13 +2,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { TrainingJobFormData } from "@/types/jobs";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -23,6 +17,7 @@ import {
   DatasetTaskResponse,
   DatasetCreatePayload,
 } from "@/types/api";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DatasetStatusEnum } from "@/types/api/enums"; // Ensure this path is correct
 import { useToast } from "@/hooks/use-toast";
 
@@ -253,6 +248,16 @@ export const SelectRepositoryAndDatasetStep: React.FC<SelectRepositoryAndDataset
     }
   };
 
+  const repositoryOptions = availableRepositories.map((repo) => ({
+    value: repo.id.toString(),
+    label: `${repo.name} (ID: ${repo.id})`,
+  }));
+
+  const datasetOptions = existingDatasets.map((ds) => ({
+    value: ds.id.toString(),
+    label: `${ds.name} (ID: ${ds.id}, Rows: ${ds.num_rows ?? "N/A"})`,
+  }));
+
   return (
     <div className="space-y-6">
       <Card>
@@ -271,28 +276,16 @@ export const SelectRepositoryAndDatasetStep: React.FC<SelectRepositoryAndDataset
             {isLoadingRepositories ? (
               <Skeleton className="h-10 w-full" />
             ) : (
-              <Select
+              <SearchableSelect
                 value={formData.repositoryId?.toString() || ""}
                 onValueChange={handleRepositorySelect}
-                disabled={availableRepositories.length === 0}
-              >
-                <SelectTrigger id="repository-select">
-                  <SelectValue
-                    placeholder={
-                      availableRepositories.length === 0
-                        ? "No repositories available"
-                        : "Select a repository..."
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableRepositories.map((repo) => (
-                    <SelectItem key={repo.id} value={repo.id.toString()}>
-                      {repo.name} (ID: {repo.id})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                options={repositoryOptions}
+                placeholder="Select a repository..."
+                searchPlaceholder="Search repositories..."
+                emptyMessage="No repositories found"
+                disabled={isLoadingRepositories || availableRepositories.length === 0}
+                isLoading={isLoadingRepositories}
+              />
             )}
             {availableRepositories.length === 0 && !isLoadingRepositories && (
               <Alert variant="default" className="mt-2">
@@ -395,38 +388,24 @@ export const SelectRepositoryAndDatasetStep: React.FC<SelectRepositoryAndDataset
                   {isLoadingExistingDatasets ? (
                     <Skeleton className="h-10 w-full" />
                   ) : (
-                    <Select
+                    <SearchableSelect
                       value={formData.datasetId?.toString() || ""}
                       onValueChange={handleExistingDatasetSelect}
-                      disabled={existingDatasets.length === 0 || isCreatingDataset}
-                    >
-                      <SelectTrigger
-                        disabled={
-                          isCreatingDataset ||
-                          isLoadingExistingDatasets ||
-                          existingDatasets.length === 0
-                        }
-                      >
-                        <SelectValue
-                          placeholder={
-                            isCreatingDataset
-                              ? "Waiting for new dataset..."
-                              : isLoadingExistingDatasets
-                                ? "Loading datasets..."
-                                : existingDatasets.length === 0
-                                  ? "No 'Ready' datasets found"
-                                  : "Select a 'Ready' dataset..."
-                          }
-                        />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {existingDatasets.map((ds) => (
-                          <SelectItem key={ds.id} value={ds.id.toString()}>
-                            {ds.name} (ID: {ds.id}, Rows: {ds.num_rows ?? "N/A"})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      options={datasetOptions}
+                      placeholder={
+                        isCreatingDataset
+                          ? "Waiting for new dataset..."
+                          : isLoadingExistingDatasets
+                            ? "Loading datasets..."
+                            : existingDatasets.length === 0
+                              ? "No 'Ready' datasets found"
+                              : "Select a 'Ready' dataset..."
+                      }
+                      searchPlaceholder="Search datasets..."
+                      emptyMessage="No 'Ready' datasets found."
+                      disabled={isCreatingDataset || isLoadingExistingDatasets || existingDatasets.length === 0}
+                      isLoading={isLoadingExistingDatasets || isCreatingDataset}
+                    />
                   )}
                   {existingDatasets.length === 0 &&
                     !isLoadingExistingDatasets &&

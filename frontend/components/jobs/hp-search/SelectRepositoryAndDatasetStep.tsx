@@ -3,13 +3,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { HpSearchJobFormData } from "@/types/jobs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -108,6 +102,16 @@ export const SelectRepositoryAndDatasetStep: React.FC<SelectRepositoryAndDataset
     }
   };
 
+  const repositoryOptions = repositories.map((repo) => ({
+    value: repo.id.toString(),
+    label: repo.name,
+  }));
+
+  const datasetOptions = datasets.map((ds) => ({
+    value: ds.id.toString(),
+    label: ds.name,
+  }));
+
   return (
     <div className="space-y-6">
       <Card>
@@ -122,22 +126,16 @@ export const SelectRepositoryAndDatasetStep: React.FC<SelectRepositoryAndDataset
           {isLoadingRepos ? (
             <Skeleton className="h-10 w-full mt-2" />
           ) : (
-            <Select
+            <SearchableSelect
+              options={repositoryOptions}
               value={formData.repositoryId?.toString() || ""}
               onValueChange={handleRepositorySelect}
               disabled={repositories.length === 0}
-            >
-              <SelectTrigger id="repository-select">
-                <SelectValue placeholder="Select a repository..." />
-              </SelectTrigger>
-              <SelectContent>
-                {repositories.map((repo) => (
-                  <SelectItem key={repo.id} value={repo.id.toString()}>
-                    {repo.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              placeholder="Select a repository..."
+              searchPlaceholder="Search repositories..."
+              emptyMessage="No repositories found."
+              isLoading={isLoadingRepos}
+            />
           )}
         </CardContent>
       </Card>
@@ -155,28 +153,20 @@ export const SelectRepositoryAndDatasetStep: React.FC<SelectRepositoryAndDataset
             {isLoadingDatasets ? (
               <Skeleton className="h-10 w-full mt-2" />
             ) : (
-              <Select
+              <SearchableSelect
+                options={datasetOptions}
                 value={formData.datasetId?.toString() || ""}
                 onValueChange={handleDatasetSelect}
                 disabled={datasets.length === 0}
-              >
-                <SelectTrigger id="dataset-select">
-                  <SelectValue
-                    placeholder={
-                      datasets.length === 0
-                        ? "No 'Ready' datasets found"
-                        : "Select a 'Ready' dataset..."
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {datasets.map((ds) => (
-                    <SelectItem key={ds.id} value={ds.id.toString()}>
-                      {ds.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder={
+                    datasets.length === 0
+                      ? "No 'Ready' datasets found"
+                      : "Select a 'Ready' dataset..."
+                  }
+                  searchPlaceholder="Search datasets..."
+                  emptyMessage="No 'Ready' datasets found."
+                  isLoading={isLoadingDatasets}
+                />
             )}
           </CardContent>
         </Card>

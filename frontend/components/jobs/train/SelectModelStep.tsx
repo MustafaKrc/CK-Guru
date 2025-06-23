@@ -1,13 +1,7 @@
 // frontend/components/jobs/train/SelectModelStep.tsx
 import React, { useState, useEffect, useCallback } from "react";
 import { TrainingJobFormData } from "@/types/jobs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import {SearchableSelect} from "@/components/ui/searchable-select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -143,6 +137,11 @@ export const SelectModelStep: React.FC<SelectModelStepProps> = ({ formData, upda
     );
   }
 
+  const modelTypeOptions = availableModelTypes.map((type) => ({
+    value: type.type_name,
+    label: type.display_name,
+  }));
+
   return (
     <div className="space-y-6">
       <Card>
@@ -162,33 +161,22 @@ export const SelectModelStep: React.FC<SelectModelStepProps> = ({ formData, upda
             {isLoadingModelTypes ? (
               <Skeleton className="h-10 w-full" />
             ) : (
-              <Select
+              <SearchableSelect
+                options={modelTypeOptions}
                 value={formData.modelType || ""}
                 onValueChange={handleModelTypeSelect}
-                disabled={availableModelTypes.length === 0}
-              >
-                <SelectTrigger
-                  id="model-type-select"
-                  disabled={isLoadingModelTypes || availableModelTypes.length === 0}
-                >
-                  <SelectValue
-                    placeholder={
-                      isLoadingModelTypes
-                        ? "Loading model types..."
-                        : availableModelTypes.length === 0
-                          ? "No model types available"
-                          : "Select a model type..."
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableModelTypes.map((type) => (
-                    <SelectItem key={type.type_name} value={type.type_name}>
-                      {type.display_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder={
+                  isLoadingModelTypes
+                    ? "Loading model types..."
+                    : availableModelTypes.length === 0
+                      ? "No model types available"
+                      : "Select a model type..."
+                }
+                searchPlaceholder="Search model types..."
+                emptyMessage="No model type found."
+                disabled={isLoadingModelTypes || availableModelTypes.length === 0}
+                isLoading={isLoadingModelTypes}
+              />
             )}
             {error && (
               <Alert variant="destructive" className="mt-2">

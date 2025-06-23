@@ -3,13 +3,7 @@
 
 import React, { useState, useEffect } from "react";
 import { HpSearchJobFormData } from "@/types/jobs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -69,6 +63,11 @@ export const SelectModelForHpSearchStep: React.FC<SelectModelForHpSearchStepProp
     }
   };
 
+  const modelTypeOptions = availableModelTypes.map((type) => ({
+    value: type.type_name,
+    label: type.display_name,
+  }));
+
   return (
     <Card>
       <CardHeader>
@@ -85,22 +84,16 @@ export const SelectModelForHpSearchStep: React.FC<SelectModelForHpSearchStepProp
         {isLoading ? (
           <Skeleton className="h-10 w-full mt-2" />
         ) : (
-          <Select
+          <SearchableSelect
+            options={modelTypeOptions}
             value={formData.modelType || ""}
             onValueChange={handleModelTypeSelect}
             disabled={availableModelTypes.length === 0}
-          >
-            <SelectTrigger id="model-type-select">
-              <SelectValue placeholder="Select a model type..." />
-            </SelectTrigger>
-            <SelectContent>
-              {availableModelTypes.map((type) => (
-                <SelectItem key={type.type_name} value={type.type_name}>
-                  {type.display_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            placeholder="Select a model type..."
+            searchPlaceholder="Search model types..."
+            emptyMessage="No model types available."
+            isLoading={isLoading}
+          />
         )}
         {error && (
           <Alert variant="destructive" className="mt-2">
