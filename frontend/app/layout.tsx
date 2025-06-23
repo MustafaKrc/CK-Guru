@@ -19,7 +19,10 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "JIT-Guru | Software Defect Prediction",
   description: "Just-In-Time Software Defect Prediction Platform",
-  generator: "v0.dev",
+  generator: "Mustafa Kırcı",
+  icons: {
+    icon: "/favicon.ico",
+  }
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
