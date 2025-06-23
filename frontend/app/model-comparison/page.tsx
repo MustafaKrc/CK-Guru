@@ -18,7 +18,7 @@ import { MLModelRead } from "@/types/api";
 import { ModelSelectionPanel } from "@/components/model-comparison/ModelSelectionPanel";
 import { ComparisonCanvas } from "@/components/model-comparison/ComparisonCanvas";
 
-export const MAX_SELECTED_MODELS = 5; // Increased limit slightly
+export const MAX_SELECTED_MODELS = 4; // Increased limit slightly
 
 function ModelComparisonPageContent() {
   const [allModels, setAllModels] = useState<MLModelRead[]>([]);
@@ -105,6 +105,7 @@ function ModelComparisonPageContent() {
             Export Report
           </Button>
         }
+        // Make the page wider than usual
         className="p-0 pt-0 md:p-0"
       >
         <div className="h-[calc(100vh-theme(spacing.24))]">
