@@ -77,62 +77,60 @@ export const CommitDetailDialog: React.FC<CommitDetailDialogProps> = ({
     }
 
     return (
-      <ScrollArea className="max-h-[70vh]">
-        <div className="p-1 space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Commit Info</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm space-y-2">
-              <div className="flex items-center gap-2">
-                <User className="h-4 w-4 text-muted-foreground" />
-                <p>
-                  {details.details.author_name} &lt;{details.details.author_email}&gt;
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <p>{new Date(details.details.author_date).toLocaleString()}</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Commit Message</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <pre className="whitespace-pre-wrap font-sans text-sm bg-muted p-3 rounded-md">
-                {details.details.message}
-              </pre>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">
-                File Changes ({details.details.file_diffs.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Accordion type="single" collapsible className="w-full">
-                {details.details.file_diffs.map((diff) => (
-                  <AccordionItem key={diff.id} value={`diff-${diff.id}`}>
-                    <AccordionTrigger>
-                      <div className="flex items-center gap-2 text-sm">
-                        <FileText className="h-4 w-4" />
-                        <span className="font-mono">{diff.file_path}</span>
-                        <Badge variant="outline">{diff.change_type}</Badge>
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <FileDiffViewer diffText={diff.diff_text} />
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
-            </CardContent>
-          </Card>
-        </div>
-      </ScrollArea>
+      <div className="space-y-4">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Commit Info</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm space-y-2">
+            <div className="flex items-center gap-2">
+              <User className="h-4 w-4 text-muted-foreground" />
+              <p>
+                {details.details.author_name} &lt;{details.details.author_email}&gt;
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-muted-foreground" />
+              <p>{new Date(details.details.author_date).toLocaleString()}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Commit Message</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <pre className="whitespace-pre-wrap font-sans text-sm bg-muted p-3 rounded-md">
+              {details.details.message}
+            </pre>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">
+              File Changes ({details.details.file_diffs.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Accordion type="single" collapsible className="w-full">
+              {details.details.file_diffs.map((diff) => (
+                <AccordionItem key={diff.id} value={`diff-${diff.id}`}>
+                  <AccordionTrigger>
+                    <div className="flex items-center gap-2 text-sm">
+                      <FileText className="h-4 w-4" />
+                      <span className="font-mono">{diff.file_path}</span>
+                      <Badge variant="outline">{diff.change_type}</Badge>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <FileDiffViewer diffText={diff.diff_text} />
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          </CardContent>
+        </Card>
+      </div>
     );
   };
 
@@ -143,7 +141,9 @@ export const CommitDetailDialog: React.FC<CommitDetailDialogProps> = ({
           <DialogTitle>Commit Details: {commitHash?.substring(0, 12)}...</DialogTitle>
           <DialogDescription>In repository {repoName}.</DialogDescription>
         </DialogHeader>
-        <div className="flex-grow overflow-hidden relative">{renderContent()}</div>
+        <div className="flex-grow overflow-y-auto p-6 pt-0 -mx-6">
+          {renderContent()}
+        </div>
       </DialogContent>
     </Dialog>
   );

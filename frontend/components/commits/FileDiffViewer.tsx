@@ -27,7 +27,7 @@ export const FileDiffViewer: React.FC<FileDiffViewerProps> = ({ diffText }) => {
   };
 
   return (
-    <ScrollArea className="font-mono text-xs border rounded-md bg-muted/30">
+    <ScrollArea className="max-h-[500px] h-96 font-mono text-xs border rounded-md bg-muted/30">
       <div className="p-2">
         {lines.map((line, index) => (
           <div
