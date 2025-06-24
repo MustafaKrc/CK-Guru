@@ -440,7 +440,7 @@ function JobDetailPageContent() {
                 {/* TODO: Fetch and display dataset name if needed */}
               </CardContent>
             </Card>
-            {jobType === "training" && (jobDetails as TrainingJobRead).ml_model_id && (
+            {jobType === "training" && (jobDetails as TrainingJobRead).ml_model?.id && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center">
@@ -450,8 +450,8 @@ function JobDetailPageContent() {
                 </CardHeader>
                 <CardContent>
                   <Button variant="link" asChild className="p-0 h-auto text-sm">
-                    <Link href={`/models/${(jobDetails as TrainingJobRead).ml_model_id}`}>
-                      View Model (ID: {(jobDetails as TrainingJobRead).ml_model_id})
+                    <Link href={`/models/${(jobDetails as TrainingJobRead).ml_model?.id}`}>
+                      View Model (ID: {(jobDetails as TrainingJobRead).ml_model?.id})
                     </Link>
                   </Button>
                 </CardContent>
