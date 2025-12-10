@@ -59,8 +59,15 @@ CK-Guru uses a microservices architecture with Docker Compose:
    ```
 
 3. **Start the application**:
+   
+   For **dev** build:
    ```bash
    docker-compose up --build -d
+   ```
+
+   For **prod** build:
+   ```bash
+   docker compose -f .\docker-compose.yml up --build -d
    ```
 
 4. **Access the application**:
