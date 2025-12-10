@@ -38,7 +38,7 @@ ENV PYTHONPATH="${PYTHONPATH}:/app"
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     git \
-    openjdk-17-jre-headless \
+    openjdk-21-jdk-headless \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed Python packages from builder stage
