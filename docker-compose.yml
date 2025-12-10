@@ -9,8 +9,6 @@ services:
     container_name: ckguru_backend
     volumes:
       - ./backend/app:/app/app # Hot-reload for backend code
-      # Mounts for alembic are still useful for development to see changes
-      # without rebuilding the image every time.
       - ./backend/alembic.ini:/app/alembic.ini
       - ./backend/alembic:/app/alembic
       - ./shared:/app/shared # Shared directory hot-reload 
